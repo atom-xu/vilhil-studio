@@ -93,7 +93,7 @@ function GuidesControl() {
         <PopoverTrigger asChild>
           <button
             aria-expanded={isOpen}
-            aria-label="Guide image settings"
+            aria-label="参考图设置"
             className={cn(
               'flex h-11 w-6 items-center justify-center rounded-r-lg transition-colors',
               isOpen ? 'bg-white/10' : 'opacity-60 hover:bg-white/5 hover:opacity-100',
@@ -201,14 +201,14 @@ function ScansControl() {
           size="icon"
           variant="ghost"
         >
-          <img alt="Scans" className="h-[28px] w-[28px] object-contain" src="/icons/mesh.png" />
+          <img alt="扫描图" className="h-[28px] w-[28px] object-contain" src="/icons/mesh.png" />
         </ActionButton>
 
         {/* Dropdown chevron */}
         <PopoverTrigger asChild>
           <button
             aria-expanded={isOpen}
-            aria-label="Scan settings"
+            aria-label="扫描图设置"
             className={cn(
               'flex h-11 w-6 items-center justify-center rounded-r-lg transition-colors',
               isOpen ? 'bg-white/10' : 'opacity-60 hover:bg-white/5 hover:opacity-100',

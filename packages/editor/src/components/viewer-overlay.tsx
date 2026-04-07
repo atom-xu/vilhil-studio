@@ -276,7 +276,7 @@ export const ViewerOverlay = ({
           <div className="pointer-events-auto flex h-14 flex-row items-center justify-center gap-1.5 rounded-2xl border border-border/40 bg-background/95 p-1.5 shadow-lg backdrop-blur-xl transition-colors duration-200 ease-out">
             {/* Theme Toggle */}
             <button
-              aria-label="Toggle theme"
+              aria-label="切换主题"
               className="flex h-[36px] shrink-0 cursor-pointer items-center rounded-full border border-border/50 bg-accent/50 p-1"
               onClick={() => useViewer.getState().setTheme(theme === 'dark' ? 'light' : 'dark')}
               type="button"
@@ -450,7 +450,7 @@ export const ViewerOverlay = ({
             {/* Camera Actions */}
             <ActionButton
               className="group hidden hover:bg-white/5 sm:inline-flex"
-              label="Orbit Left"
+              label="向左环绕"
               onClick={() => emitter.emit('camera-controls:orbit-ccw')}
               size="icon"
               tooltipSide="top"
@@ -465,7 +465,7 @@ export const ViewerOverlay = ({
 
             <ActionButton
               className="group hidden hover:bg-white/5 sm:inline-flex"
-              label="Orbit Right"
+              label="向右环绕"
               onClick={() => emitter.emit('camera-controls:orbit-cw')}
               size="icon"
               tooltipSide="top"
@@ -480,7 +480,7 @@ export const ViewerOverlay = ({
 
             <ActionButton
               className="group hover:bg-white/5"
-              label="Top View"
+              label="顶视图"
               onClick={() => emitter.emit('camera-controls:top-view')}
               size="icon"
               tooltipSide="top"
@@ -498,7 +498,7 @@ export const ViewerOverlay = ({
             {/* Street View */}
             <ActionButton
               className="group hover:bg-white/5"
-              label="Street View"
+              label="街景视图"
               onClick={() => useEditor.getState().setFirstPersonMode(true)}
               size="icon"
               tooltipSide="top"

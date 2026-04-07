@@ -28,7 +28,7 @@ export function CameraActions() {
       {/* Orbit CCW */}
       <ActionButton
         className="group hover:bg-white/5"
-        label="Orbit Left"
+        label="向左环绕"
         onClick={orbitCCW}
         size="icon"
         variant="ghost"
@@ -45,7 +45,7 @@ export function CameraActions() {
       {/* Orbit CW */}
       <ActionButton
         className="group hover:bg-white/5"
-        label="Orbit Right"
+        label="向右环绕"
         onClick={orbitCW}
         size="icon"
         variant="ghost"
@@ -62,7 +62,7 @@ export function CameraActions() {
       {/* Top View */}
       <ActionButton
         className="group hover:bg-white/5"
-        label="Top View"
+        label="顶视图"
         onClick={goToTopView}
         size="icon"
         variant="ghost"
@@ -79,7 +79,7 @@ export function CameraActions() {
       {/* Street View */}
       <ActionButton
         className="group hover:bg-white/5"
-        label="Street View"
+        label="街景视图"
         onClick={enterStreetView}
         size="icon"
         variant="ghost"

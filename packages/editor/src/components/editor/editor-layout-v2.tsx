@@ -94,7 +94,7 @@ function LeftColumn({
       <div
         className="relative h-full w-2 flex-shrink-0 cursor-col-resize transition-colors hover:bg-primary/20"
         onPointerDown={handleGrabDown}
-        title="Expand sidebar"
+        title="展开侧边栏"
       />
     )
   }

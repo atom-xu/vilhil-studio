@@ -214,12 +214,12 @@ export const FirstPersonOverlay = ({ onExit }: { onExit: () => void }) => {
       {/* Controls hint — bottom-center */}
       <div className="pointer-events-none fixed bottom-6 left-1/2 z-40 -translate-x-1/2">
         <div className="flex items-center gap-4 rounded-2xl border border-border/35 bg-background/80 px-5 py-3 shadow-lg backdrop-blur-xl">
-          <ControlHint label="Move" keys={['W', 'A', 'S', 'D']} />
+          <ControlHint label="移动" keys={['W', 'A', 'S', 'D']} />
           <div className="h-5 w-px bg-border/30" />
-          <ControlHint label="Up" keys={['Q']} />
-          <ControlHint label="Down" keys={['E']} />
+          <ControlHint label="上升" keys={['Q']} />
+          <ControlHint label="下降" keys={['E']} />
           <div className="h-5 w-px bg-border/30" />
-          <ControlHint label="Sprint" keys={['Shift']} />
+          <ControlHint label="加速" keys={['Shift']} />
           <div className="h-5 w-px bg-border/30" />
           <span className="text-muted-foreground/60 text-xs">Click to look around</span>
         </div>

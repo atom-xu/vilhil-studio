@@ -190,7 +190,7 @@ export function FeedbackDialog({
                   disabled={isSubmitting}
                   id="feedback-message"
                   onChange={(e) => setMessage(e.target.value)}
-                  placeholder="Share your thoughts, suggestions, feature requests, or report issues..."
+                  placeholder="分享您的想法、建议、功能请求或报告问题...", suggestions, feature requests, or report issues..."
                   rows={5}
                   value={message}
                 />
