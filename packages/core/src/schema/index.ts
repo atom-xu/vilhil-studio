@@ -14,6 +14,23 @@ export {
 } from './material'
 export { BuildingNode } from './nodes/building'
 export { CeilingNode } from './nodes/ceiling'
+export {
+  DeviceNode,
+  DeviceParamsSchema,
+  getSubsystemColor,
+  getSubsystemLabel,
+  MountTypeEnum,
+  SceneNode,
+  SceneEffectSchema,
+  SubsystemEnum,
+  SUBSYSTEM_META,
+  type DeviceNode as DeviceNodeType,
+  type DeviceParams,
+  type MountType,
+  type SceneEffect,
+  type SceneNode as SceneNodeType,
+  type Subsystem,
+} from './nodes/device'
 export { DoorNode, DoorSegment } from './nodes/door'
 export { GuideNode } from './nodes/guide'
 export type {
