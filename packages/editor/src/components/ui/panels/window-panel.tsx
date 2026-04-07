@@ -207,7 +207,7 @@ export function WindowPanel() {
         </PresetsPopover>
       </div>
 
-      <PanelSection title="Position">
+      <PanelSection title="位置">
         <SliderControl
           label={
             <>
@@ -242,9 +242,9 @@ export function WindowPanel() {
         </div>
       </PanelSection>
 
-      <PanelSection title="Dimensions">
+      <PanelSection title="尺寸">
         <SliderControl
-          label="Width"
+          label="宽度"
           min={0}
           onChange={(v) => handleUpdate({ width: v })}
           precision={2}
@@ -253,7 +253,7 @@ export function WindowPanel() {
           value={Math.round(node.width * 100) / 100}
         />
         <SliderControl
-          label="Height"
+          label="高度"
           min={0}
           onChange={(v) => handleUpdate({ height: v })}
           precision={2}
@@ -265,7 +265,7 @@ export function WindowPanel() {
 
       <PanelSection title="Frame">
         <SliderControl
-          label="Thickness"
+          label="厚度"
           min={0}
           onChange={(v) => handleUpdate({ frameThickness: v })}
           precision={3}
@@ -274,7 +274,7 @@ export function WindowPanel() {
           value={Math.round(node.frameThickness * 1000) / 1000}
         />
         <SliderControl
-          label="Depth"
+          label="深度"
           min={0}
           onChange={(v) => handleUpdate({ frameDepth: v })}
           precision={3}
@@ -284,9 +284,9 @@ export function WindowPanel() {
         />
       </PanelSection>
 
-      <PanelSection title="Grid">
+      <PanelSection title="格栅">
         <SliderControl
-          label="Columns"
+          label="列数"
           max={8}
           min={1}
           onChange={(v) => {
@@ -298,7 +298,7 @@ export function WindowPanel() {
           value={numCols}
         />
         <SliderControl
-          label="Rows"
+          label="行数"
           max={8}
           min={1}
           onChange={(v) => {
@@ -330,7 +330,7 @@ export function WindowPanel() {
             ))}
             <div className="mt-1 border-border/50 border-t pt-1">
               <SliderControl
-                label="Divider"
+                label="分隔条"
                 max={0.1}
                 min={0.005}
                 onChange={(v) => handleUpdate({ columnDividerThickness: v })}
@@ -363,7 +363,7 @@ export function WindowPanel() {
             ))}
             <div className="mt-1 border-border/50 border-t pt-1">
               <SliderControl
-                label="Divider"
+                label="分隔条"
                 max={0.1}
                 min={0.005}
                 onChange={(v) => handleUpdate({ rowDividerThickness: v })}
@@ -377,7 +377,7 @@ export function WindowPanel() {
         )}
       </PanelSection>
 
-      <PanelSection title="Sill">
+      <PanelSection title="窗台">
         <ToggleControl
           checked={node.sill}
           label="Enable Sill"
@@ -386,7 +386,7 @@ export function WindowPanel() {
         {node.sill && (
           <div className="mt-1 flex flex-col gap-1">
             <SliderControl
-              label="Depth"
+              label="深度"
               min={0}
               onChange={(v) => handleUpdate({ sillDepth: v })}
               precision={3}
@@ -395,7 +395,7 @@ export function WindowPanel() {
               value={Math.round(node.sillDepth * 1000) / 1000}
             />
             <SliderControl
-              label="Thickness"
+              label="厚度"
               min={0}
               onChange={(v) => handleUpdate({ sillThickness: v })}
               precision={3}
@@ -407,25 +407,25 @@ export function WindowPanel() {
         )}
       </PanelSection>
 
-      <PanelSection title="Material">
+      <PanelSection title="材质">
         <MaterialPicker
           onChange={handleMaterialChange}
           value={node.material}
         />
       </PanelSection>
 
-      <PanelSection title="Actions">
+      <PanelSection title="操作">
         <ActionGroup>
-          <ActionButton icon={<Move className="h-3.5 w-3.5" />} label="Move" onClick={handleMove} />
+          <ActionButton icon={<Move className="h-3.5 w-3.5" />} label="移动" onClick={handleMove} />
           <ActionButton
             icon={<Copy className="h-3.5 w-3.5" />}
-            label="Duplicate"
+            label="复制"
             onClick={handleDuplicate}
           />
           <ActionButton
             className="hover:bg-red-500/20"
             icon={<Trash2 className="h-3.5 w-3.5 text-red-400" />}
-            label="Delete"
+            label="删除"
             onClick={handleDelete}
           />
         </ActionGroup>

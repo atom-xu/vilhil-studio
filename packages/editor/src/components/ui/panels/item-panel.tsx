@@ -84,7 +84,7 @@ export function ItemPanel() {
       title={node.name || node.asset.name}
       width={300}
     >
-      <PanelSection title="Position">
+      <PanelSection title="位置">
         <SliderControl
           label={
             <>
@@ -135,7 +135,7 @@ export function ItemPanel() {
         />
       </PanelSection>
 
-      <PanelSection title="Rotation">
+      <PanelSection title="旋转">
         <SliderControl
           label={
             <>
@@ -175,7 +175,7 @@ export function ItemPanel() {
         </div>
       </PanelSection>
 
-      <PanelSection title="Scale">
+      <PanelSection title="缩放">
         <div className="flex items-center justify-between px-2 pb-2">
           <span className="font-medium text-[10px] text-muted-foreground/80 uppercase tracking-wider">
             Uniform Scale
@@ -260,7 +260,7 @@ export function ItemPanel() {
         )}
       </PanelSection>
 
-      <PanelSection title="Info">
+      <PanelSection title="信息">
         <div className="flex items-center justify-between px-2 py-1 text-muted-foreground text-sm">
           <span>Dimensions</span>
           {(() => {
@@ -274,7 +274,7 @@ export function ItemPanel() {
         </div>
       </PanelSection>
 
-      <PanelSection title="Collections">
+      <PanelSection title="集合">
         <ActionGroup>
           <CollectionsPopover
             collectionIds={node.collectionIds}
@@ -285,18 +285,18 @@ export function ItemPanel() {
         </ActionGroup>
       </PanelSection>
 
-      <PanelSection title="Actions">
+      <PanelSection title="操作">
         <ActionGroup>
-          <ActionButton icon={<Move className="h-3.5 w-3.5" />} label="Move" onClick={handleMove} />
+          <ActionButton icon={<Move className="h-3.5 w-3.5" />} label="移动" onClick={handleMove} />
           <ActionButton
             icon={<Copy className="h-3.5 w-3.5" />}
-            label="Duplicate"
+            label="复制"
             onClick={handleDuplicate}
           />
           <ActionButton
             className="hover:bg-red-500/20"
             icon={<Trash2 className="h-3.5 w-3.5 text-red-400" />}
-            label="Delete"
+            label="删除"
             onClick={handleDelete}
           />
         </ActionGroup>

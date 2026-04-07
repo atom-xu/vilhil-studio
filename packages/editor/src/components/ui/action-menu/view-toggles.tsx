@@ -77,13 +77,13 @@ function GuidesControl() {
               ? 'bg-white/10'
               : 'opacity-60 grayscale hover:bg-white/5 hover:opacity-100 hover:grayscale-0',
           )}
-          label={`Guides: ${showGuides ? 'Visible' : 'Hidden'}`}
+          label={`参考图: ${showGuides ? '显示' : '隐藏'}`}
           onClick={() => setShowGuides(!showGuides)}
           size="icon"
           variant="ghost"
         >
           <img
-            alt="Guides"
+            alt="参考图"
             className="h-[28px] w-[28px] object-contain"
             src="/icons/floorplan.png"
           />
@@ -117,10 +117,10 @@ function GuidesControl() {
               <img alt="" className="h-4 w-4 object-contain" src="/icons/floorplan.png" />
             </span>
             <div className="min-w-0">
-              <p className="font-medium text-foreground text-sm">Guide images</p>
+              <p className="font-medium text-foreground text-sm">参考图</p>
               {hasGuides && (
                 <p className="text-muted-foreground text-xs">
-                  {guides.length} guide image{guides.length !== 1 ? 's' : ''} on this level
+                  本层 {guides.length} 张参考图
                 </p>
               )}
             </div>
@@ -140,11 +140,11 @@ function GuidesControl() {
                       src="/icons/floorplan.png"
                     />
                     <p className="truncate font-medium text-foreground text-sm">
-                      {guide.name || `Guide image ${index + 1}`}
+                      {guide.name || `参考图 ${index + 1}`}
                     </p>
                   </div>
                   <SliderControl
-                    label="Opacity"
+                    label="透明度"
                     max={100}
                     min={0}
                     onChange={(value) => handleOpacityChange(guide.id, value)}
@@ -158,7 +158,7 @@ function GuidesControl() {
             </div>
           ) : (
             <div className="rounded-xl border border-border/45 border-dashed bg-background/60 px-3 py-4 text-muted-foreground text-sm">
-              No guide images on this level yet.
+              本层暂无参考图
             </div>
           )}
         </div>
@@ -196,7 +196,7 @@ function ScansControl() {
               ? 'bg-white/10'
               : 'opacity-60 grayscale hover:bg-white/5 hover:opacity-100 hover:grayscale-0',
           )}
-          label={`Scans: ${showScans ? 'Visible' : 'Hidden'}`}
+          label={`扫描图: ${showScans ? '显示' : '隐藏'}`}
           onClick={() => setShowScans(!showScans)}
           size="icon"
           variant="ghost"
@@ -232,10 +232,10 @@ function ScansControl() {
               <img alt="" className="h-4 w-4 object-contain" src="/icons/mesh.png" />
             </span>
             <div className="min-w-0">
-              <p className="font-medium text-foreground text-sm">Scans</p>
+              <p className="font-medium text-foreground text-sm">扫描图</p>
               {hasScans && (
                 <p className="text-muted-foreground text-xs">
-                  {scans.length} scan{scans.length !== 1 ? 's' : ''} on this level
+                  本层 {scans.length} 张扫描图
                 </p>
               )}
             </div>
@@ -255,11 +255,11 @@ function ScansControl() {
                       src="/icons/mesh.png"
                     />
                     <p className="truncate font-medium text-foreground text-sm">
-                      {scan.name || `Scan ${index + 1}`}
+                      {scan.name || `扫描图 ${index + 1}`}
                     </p>
                   </div>
                   <SliderControl
-                    label="Opacity"
+                    label="透明度"
                     max={100}
                     min={0}
                     onChange={(value) => handleOpacityChange(scan.id, value)}
@@ -273,7 +273,7 @@ function ScansControl() {
             </div>
           ) : (
             <div className="rounded-xl border border-border/45 border-dashed bg-background/60 px-3 py-4 text-muted-foreground text-sm">
-              No scans on this level yet.
+              本层暂无扫描图
             </div>
           )}
         </div>

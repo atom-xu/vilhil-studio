@@ -139,7 +139,7 @@ export function RoofSegmentPanel() {
 
       <PanelSection title="Footprint">
         <SliderControl
-          label="Width"
+          label="宽度"
           max={25}
           min={0.5}
           onChange={(v) => handleUpdate({ width: v })}
@@ -149,7 +149,7 @@ export function RoofSegmentPanel() {
           value={Math.round(node.width * 100) / 100}
         />
         <SliderControl
-          label="Depth"
+          label="深度"
           max={25}
           min={0.5}
           onChange={(v) => handleUpdate({ depth: v })}
@@ -226,7 +226,7 @@ export function RoofSegmentPanel() {
         />
       </PanelSection>
 
-      <PanelSection title="Position">
+      <PanelSection title="位置">
         <MetricControl
           label="X"
           max={50}
@@ -270,7 +270,7 @@ export function RoofSegmentPanel() {
           value={Math.round(node.position[2] * 100) / 100}
         />
         <SliderControl
-          label="Rotation"
+          label="旋转"
           max={180}
           min={-180}
           onChange={(degrees) => {
@@ -299,25 +299,25 @@ export function RoofSegmentPanel() {
         </div>
       </PanelSection>
 
-      <PanelSection title="Material">
+      <PanelSection title="材质">
         <MaterialPicker
           onChange={handleMaterialChange}
           value={node.material}
         />
       </PanelSection>
 
-      <PanelSection title="Actions">
+      <PanelSection title="操作">
         <ActionGroup>
-          <ActionButton icon={<Move className="h-3.5 w-3.5" />} label="Move" onClick={handleMove} />
+          <ActionButton icon={<Move className="h-3.5 w-3.5" />} label="移动" onClick={handleMove} />
           <ActionButton
             icon={<Copy className="h-3.5 w-3.5" />}
-            label="Duplicate"
+            label="复制"
             onClick={handleDuplicate}
           />
           <ActionButton
             className="hover:bg-red-500/20"
             icon={<Trash2 className="h-3.5 w-3.5 text-red-400" />}
-            label="Delete"
+            label="删除"
             onClick={handleDelete}
           />
         </ActionGroup>

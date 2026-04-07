@@ -126,9 +126,9 @@ export function CeilingPanel() {
       title={node.name || 'Ceiling'}
       width={320}
     >
-      <PanelSection title="Height">
+      <PanelSection title="高度">
         <SliderControl
-          label="Height"
+          label="高度"
           max={6}
           min={0}
           onChange={(v) => handleUpdate({ height: v })}
@@ -145,14 +145,14 @@ export function CeilingPanel() {
         </div>
       </PanelSection>
 
-      <PanelSection title="Info">
+      <PanelSection title="信息">
         <div className="flex items-center justify-between px-2 py-1 text-muted-foreground text-sm">
           <span>Area</span>
           <span className="font-mono text-white">{area.toFixed(2)} m²</span>
         </div>
       </PanelSection>
 
-      <PanelSection title="Holes">
+      <PanelSection title="开洞">
         {node.holes && node.holes.length > 0 ? (
           <div className="flex flex-col gap-1 pb-2">
             {node.holes.map((hole, index) => {
@@ -182,7 +182,7 @@ export function CeilingPanel() {
                     {isEditing ? (
                       <ActionButton
                         className="h-7 bg-primary text-primary-foreground hover:bg-primary/90"
-                        label="Done"
+                        label="完成"
                         onClick={() => setEditingHole(null)}
                       />
                     ) : (
@@ -223,7 +223,7 @@ export function CeilingPanel() {
         </div>
       </PanelSection>
 
-      <PanelSection title="Material">
+      <PanelSection title="材质">
         <MaterialPicker
           onChange={handleMaterialChange}
           value={node.material}

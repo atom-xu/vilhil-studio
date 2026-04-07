@@ -27,7 +27,7 @@ const controls: ControlConfig[] = [
   {
     id: 'select',
     imageSrc: '/icons/select.png',
-    label: 'Select',
+    label: '选择',
     shortcut: 'V',
     color: 'hover:bg-blue-500/20 hover:text-blue-400',
     activeColor: 'bg-blue-500/20 text-blue-400',
@@ -35,21 +35,21 @@ const controls: ControlConfig[] = [
   {
     id: 'box-select',
     iconifyIcon: 'mdi:select-drag',
-    label: 'Box select',
+    label: '框选',
     color: 'hover:bg-white/5',
     activeColor: 'bg-white/10 hover:bg-white/10',
   },
   {
     id: 'site-edit',
     imageSrc: '/icons/site.png',
-    label: 'Edit site',
+    label: '编辑场地',
     color: 'hover:bg-white/5',
     activeColor: 'bg-white/10 hover:bg-white/10',
   },
   {
     id: 'build',
     imageSrc: '/icons/build.png',
-    label: 'Build',
+    label: '建造',
     shortcut: 'B',
     color: 'hover:bg-green-500/20 hover:text-green-400',
     activeColor: 'bg-green-500/20 text-green-400',
@@ -57,7 +57,7 @@ const controls: ControlConfig[] = [
   {
     id: 'delete',
     icon: Trash2,
-    label: 'Delete',
+    label: '删除',
     shortcut: 'D',
     color: 'hover:bg-red-500/20 hover:text-red-400',
     activeColor: 'bg-red-500/20 text-red-400',
@@ -152,10 +152,10 @@ export function ControlModes() {
             label={
               isSiteButton
                 ? isActive
-                  ? 'Exit site editing'
+                  ? '退出场地编辑'
                   : canEnterSiteEdit
-                    ? 'Edit site'
-                    : 'Site editing (ground level only)'
+                    ? '编辑场地'
+                    : '场地编辑（仅限首层）'
                 : c.label
             }
             onClick={() => handleClick(c.id)}

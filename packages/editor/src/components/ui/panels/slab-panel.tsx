@@ -124,9 +124,9 @@ export function SlabPanel() {
       title={node.name || 'Slab'}
       width={320}
     >
-      <PanelSection title="Elevation">
+      <PanelSection title="标高">
         <SliderControl
-          label="Height"
+          label="高度"
           max={1}
           min={-1}
           onChange={(v) => handleUpdate({ elevation: v })}
@@ -144,14 +144,14 @@ export function SlabPanel() {
         </div>
       </PanelSection>
 
-      <PanelSection title="Info">
+      <PanelSection title="信息">
         <div className="flex items-center justify-between px-2 py-1 text-muted-foreground text-sm">
           <span>Area</span>
           <span className="font-mono text-white">{area.toFixed(2)} m²</span>
         </div>
       </PanelSection>
 
-      <PanelSection title="Holes">
+      <PanelSection title="开洞">
         {node.holes && node.holes.length > 0 ? (
           <div className="flex flex-col gap-1 pb-2">
             {node.holes.map((hole, index) => {
@@ -181,7 +181,7 @@ export function SlabPanel() {
                     {isEditing ? (
                       <ActionButton
                         className="h-7 bg-primary text-primary-foreground hover:bg-primary/90"
-                        label="Done"
+                        label="完成"
                         onClick={() => setEditingHole(null)}
                       />
                     ) : (
@@ -222,7 +222,7 @@ export function SlabPanel() {
         </div>
       </PanelSection>
 
-      <PanelSection title="Material">
+      <PanelSection title="材质">
         <MaterialPicker
           onChange={handleMaterialChange}
           value={node.material}

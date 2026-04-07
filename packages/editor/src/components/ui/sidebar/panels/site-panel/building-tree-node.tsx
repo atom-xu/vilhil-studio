@@ -51,7 +51,7 @@ export function BuildingTreeNode({ node, depth, isLast }: BuildingTreeNodeProps)
                 <Plus className="h-3 w-3" />
               </button>
             </TooltipTrigger>
-            <TooltipContent side="right">Add new level</TooltipContent>
+            <TooltipContent side="right">添加楼层</TooltipContent>
           </Tooltip>
         </div>
       }
@@ -62,7 +62,7 @@ export function BuildingTreeNode({ node, depth, isLast }: BuildingTreeNodeProps)
       isHovered={isHovered}
       isLast={isLast}
       isSelected={isSelected}
-      label={node.name || 'Building'}
+      label={node.name || '建筑'}
       onClick={handleClick}
       onDoubleClick={() => focusTreeNode(node.id)}
       onToggle={() => setExpanded(!expanded)}

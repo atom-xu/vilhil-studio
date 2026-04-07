@@ -19,16 +19,16 @@ export type ToolConfig = {
 }
 
 export const tools: ToolConfig[] = [
-  { id: 'wall', iconSrc: '/icons/wall.png', label: 'Wall' },
+  { id: 'wall', iconSrc: '/icons/wall.png', label: '墙体' },
   // { id: 'room', iconSrc: '/icons/room.png', label: 'Room' },
   // { id: 'custom-room', iconSrc: '/icons/custom-room.png', label: 'Custom Room' },
-  { id: 'slab', iconSrc: '/icons/floor.png', label: 'Slab' },
-  { id: 'ceiling', iconSrc: '/icons/ceiling.png', label: 'Ceiling' },
-  { id: 'roof', iconSrc: '/icons/roof.png', label: 'Gable Roof' },
-  { id: 'stair', iconSrc: '/icons/stairs.png', label: 'Stairs' },
-  { id: 'door', iconSrc: '/icons/door.png', label: 'Door' },
-  { id: 'window', iconSrc: '/icons/window.png', label: 'Window' },
-  { id: 'zone', iconSrc: '/icons/zone.png', label: 'Zone' },
+  { id: 'slab', iconSrc: '/icons/floor.png', label: '楼板' },
+  { id: 'ceiling', iconSrc: '/icons/ceiling.png', label: '天花板' },
+  { id: 'roof', iconSrc: '/icons/roof.png', label: '人字屋顶' },
+  { id: 'stair', iconSrc: '/icons/stairs.png', label: '楼梯' },
+  { id: 'door', iconSrc: '/icons/door.png', label: '门' },
+  { id: 'window', iconSrc: '/icons/window.png', label: '窗' },
+  { id: 'zone', iconSrc: '/icons/zone.png', label: '区域' },
 ]
 
 export function StructureTools() {

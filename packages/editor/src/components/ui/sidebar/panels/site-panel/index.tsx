@@ -511,7 +511,7 @@ function LevelReferences({
                 ) : (
                   <Plus className="h-3.5 w-3.5" />
                 )}
-                {uploading ? `Uploading ${uploadingType}... ${progress}%` : 'Upload scan/floorplan'}
+                {uploading ? `上传${uploadingType}... ${progress}%` : '上传底图'}
               </button>
 
               <input
@@ -749,7 +749,7 @@ function LevelItem({
               className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-sm transition-colors enabled:cursor-pointer enabled:hover:bg-accent enabled:hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
               disabled={!canDeleteLevel}
               onClick={() => deleteLevelWithFallbackSelection(level.id)}
-              title={canDeleteLevel ? 'Delete level' : 'The ground level cannot be deleted'}
+              title={canDeleteLevel ? '删除楼层' : '首层不能删除'}
             >
               <Trash2 className="h-3.5 w-3.5" />
               Delete
@@ -970,14 +970,14 @@ function LayerToggle() {
         )}
         <div className="relative z-10 flex flex-col items-center">
           <img
-            alt="Zones"
+            alt="区域"
             className={cn(
               'mb-1 h-6 w-6 transition-all',
               activeTab !== 'zones' && 'opacity-50 grayscale',
             )}
             src="/icons/kitchen.png"
           />
-          Zones
+          区域
         </div>
         <div className="absolute right-1.5 bottom-1 z-10 rounded border border-border/40 bg-background/40 px-1 py-[2px] backdrop-blur-md">
           <span className="block font-medium font-mono text-[9px] text-muted-foreground/70 leading-none">
@@ -1314,14 +1314,14 @@ function BuildingItem({
       >
         <div className="flex h-full min-w-0 flex-1 cursor-pointer items-center gap-2 py-2 pl-3">
           <img
-            alt="Building"
+            alt="建筑"
             className={cn(
               'h-5 w-5 object-contain transition-all',
               !isBuildingActive && 'opacity-60 grayscale',
             )}
             src="/icons/building.png"
           />
-          <span className="truncate font-medium text-sm">{building.name || 'Building'}</span>
+          <span className="truncate font-medium text-sm">{building.name || '建筑'}</span>
         </div>
         <Popover
           onOpenChange={(open) => setBuildingCameraOpen(open ? building.id : null)}

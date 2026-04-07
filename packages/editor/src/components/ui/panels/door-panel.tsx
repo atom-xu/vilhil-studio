@@ -202,7 +202,7 @@ export function DoorPanel() {
         </PresetsPopover>
       </div>
 
-      <PanelSection title="Position">
+      <PanelSection title="位置">
         <SliderControl
           label={
             <>
@@ -227,9 +227,9 @@ export function DoorPanel() {
         </div>
       </PanelSection>
 
-      <PanelSection title="Dimensions">
+      <PanelSection title="尺寸">
         <SliderControl
-          label="Width"
+          label="宽度"
           max={3}
           min={0.5}
           onChange={(v) => handleUpdate({ width: v })}
@@ -239,7 +239,7 @@ export function DoorPanel() {
           value={Math.round(node.width * 100) / 100}
         />
         <SliderControl
-          label="Height"
+          label="高度"
           max={4}
           min={1.0}
           onChange={(v) =>
@@ -252,9 +252,9 @@ export function DoorPanel() {
         />
       </PanelSection>
 
-      <PanelSection title="Frame">
+      <PanelSection title="门框">
         <SliderControl
-          label="Thickness"
+          label="厚度"
           max={0.2}
           min={0.01}
           onChange={(v) => handleUpdate({ frameThickness: v })}
@@ -264,7 +264,7 @@ export function DoorPanel() {
           value={Math.round(node.frameThickness * 1000) / 1000}
         />
         <SliderControl
-          label="Depth"
+          label="深度"
           max={0.3}
           min={0.01}
           onChange={(v) => handleUpdate({ frameDepth: v })}
@@ -277,7 +277,7 @@ export function DoorPanel() {
 
       <PanelSection title="Content Padding">
         <SliderControl
-          label="Horizontal"
+          label="水平"
           max={0.2}
           min={0}
           onChange={(v) => handleUpdate({ contentPadding: [v, node.contentPadding[1]] })}
@@ -287,7 +287,7 @@ export function DoorPanel() {
           value={Math.round(node.contentPadding[0] * 1000) / 1000}
         />
         <SliderControl
-          label="Vertical"
+          label="垂直"
           max={0.2}
           min={0}
           onChange={(v) => handleUpdate({ contentPadding: [node.contentPadding[0], v] })}
@@ -298,7 +298,7 @@ export function DoorPanel() {
         />
       </PanelSection>
 
-      <PanelSection title="Swing">
+      <PanelSection title="开启方向">
         <div className="flex flex-col gap-2 px-1 pb-1">
           <div className="space-y-1">
             <span className="font-medium text-[10px] text-muted-foreground/80 uppercase tracking-wider">
@@ -329,7 +329,7 @@ export function DoorPanel() {
         </div>
       </PanelSection>
 
-      <PanelSection title="Threshold">
+      <PanelSection title="门槛">
         <ToggleControl
           checked={node.threshold}
           label="Enable Threshold"
@@ -338,7 +338,7 @@ export function DoorPanel() {
         {node.threshold && (
           <div className="mt-1 flex flex-col gap-1">
             <SliderControl
-              label="Height"
+              label="高度"
               max={0.1}
               min={0.005}
               onChange={(v) => handleUpdate({ thresholdHeight: v })}
@@ -351,7 +351,7 @@ export function DoorPanel() {
         )}
       </PanelSection>
 
-      <PanelSection title="Handle">
+      <PanelSection title="把手">
         <ToggleControl
           checked={node.handle}
           label="Enable Handle"
@@ -360,7 +360,7 @@ export function DoorPanel() {
         {node.handle && (
           <div className="mt-1 flex flex-col gap-1">
             <SliderControl
-              label="Height"
+              label="高度"
               max={node.height - 0.1}
               min={0.5}
               onChange={(v) => handleUpdate({ handleHeight: v })}
@@ -386,7 +386,7 @@ export function DoorPanel() {
         )}
       </PanelSection>
 
-      <PanelSection title="Hardware">
+      <PanelSection title="五金">
         <ToggleControl
           checked={node.doorCloser}
           label="Door Closer"
@@ -438,7 +438,7 @@ export function DoorPanel() {
               />
 
               <SliderControl
-                label="Height"
+                label="高度"
                 max={95}
                 min={5}
                 onChange={(v) => setSegmentHeightRatio(i, v / 100)}
@@ -515,7 +515,7 @@ export function DoorPanel() {
                     value={Math.round(seg.panelInset * 1000) / 1000}
                   />
                   <SliderControl
-                    label="Depth"
+                    label="深度"
                     max={0.1}
                     min={0}
                     onChange={(v) => {
@@ -563,25 +563,25 @@ export function DoorPanel() {
         </div>
       </PanelSection>
 
-      <PanelSection title="Material">
+      <PanelSection title="材质">
         <MaterialPicker
           onChange={(material) => handleUpdate({ material })}
           value={node.material}
         />
       </PanelSection>
 
-      <PanelSection title="Actions">
+      <PanelSection title="操作">
         <ActionGroup>
-          <ActionButton icon={<Move className="h-3.5 w-3.5" />} label="Move" onClick={handleMove} />
+          <ActionButton icon={<Move className="h-3.5 w-3.5" />} label="移动" onClick={handleMove} />
           <ActionButton
             icon={<Copy className="h-3.5 w-3.5" />}
-            label="Duplicate"
+            label="复制"
             onClick={handleDuplicate}
           />
           <ActionButton
             className="hover:bg-red-500/20"
             icon={<Trash2 className="h-3.5 w-3.5 text-red-400" />}
-            label="Delete"
+            label="删除"
             onClick={handleDelete}
           />
         </ActionGroup>

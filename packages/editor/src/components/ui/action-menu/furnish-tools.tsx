@@ -17,31 +17,31 @@ export const furnishTools: FurnishToolConfig[] = [
   {
     id: 'item',
     iconSrc: '/icons/couch.png',
-    label: 'Furniture',
+    label: '家具',
     catalogCategory: 'furniture',
   },
   {
     id: 'item',
     iconSrc: '/icons/appliance.png',
-    label: 'Appliance',
+    label: '电器',
     catalogCategory: 'appliance',
   },
   {
     id: 'item',
     iconSrc: '/icons/kitchen.png',
-    label: 'Kitchen',
+    label: '厨房',
     catalogCategory: 'kitchen',
   },
   {
     id: 'item',
     iconSrc: '/icons/bathroom.png',
-    label: 'Bathroom',
+    label: '卫浴',
     catalogCategory: 'bathroom',
   },
   {
     id: 'item',
     iconSrc: '/icons/tree.png',
-    label: 'Outdoor',
+    label: '户外',
     catalogCategory: 'outdoor',
   },
 ]

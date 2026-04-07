@@ -202,7 +202,7 @@ export function SettingsPanel({
 
   const isLocalProject = false // Props-based; only show cloud sections when projectId provided
 
-  const handleExport = async (format: 'glb' | 'stl' | 'obj' = 'glb') => {
+  const handle导出 = async (format: 'glb' | 'stl' | 'obj' = 'glb') => {
     if (exportScene) {
       await exportScene(format)
     }
@@ -315,20 +315,20 @@ export function SettingsPanel({
         </div>
       )}
 
-      {/* Export Section */}
+      {/* 导出 Section */}
       <div className="space-y-2">
-        <label className="font-medium text-muted-foreground text-xs uppercase">Export</label>
-        <Button className="w-full justify-start gap-2" onClick={() => handleExport('glb')} variant="outline">
+        <label className="font-medium text-muted-foreground text-xs uppercase">导出</label>
+        <Button className="w-full justify-start gap-2" onClick={() => handle导出('glb')} variant="outline">
           <Download className="size-4" />
-          Export as GLB
+          导出 as GLB
         </Button>
-        <Button className="w-full justify-start gap-2" onClick={() => handleExport('stl')} variant="outline">
+        <Button className="w-full justify-start gap-2" onClick={() => handle导出('stl')} variant="outline">
           <Download className="size-4" />
-          Export as STL
+          导出 as STL
         </Button>
-        <Button className="w-full justify-start gap-2" onClick={() => handleExport('obj')} variant="outline">
+        <Button className="w-full justify-start gap-2" onClick={() => handle导出('obj')} variant="outline">
           <Download className="size-4" />
-          Export as OBJ
+          导出 as OBJ
         </Button>
       </div>
 
@@ -354,7 +354,7 @@ export function SettingsPanel({
 
         <Button className="w-full justify-start gap-2" onClick={handleSaveBuild} variant="outline">
           <Save className="size-4" />
-          Save Build
+          保存方案
         </Button>
 
         <Button
@@ -363,7 +363,7 @@ export function SettingsPanel({
           variant="outline"
         >
           <Upload className="size-4" />
-          Load Build
+          加载方案
         </Button>
 
         <input
@@ -387,9 +387,9 @@ export function SettingsPanel({
         <KeyboardShortcutsDialog />
       </div>
 
-      {/* Scene Graph */}
+      {/* 场景树 */}
       <div className="space-y-1">
-        <label className="font-medium text-muted-foreground text-xs uppercase">Scene Graph</label>
+        <label className="font-medium text-muted-foreground text-xs uppercase">场景树</label>
         <Dialog>
           <DialogTrigger asChild>
             <Button className="h-auto justify-start p-0 text-sm" variant="link">
@@ -397,7 +397,7 @@ export function SettingsPanel({
             </Button>
           </DialogTrigger>
           <DialogContent className="h-[80vh] max-w-[95vw] gap-0 overflow-hidden border-0 bg-[#1e1e1e] p-0 shadow-none sm:max-w-5xl">
-            <DialogTitle className="sr-only">Scene Graph</DialogTitle>
+            <DialogTitle className="sr-only">场景树</DialogTitle>
             <div
               className="flex h-full min-h-0 w-full min-w-0 *:h-full *:w-full *:overflow-y-auto"
               onContextMenuCapture={blockSceneGraphMutations}

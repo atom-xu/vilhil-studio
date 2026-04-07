@@ -27,7 +27,7 @@ export function LevelTreeNode({ node, depth, isLast }: LevelTreeNodeProps) {
     focusTreeNode(node.id)
   }
 
-  const defaultName = `Level ${node.level}`
+  const defaultName = `楼层 ${node.level}`
 
   return (
     <TreeNodeWrapper

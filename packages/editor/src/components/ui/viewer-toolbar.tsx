@@ -35,7 +35,7 @@ const VIEW_MODES: { id: ViewMode; label: string; icon: React.ReactNode }[] = [
   },
   {
     id: 'split',
-    label: 'Split',
+    label: '分屏',
     icon: <Columns2 className="h-3 w-3" />,
   },
 ]
@@ -84,7 +84,7 @@ function CollapseSidebarButton() {
       <button
         className={TOOLBAR_BTN}
         onClick={toggle}
-        title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        title={isCollapsed ? '展开侧边栏' : '收起侧边栏'}
         type="button"
       >
         {isCollapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
@@ -117,7 +117,7 @@ function WalkthroughButton() {
           <Footprints className="h-4 w-4" />
         </button>
       </TooltipTrigger>
-      <TooltipContent side="bottom">Walkthrough</TooltipContent>
+      <TooltipContent side="bottom">漫游</TooltipContent>
     </Tooltip>
   )
 }
@@ -138,7 +138,7 @@ function UnitToggle() {
         </button>
       </TooltipTrigger>
       <TooltipContent side="bottom">
-        {unit === 'metric' ? 'Metric (m)' : 'Imperial (ft)'}
+        {unit === 'metric' ? '公制 (m)' : '英制 (ft)'}
       </TooltipContent>
     </Tooltip>
   )
@@ -159,7 +159,7 @@ function ThemeToggle() {
           {theme === 'dark' ? <Moon className="h-3.5 w-3.5" /> : <Sun className="h-3.5 w-3.5" />}
         </button>
       </TooltipTrigger>
-      <TooltipContent side="bottom">{theme === 'dark' ? 'Dark' : 'Light'}</TooltipContent>
+      <TooltipContent side="bottom">{theme === 'dark' ? '暗色' : '亮色'}</TooltipContent>
     </Tooltip>
   )
 }
@@ -168,10 +168,10 @@ function ThemeToggle() {
 
 const levelModeOrder = ['stacked', 'exploded', 'solo'] as const
 const levelModeLabels: Record<string, string> = {
-  manual: 'Stack',
-  stacked: 'Stack',
-  exploded: 'Exploded',
-  solo: 'Solo',
+  manual: '堆叠',
+  stacked: '堆叠',
+  exploded: '展开',
+  solo: '独立',
 }
 
 function LevelModeToggle() {
@@ -213,7 +213,7 @@ function LevelModeToggle() {
         </button>
       </TooltipTrigger>
       <TooltipContent side="bottom">
-        Levels: {levelMode === 'manual' ? 'Manual' : levelModeLabels[levelMode]}
+        楼层: {levelMode === 'manual' ? '手动' : levelModeLabels[levelMode]}
       </TooltipContent>
     </Tooltip>
   )
@@ -223,9 +223,9 @@ function LevelModeToggle() {
 
 const wallModeOrder = ['cutaway', 'up', 'down'] as const
 const wallModeConfig: Record<string, { icon: string; label: string }> = {
-  up: { icon: '/icons/room.png', label: 'Full height' },
-  cutaway: { icon: '/icons/wallcut.png', label: 'Cutaway' },
-  down: { icon: '/icons/walllow.png', label: 'Low' },
+  up: { icon: '/icons/room.png', label: '全高' },
+  cutaway: { icon: '/icons/wallcut.png', label: '剖切' },
+  down: { icon: '/icons/walllow.png', label: '低矮' },
 }
 
 function WallModeToggle() {
@@ -258,7 +258,7 @@ function WallModeToggle() {
           <span className="font-medium text-xs">{config.label}</span>
         </button>
       </TooltipTrigger>
-      <TooltipContent side="bottom">Walls: {config.label}</TooltipContent>
+      <TooltipContent side="bottom">墙体: {config.label}</TooltipContent>
     </Tooltip>
   )
 }
@@ -290,7 +290,7 @@ function CameraModeToggle() {
         </button>
       </TooltipTrigger>
       <TooltipContent side="bottom">
-        {cameraMode === 'perspective' ? 'Perspective' : 'Orthographic'}
+        {cameraMode === 'perspective' ? '透视' : '正交'}
       </TooltipContent>
     </Tooltip>
   )
@@ -306,10 +306,10 @@ function PreviewButton() {
           type="button"
         >
           <Eye className="h-3.5 w-3.5 shrink-0" />
-          <span>Preview</span>
+          <span>预览</span>
         </button>
       </TooltipTrigger>
-      <TooltipContent side="bottom">Preview mode</TooltipContent>
+      <TooltipContent side="bottom">预览模式</TooltipContent>
     </Tooltip>
   )
 }

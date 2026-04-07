@@ -45,7 +45,7 @@ export function ReferencePanel() {
       title={node.name || (isScan ? '3D Scan' : 'Guide Image')}
       width={300}
     >
-      <PanelSection title="Position">
+      <PanelSection title="位置">
         <SliderControl
           label={
             <>
@@ -102,7 +102,7 @@ export function ReferencePanel() {
         />
       </PanelSection>
 
-      <PanelSection title="Rotation">
+      <PanelSection title="旋转">
         <SliderControl
           label={
             <>
