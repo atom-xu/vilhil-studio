@@ -32,10 +32,10 @@ export function NodeActionMenu({
     >
       {onMove && (
         <button
-          aria-label="Move"
+          aria-label="移动"
           className="tooltip-trigger rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           onClick={onMove}
-          title="Move"
+          title="移动"
           type="button"
         >
           <Move className="h-4 w-4" />
@@ -43,20 +43,20 @@ export function NodeActionMenu({
       )}
       {onDuplicate && (
         <button
-          aria-label="Duplicate"
+          aria-label="复制"
           className="tooltip-trigger rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           onClick={onDuplicate}
-          title="Duplicate"
+          title="复制"
           type="button"
         >
           <Copy className="h-4 w-4" />
         </button>
       )}
       <button
-        aria-label="Delete"
+        aria-label="删除"
         className="tooltip-trigger rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
         onClick={onDelete}
-        title="Delete"
+        title="删除"
         type="button"
       >
         <Trash2 className="h-4 w-4" />

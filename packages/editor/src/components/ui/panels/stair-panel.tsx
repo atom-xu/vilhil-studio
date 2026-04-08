@@ -179,7 +179,7 @@ export function StairPanel() {
       title={node.name || 'Staircase'}
       width={300}
     >
-      <PanelSection title="Segments">
+      <PanelSection title="分段">
         <div className="flex flex-col gap-1">
           {segments.map((seg, i) => (
             <button

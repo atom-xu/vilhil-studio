@@ -25,6 +25,8 @@ type ShortcutCategory = {
 const KEY_DISPLAY_MAP: Record<string, string> = {
   'Arrow Up': '↑',
   'Arrow Down': '↓',
+  'Middle click': '中键',
+  'Right click': '右键',
   Esc: '⎋',
   Shift: '⇧',
   Space: '␣',

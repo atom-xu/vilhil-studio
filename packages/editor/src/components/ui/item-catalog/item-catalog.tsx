@@ -197,7 +197,7 @@ export function ItemCatalog({ category }: { category: CatalogCategory }) {
                   {attachmentIcon && (
                     <div className="absolute right-0.5 bottom-0.5 flex h-4 w-4 items-center justify-center rounded bg-black/60">
                       <Image
-                        alt={item.attachTo === 'ceiling' ? 'Ceiling attachment' : 'Wall attachment'}
+                        alt={item.attachTo === 'ceiling' ? '天花板附着' : '墙面附着'}
                         className="h-4 w-4"
                         height={16}
                         src={attachmentIcon}

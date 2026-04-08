@@ -25,7 +25,7 @@ interface ProposalLayoutProps {
  */
 export function ProposalLayout({
   children,
-  projectName = 'Project',
+  projectName = '项目',
   onBack,
   className,
 }: ProposalLayoutProps) {
@@ -82,17 +82,17 @@ export function ProposalLayout({
             <h1 className="font-semibold text-foreground">{projectName}</h1>
             {/* Breadcrumb */}
             <div className="flex items-center gap-1 text-muted-foreground text-xs">
-              <span>Site</span>
+              <span>场地</span>
               {building && (
                 <>
                   <ChevronRight className="h-3 w-3" />
-                  <span>{building.name || 'Building'}</span>
+                  <span>{building.name || '建筑'}</span>
                 </>
               )}
               {level && (
                 <>
                   <ChevronRight className="h-3 w-3" />
-                  <span>{level.name || `Level ${level.level}`}</span>
+                  <span>{level.name || `楼层 ${level.level}`}</span>
                 </>
               )}
             </div>

@@ -283,7 +283,7 @@ function CameraPopover({
             }}
           >
             <Camera className="h-3.5 w-3.5" />
-            {hasCamera ? 'Update snapshot' : 'Take snapshot'}
+            {hasCamera ? '更新快照' : '拍摄快照'}
           </button>
           {hasCamera && (
             <button
@@ -675,7 +675,7 @@ function LevelItem({
                   : 'text-muted-foreground hover:bg-accent hover:text-foreground',
               )}
               onClick={(e) => e.stopPropagation()}
-              title="Camera snapshot"
+              title="相机快照"
             >
               <Camera className="h-3.5 w-3.5" />
               {level.camera && (
@@ -1086,7 +1086,7 @@ function ZoneItem({ zone, isLast }: { zone: ZoneNode; isLast?: boolean }) {
             <button
               className="relative flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 transition-colors hover:bg-black/5 hover:text-foreground group-hover/row:opacity-100 dark:hover:bg-white/10"
               onClick={(e) => e.stopPropagation()}
-              title="Camera snapshot"
+              title="相机快照"
             >
               <Camera className="h-3 w-3" />
               {zone.camera && (
@@ -1336,7 +1336,7 @@ function BuildingItem({
                   : 'text-muted-foreground hover:bg-accent hover:text-foreground',
               )}
               onClick={(e) => e.stopPropagation()}
-              title="Camera snapshot"
+              title="相机快照"
             >
               <Camera className="h-4 w-4" />
               {building.camera && (
@@ -1474,7 +1474,7 @@ export function SitePanel({ projectId, onUploadAsset, onDeleteAsset }: SitePanel
                 )}
                 src="/icons/site.png"
               />
-              <span className="font-medium text-sm">{siteNode.name || 'Site'}</span>
+              <span className="font-medium text-sm">{siteNode.name || '场地'}</span>
             </div>
             <CameraPopover
               buttonClassName={cn(

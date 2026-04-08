@@ -642,7 +642,7 @@ export const CATALOG_ITEMS: AssetInput[] = [
         {
           kind: 'animation',
           clips: {
-            on: 'On',
+            on: '开启',
           },
         },
       ],
@@ -1262,7 +1262,7 @@ export const CATALOG_ITEMS: AssetInput[] = [
         },
         {
           kind: 'slider',
-          label: 'Intensity',
+          label: '亮度',
           min: 0,
           max: 100,
           unit: '%',
@@ -1299,7 +1299,7 @@ export const CATALOG_ITEMS: AssetInput[] = [
         },
         {
           kind: 'slider',
-          label: 'Intensity',
+          label: '亮度',
           min: 0,
           max: 100,
           unit: '%',
@@ -1336,7 +1336,7 @@ export const CATALOG_ITEMS: AssetInput[] = [
         },
         {
           kind: 'slider',
-          label: 'Intensity',
+          label: '亮度',
           min: 0,
           max: 100,
           unit: '%',

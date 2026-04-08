@@ -42,7 +42,7 @@ export function ReferencePanel() {
     <PanelWrapper
       icon={isScan ? undefined : undefined}
       onClose={handleClose}
-      title={node.name || (isScan ? '3D Scan' : 'Guide Image')}
+      title={node.name || (isScan ? '3D 扫描' : '平面参考图')}
       width={300}
     >
       <PanelSection title="位置">
@@ -142,7 +142,7 @@ export function ReferencePanel() {
         </div>
       </PanelSection>
 
-      <PanelSection title="Scale & Opacity">
+      <PanelSection title="缩放与透明度">
         <SliderControl
           label={
             <>

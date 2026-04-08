@@ -211,9 +211,9 @@ export function StairSegmentPanel() {
         )}
       </PanelSection>
 
-      <PanelSection title="Structure">
+      <PanelSection title="结构">
         <div className="flex items-center justify-between px-1 py-1">
-          <span className="text-muted-foreground text-xs">Fill to floor</span>
+          <span className="text-muted-foreground text-xs">填充到地面</span>
           <button
             className={`relative h-5 w-10 rounded-full transition-colors ${
               node.fillToFloor ? 'bg-blue-500' : 'bg-[#3e3e3e]'

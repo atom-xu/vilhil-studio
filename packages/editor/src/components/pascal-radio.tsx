@@ -181,7 +181,7 @@ export function PascalRadio() {
         </div>
         <div className="flex items-center gap-2">
           <div
-            aria-label={isRadioPlaying ? 'Pause' : 'Play'}
+            aria-label={isRadioPlaying ? '暂停' : '播放'}
             className="cursor-pointer rounded-sm bg-accent/30 p-1 transition-all hover:bg-accent hover:text-accent-foreground hover:shadow-sm"
             onClick={(e) => {
               e.stopPropagation()
@@ -204,7 +204,7 @@ export function PascalRadio() {
             )}
           </div>
           <button
-            aria-label="Radio Settings"
+            aria-label="收音机设置"
             className={cn(
               'cursor-pointer rounded-sm p-1 transition-all hover:bg-accent hover:text-accent-foreground',
               isOpen && 'bg-accent text-accent-foreground',
@@ -231,10 +231,10 @@ export function PascalRadio() {
               <div className="mb-3 h-px w-full bg-border/50" />
               {/* Current song info with prev/next */}
               <div>
-                <p className="mb-2 text-muted-foreground text-xs">Now Playing</p>
+                <p className="mb-2 text-muted-foreground text-xs">正在播放</p>
                 <div className="flex items-center justify-between gap-2">
                   <button
-                    aria-label="Previous"
+                    aria-label="上一首"
                     className="shrink-0 rounded-full p-1.5 transition-colors hover:bg-accent"
                     onClick={handlePrevious}
                   >
@@ -247,7 +247,7 @@ export function PascalRadio() {
                     {currentTrack.title}
                   </p>
                   <button
-                    aria-label="Next"
+                    aria-label="下一首"
                     className="shrink-0 rounded-full p-1.5 transition-colors hover:bg-accent"
                     onClick={handleNext}
                   >
@@ -260,7 +260,7 @@ export function PascalRadio() {
               <div className="flex items-center gap-2">
                 <Volume2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 <Slider
-                  aria-label="Radio Volume"
+                  aria-label="收音机音量"
                   className="flex-1"
                   max={100}
                   onValueChange={handleVolumeChange}

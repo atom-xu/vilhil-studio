@@ -57,7 +57,7 @@ function ZoneItem({ zone }: { zone: ZoneNode }) {
           <button
             className="relative flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 transition-colors hover:bg-black/5 hover:text-foreground group-hover/row:opacity-100 dark:hover:bg-white/10"
             onClick={(e) => e.stopPropagation()}
-            title="Camera snapshot"
+            title="相机快照"
           >
             <Camera className="h-3 w-3" />
             {zone.camera && (
@@ -82,7 +82,7 @@ function ZoneItem({ zone }: { zone: ZoneNode }) {
                 }}
               >
                 <Camera className="h-3.5 w-3.5" />
-                View snapshot
+                查看快照
               </button>
             )}
             <button
@@ -94,7 +94,7 @@ function ZoneItem({ zone }: { zone: ZoneNode }) {
               }}
             >
               <Camera className="h-3.5 w-3.5" />
-              {zone.camera ? 'Update snapshot' : 'Take snapshot'}
+              {zone.camera ? '更新快照' : '拍摄快照'}
             </button>
             {zone.camera && (
               <button
@@ -106,7 +106,7 @@ function ZoneItem({ zone }: { zone: ZoneNode }) {
                 }}
               >
                 <Trash2 className="h-3.5 w-3.5" />
-                Clear snapshot
+                清除快照
               </button>
             )}
           </div>
@@ -145,7 +145,7 @@ export function ZonePanel() {
   if (!currentLevelId) {
     return (
       <div className="px-3 py-4 text-muted-foreground text-sm">
-        Select a level to view and create zones
+        选择一个楼层以查看和创建区域
       </div>
     )
   }
@@ -154,9 +154,9 @@ export function ZonePanel() {
     <div className="py-1">
       {levelZones.length === 0 ? (
         <div className="px-3 py-4 text-muted-foreground text-sm">
-          No zones on this level.{' '}
+          该楼层暂无区域。{' '}
           <button className="cursor-pointer text-primary hover:underline" onClick={handleAddZone}>
-            Add one
+            添加一个
           </button>
         </div>
       ) : (

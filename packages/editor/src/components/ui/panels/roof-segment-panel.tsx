@@ -23,16 +23,16 @@ import { SliderControl } from '../controls/slider-control'
 import { PanelWrapper } from './panel-wrapper'
 
 const ROOF_TYPE_OPTIONS: { label: string; value: RoofType }[] = [
-  { label: 'Hip', value: 'hip' },
-  { label: 'Gable', value: 'gable' },
-  { label: 'Shed', value: 'shed' },
-  { label: 'Flat', value: 'flat' },
+  { label: '四坡顶', value: 'hip' },
+  { label: '人字顶', value: 'gable' },
+  { label: '单坡顶', value: 'shed' },
+  { label: '平顶', value: 'flat' },
 ]
 
 const ROOF_TYPE_OPTIONS_2: { label: string; value: RoofType }[] = [
-  { label: 'Gambrel', value: 'gambrel' },
-  { label: 'Dutch', value: 'dutch' },
-  { label: 'Mansard', value: 'mansard' },
+  { label: '谷仓顶', value: 'gambrel' },
+  { label: '荷兰顶', value: 'dutch' },
+  { label: '孟莎顶', value: 'mansard' },
 ]
 
 export function RoofSegmentPanel() {
@@ -137,7 +137,7 @@ export function RoofSegmentPanel() {
         />
       </PanelSection>
 
-      <PanelSection title="Footprint">
+      <PanelSection title="占地面积">
         <SliderControl
           label="宽度"
           max={25}

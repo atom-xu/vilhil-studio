@@ -413,7 +413,7 @@ export function DoorPanel() {
         )}
       </PanelSection>
 
-      <PanelSection title="Segments">
+      <PanelSection title="分段">
         {node.segments.map((seg, i) => {
           const numCols = seg.columnRatios.length
           const colSum = seg.columnRatios.reduce((a, b) => a + b, 0)

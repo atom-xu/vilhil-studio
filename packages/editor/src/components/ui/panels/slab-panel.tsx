@@ -121,7 +121,7 @@ export function SlabPanel() {
     <PanelWrapper
       icon="/icons/floor.png"
       onClose={handleClose}
-      title={node.name || 'Slab'}
+      title={node.name || '楼板'}
       width={320}
     >
       <PanelSection title="标高">

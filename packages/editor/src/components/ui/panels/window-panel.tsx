@@ -263,7 +263,7 @@ export function WindowPanel() {
         />
       </PanelSection>
 
-      <PanelSection title="Frame">
+      <PanelSection title="窗框">
         <SliderControl
           label="厚度"
           min={0}

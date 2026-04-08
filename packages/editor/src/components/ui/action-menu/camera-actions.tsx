@@ -34,7 +34,7 @@ export function CameraActions() {
         variant="ghost"
       >
         <Image
-          alt="Orbit Left"
+          alt="向左环绕"
           className="h-[28px] w-[28px] -scale-x-100 object-contain opacity-70 transition-opacity group-hover:opacity-100"
           height={28}
           src="/icons/rotate.png"
@@ -51,7 +51,7 @@ export function CameraActions() {
         variant="ghost"
       >
         <Image
-          alt="Orbit Right"
+          alt="向右环绕"
           className="h-[28px] w-[28px] object-contain opacity-70 transition-opacity group-hover:opacity-100"
           height={28}
           src="/icons/rotate.png"
@@ -68,7 +68,7 @@ export function CameraActions() {
         variant="ghost"
       >
         <Image
-          alt="Top View"
+          alt="顶视图"
           className="h-[28px] w-[28px] object-contain opacity-70 transition-opacity group-hover:opacity-100"
           height={28}
           src="/icons/topview.png"
