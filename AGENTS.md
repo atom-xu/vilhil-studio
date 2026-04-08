@@ -165,7 +165,49 @@ Then  筒灯渐亮到暖白 3000K，灯带亮起氛围光，窗帘缓缓关闭
 
 ## 开发规约
 
-### 1. 修改前必读
+### 1. 功能即工具（最重要的原则）
+
+**每个功能必须先是一个可独立调用的纯函数，再用 UI 包装。**
+
+```
+❌ 错误：功能写在 React 组件里
+const DevicePlacer = () => {
+  const handleDrop = () => {
+    // 100 行放置逻辑写在组件内
+  }
+}
+
+✅ 正确：功能是独立工具函数，组件只是调用方
+// packages/smarthome/src/tools/place-device.ts
+export function placeDevice(roomId, deviceType, position, params) { ... }
+
+// UI 组件调用
+const DevicePlacer = () => {
+  const handleDrop = () => placeDevice(roomId, type, pos, params)
+}
+
+// AI 也能调用同一个函数
+await placeDevice('living-room', 'ceiling_light', [3,2.5,4], { beamAngle: 30 })
+```
+
+**工具函数存放位置**：`packages/smarthome/src/tools/`
+
+| 工具 | 函数 | 未来 AI 用途 |
+|------|------|------------|
+| 放置设备 | `placeDevice()` | "帮我在客厅放 3 盏筒灯" |
+| 删除设备 | `removeDevice()` | "把多余的传感器去掉" |
+| 设置参数 | `setDeviceParams()` | "把灯光调到 3000K" |
+| 创建场景 | `createScene()` | "创建一个回家模式" |
+| 编排时间线 | `addSceneEffect()` | "灯先亮，2 秒后窗帘关" |
+| 自动布点 | `autoPlaceDevices()` | "帮我自动布一套灯光方案" |
+| 覆盖计算 | `calculateCoverage()` | "这个 AP 能覆盖多大" |
+| 导出清单 | `exportDeviceList()` | "生成设备清单" |
+| 应用场景 | `applyScene()` | "播放回家模式" |
+| 切换设备 | `toggleDevice()` | "把客厅灯关了" |
+
+**规则**：任何新功能开发，先在 `packages/smarthome/src/tools/` 写纯函数并测试通过，再做 UI。如果一个功能不能脱离 UI 独立运行，说明架构有问题。
+
+### 2. 修改前必读
 - 修改任何文件前先读它，了解上下文
 - 涉及子系统分类时对照9分类表
 - Pascal 核心代码（wall/slab/ceiling/roof）谨慎修改
