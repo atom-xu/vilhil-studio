@@ -198,7 +198,7 @@ export function StairSegmentPanel() {
               value={Math.round(node.height * 100) / 100}
             />
             <SliderControl
-              label="Steps"
+              label="台阶数"
               max={30}
               min={2}
               onChange={(v) => handleUpdate({ stepCount: Math.round(v) })}

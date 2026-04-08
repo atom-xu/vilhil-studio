@@ -32,13 +32,7 @@ export default function RootLayout({
       lang="en"
     >
       <head>
-        {process.env.NODE_ENV === 'development' && (
-          <Script
-            crossOrigin="anonymous"
-            src="//unpkg.com/react-scan/dist/auto.global.js"
-            strategy="beforeInteractive"
-          />
-        )}
+        {/* React Scan 已禁用 — 会干扰 R3F Canvas context 导致崩溃 */}
       </head>
       <body className="font-sans">
         {children}

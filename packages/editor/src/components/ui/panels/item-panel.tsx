@@ -280,7 +280,7 @@ export function ItemPanel() {
             collectionIds={node.collectionIds}
             nodeId={selectedId as AnyNode['id']}
           >
-            <ActionButton label="Manage collections…" />
+            <ActionButton label="管理收藏…" />
           </CollectionsPopover>
         </ActionGroup>
       </PanelSection>

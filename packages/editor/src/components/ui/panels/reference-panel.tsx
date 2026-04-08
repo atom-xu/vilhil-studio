@@ -162,7 +162,7 @@ export function ReferencePanel() {
         />
 
         <SliderControl
-          label="Opacity"
+          label="透明度"
           max={100}
           min={0}
           onChange={(v) => handleUpdate({ opacity: v })}
