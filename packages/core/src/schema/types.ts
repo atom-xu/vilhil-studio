@@ -15,6 +15,7 @@ import { StairSegmentNode } from './nodes/stair-segment'
 import { WallNode } from './nodes/wall'
 import { WindowNode } from './nodes/window'
 import { ZoneNode } from './nodes/zone'
+import { DeviceNode, SceneNode } from './nodes/device'
 
 export const AnyNode = z.discriminatedUnion('type', [
   SiteNode,
@@ -33,6 +34,8 @@ export const AnyNode = z.discriminatedUnion('type', [
   GuideNode,
   WindowNode,
   DoorNode,
+  DeviceNode,
+  SceneNode,
 ])
 
 export type AnyNode = z.infer<typeof AnyNode>

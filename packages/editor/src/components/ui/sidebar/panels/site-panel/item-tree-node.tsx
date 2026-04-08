@@ -73,7 +73,7 @@ export function ItemTreeNode({ node, depth, isLast }: ItemTreeNodeProps) {
     setHoveredId(null)
   }
 
-  const defaultName = node.asset.name || 'Item'
+  const defaultName = node.asset.name || '物品'
   const hasChildren = node.children && node.children.length > 0
 
   return (

@@ -43,7 +43,7 @@ export function SlabTreeNode({ node, depth, isLast }: SlabTreeNodeProps) {
 
   // Calculate approximate area from polygon
   const area = calculatePolygonArea(node.polygon).toFixed(1)
-  const defaultName = `Slab (${area}m²)`
+  const defaultName = `楼板 (${area}m²)`
 
   return (
     <TreeNodeWrapper

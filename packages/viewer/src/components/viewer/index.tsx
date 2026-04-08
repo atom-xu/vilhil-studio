@@ -108,7 +108,7 @@ const Viewer: React.FC<ViewerProps> = ({
 
   return (
     <Canvas
-      camera={{ position: [50, 50, 50], fov: 50 }}
+      camera={{ position: [8, 6, 8], fov: 50 }}
       className={`transition-colors duration-700 ${theme === 'dark' ? 'bg-[#1f2433]' : 'bg-[#fafafa]'}`}
       dpr={[1, 1.5]}
       gl={(props) => {

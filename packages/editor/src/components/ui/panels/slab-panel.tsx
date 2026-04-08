@@ -137,16 +137,16 @@ export function SlabPanel() {
         />
 
         <div className="mt-2 grid grid-cols-2 gap-1.5 px-1 pb-1">
-          <ActionButton label="Sunken (-15cm)" onClick={() => handleUpdate({ elevation: -0.15 })} />
-          <ActionButton label="Ground (0m)" onClick={() => handleUpdate({ elevation: 0 })} />
-          <ActionButton label="Raised (+5cm)" onClick={() => handleUpdate({ elevation: 0.05 })} />
-          <ActionButton label="Step (+15cm)" onClick={() => handleUpdate({ elevation: 0.15 })} />
+          <ActionButton label="下沉 (-15cm)" onClick={() => handleUpdate({ elevation: -0.15 })} />
+          <ActionButton label="地面 (0m)" onClick={() => handleUpdate({ elevation: 0 })} />
+          <ActionButton label="抬高 (+5cm)" onClick={() => handleUpdate({ elevation: 0.05 })} />
+          <ActionButton label="台阶 (+15cm)" onClick={() => handleUpdate({ elevation: 0.15 })} />
         </div>
       </PanelSection>
 
       <PanelSection title="信息">
         <div className="flex items-center justify-between px-2 py-1 text-muted-foreground text-sm">
-          <span>Area</span>
+          <span>面积</span>
           <span className="font-mono text-white">{area.toFixed(2)} m²</span>
         </div>
       </PanelSection>
@@ -171,7 +171,7 @@ export function SlabPanel() {
                     <p
                       className={`font-medium text-xs ${isEditing ? 'text-primary' : 'text-white'}`}
                     >
-                      Hole {index + 1} {isEditing && '(Editing)'}
+                      开洞 {index + 1} {isEditing && '(编辑中)'}
                     </p>
                     <p className="text-[10px] text-muted-foreground">
                       {holeArea.toFixed(2)} m² · {hole.length} pts
@@ -208,7 +208,7 @@ export function SlabPanel() {
             })}
           </div>
         ) : (
-          <div className="px-2 py-3 text-center text-muted-foreground text-xs">No holes</div>
+          <div className="px-2 py-3 text-center text-muted-foreground text-xs">无开洞</div>
         )}
 
         <div className="px-1 pt-1 pb-1">
@@ -216,7 +216,7 @@ export function SlabPanel() {
             className="w-full"
             disabled={editingHole?.nodeId === selectedId}
             icon={<Plus className="h-3.5 w-3.5" />}
-            label="Add Hole"
+            label="添加开洞"
             onClick={handleAddHole}
           />
         </div>

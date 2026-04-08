@@ -67,7 +67,7 @@ export function StairTreeNode({ node, depth, isLast }: StairTreeNodeProps) {
   }, [isDropTarget, expanded])
 
   const segmentCount = segments.length
-  const defaultName = `Staircase (${segmentCount} segment${segmentCount !== 1 ? 's' : ''})`
+  const defaultName = `楼梯 (${segmentCount} 段)`
 
   // Hide the dragged segment from every stair while dragging
   const visibleSegments = drag ? segments.filter((seg) => seg.id !== drag.nodeId) : segments
@@ -160,17 +160,17 @@ function StairSegmentTreeNode({
     handleTreeSelection(e, node.id, selectedIds, setSelection)
   }
 
+  const typeLabel = node.segmentType === 'stair' ? '梯段' : '平台'
+
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (e.button !== 0) return
-      const typeLabel = node.segmentType === 'stair' ? 'Flight' : 'Landing'
       const label = `${typeLabel} (${node.width.toFixed(1)}×${node.length.toFixed(1)}m)`
       startDrag(node.id, node.type, node.parentId as string, label, e.clientX, e.clientY)
     },
-    [node.id, node.type, node.parentId, node.segmentType, node.width, node.length, startDrag],
+    [node.id, node.type, node.parentId, typeLabel, node.width, node.length, startDrag],
   )
 
-  const typeLabel = node.segmentType === 'stair' ? 'Flight' : 'Landing'
   const defaultName = `${typeLabel} (${node.width.toFixed(1)}×${node.length.toFixed(1)}m)`
 
   return (

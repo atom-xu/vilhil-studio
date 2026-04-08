@@ -5,6 +5,7 @@ import { TooltipProvider } from './../../../components/ui/primitives/tooltip'
 import { useReducedMotion } from './../../../hooks/use-reduced-motion'
 import { cn } from './../../../lib/utils'
 import useEditor from './../../../store/use-editor'
+import { DeviceCatalog } from '../device-catalog/device-catalog'
 import { ItemCatalog } from '../item-catalog/item-catalog'
 import { CameraActions } from './camera-actions'
 import { ControlModes } from './control-modes'
@@ -63,6 +64,35 @@ export function ActionMenu({ className }: { className?: string }) {
               transition={transition}
             >
               <ItemCatalog category={catalogCategory} key={catalogCategory} />
+            </motion.div>
+          )}
+          {mode === 'build' && tool === 'device' && (
+            <motion.div
+              animate={{
+                opacity: 1,
+                maxHeight: 160,
+                paddingTop: 8,
+                paddingBottom: 8,
+                borderBottomWidth: 1,
+              }}
+              className={cn('overflow-hidden border-border border-b px-2 py-2')}
+              exit={{
+                opacity: 0,
+                maxHeight: 0,
+                paddingTop: 0,
+                paddingBottom: 0,
+                borderBottomWidth: 0,
+              }}
+              initial={{
+                opacity: 0,
+                maxHeight: 0,
+                paddingTop: 0,
+                paddingBottom: 0,
+                borderBottomWidth: 0,
+              }}
+              transition={transition}
+            >
+              <DeviceCatalog />
             </motion.div>
           )}
         </AnimatePresence>

@@ -4,6 +4,7 @@ export type {
   BuildingEvent,
   CameraControlEvent,
   CeilingEvent,
+  DeviceEvent,
   DoorEvent,
   EventSuffix,
   GridEvent,

@@ -7,13 +7,13 @@
 
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
-import type { DeviceState, Subsystem } from '@pascal-app/core'
+import type { Subsystem } from '@pascal-app/core'
 
 // ═══════════════════════════════════════════════════════════════
 // 状态定义
 // ═══════════════════════════════════════════════════════════════
 
-interface DeviceStateEntry {
+export interface DeviceStateEntry {
   on?: boolean
   brightness?: number
   colorTemp?: number

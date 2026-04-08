@@ -9,6 +9,16 @@ import { focusTreeNode, handleTreeSelection, TreeNodeWrapper } from './tree-node
 import { TreeNodeActions } from './tree-node-actions'
 import { DropIndicatorLine, useTreeNodeDrag } from './tree-node-drag'
 
+const ROOF_TYPE_LABELS: Record<string, string> = {
+  gable: '人字顶',
+  hip: '四坡顶',
+  shed: '单坡顶',
+  gambrel: '谷仓顶',
+  dutch: '荷兰顶',
+  mansard: '孟莎顶',
+  flat: '平顶',
+}
+
 interface RoofTreeNodeProps {
   node: RoofNode
   depth: number
@@ -67,7 +77,7 @@ export function RoofTreeNode({ node, depth, isLast }: RoofTreeNodeProps) {
   }, [isDropTarget, expanded])
 
   const segmentCount = segments.length
-  const defaultName = `Roof (${segmentCount} segment${segmentCount !== 1 ? 's' : ''})`
+  const defaultName = `屋顶 (${segmentCount} 段)`
 
   // Hide the dragged segment from every roof while dragging
   const visibleSegments = drag ? segments.filter((seg) => seg.id !== drag.nodeId) : segments
@@ -160,16 +170,18 @@ function RoofSegmentTreeNode({
     handleTreeSelection(e, node.id, selectedIds, setSelection)
   }
 
+  const roofTypeLabel = ROOF_TYPE_LABELS[node.roofType] || node.roofType
+
   const handlePointerDown = useCallback(
     (e: React.PointerEvent) => {
       if (e.button !== 0) return
-      const label = `${node.roofType.charAt(0).toUpperCase() + node.roofType.slice(1)} (${node.width.toFixed(1)}×${node.depth.toFixed(1)}m)`
+      const label = `${roofTypeLabel} (${node.width.toFixed(1)}×${node.depth.toFixed(1)}m)`
       startDrag(node.id, node.type, node.parentId as string, label, e.clientX, e.clientY)
     },
-    [node.id, node.type, node.parentId, node.roofType, node.width, node.depth, startDrag],
+    [node.id, node.type, node.parentId, roofTypeLabel, node.width, node.depth, startDrag],
   )
 
-  const defaultName = `${node.roofType.charAt(0).toUpperCase() + node.roofType.slice(1)} (${node.width.toFixed(1)}x${node.depth.toFixed(1)}m)`
+  const defaultName = `${roofTypeLabel} (${node.width.toFixed(1)}×${node.depth.toFixed(1)}m)`
 
   return (
     <div data-drop-child={node.id}>

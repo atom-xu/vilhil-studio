@@ -17,6 +17,7 @@ import { WallTool } from './wall/wall-tool'
 import { WindowTool } from './window/window-tool'
 import { ZoneBoundaryEditor } from './zone/zone-boundary-editor'
 import { ZoneTool } from './zone/zone-tool'
+import { DeviceTool } from './device/device-tool'
 
 const tools: Record<Phase, Partial<Record<Tool, React.FC>>> = {
   site: {
@@ -32,6 +33,7 @@ const tools: Record<Phase, Partial<Record<Tool, React.FC>>> = {
     item: ItemTool,
     zone: ZoneTool,
     window: WindowTool,
+    device: DeviceTool,
   },
   furnish: {
     item: ItemTool,

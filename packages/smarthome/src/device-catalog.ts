@@ -385,16 +385,14 @@ export const CATALOG_BY_ID: Record<string, DeviceDefinition> =
 /** 按 subsystem 分组 */
 export const CATALOG_BY_SUBSYSTEM: Record<string, DeviceDefinition[]> =
   DEVICE_CATALOG.reduce((acc, d) => {
-    acc[d.subsystem] ??= []
-    acc[d.subsystem].push(d)
+    ;(acc[d.subsystem] ??= []).push(d)
     return acc
   }, {} as Record<string, DeviceDefinition[]>)
 
 /** 按 type 分组 */
 export const CATALOG_BY_TYPE: Record<string, DeviceDefinition[]> =
   DEVICE_CATALOG.reduce((acc, d) => {
-    acc[d.type] ??= []
-    acc[d.type].push(d)
+    ;(acc[d.type] ??= []).push(d)
     return acc
   }, {} as Record<string, DeviceDefinition[]>)
 

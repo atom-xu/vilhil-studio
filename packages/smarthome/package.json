@@ -26,7 +26,7 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
-    "@repo/typescript-config": "workspace:*",
+    "@pascal/typescript-config": "workspace:*",
     "typescript": "^5.0.0"
   }
 }

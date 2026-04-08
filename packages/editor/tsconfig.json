@@ -2,8 +2,14 @@
   "extends": "@pascal/typescript-config/react-library.json",
   "compilerOptions": {
     "rootDir": "src",
-    "noEmit": true
+    "noEmit": true,
+    "composite": true
   },
   "include": ["src"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules"],
+  "references": [
+    { "path": "../core" },
+    { "path": "../smarthome" },
+    { "path": "../viewer" }
+  ]
 }

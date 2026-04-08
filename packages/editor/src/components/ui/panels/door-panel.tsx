@@ -221,7 +221,7 @@ export function DoorPanel() {
           <ActionButton
             className="w-full"
             icon={<FlipHorizontal2 className="h-4 w-4" />}
-            label="Flip Side"
+            label="翻转"
             onClick={handleFlip}
           />
         </div>
@@ -332,7 +332,7 @@ export function DoorPanel() {
       <PanelSection title="门槛">
         <ToggleControl
           checked={node.threshold}
-          label="Enable Threshold"
+          label="启用门槛"
           onChange={(checked) => handleUpdate({ threshold: checked })}
         />
         {node.threshold && (
@@ -354,7 +354,7 @@ export function DoorPanel() {
       <PanelSection title="把手">
         <ToggleControl
           checked={node.handle}
-          label="Enable Handle"
+          label="启用把手"
           onChange={(checked) => handleUpdate({ handle: checked })}
         />
         {node.handle && (
@@ -371,13 +371,13 @@ export function DoorPanel() {
             />
             <div className="space-y-1">
               <span className="font-medium text-[10px] text-muted-foreground/80 uppercase tracking-wider">
-                Handle Side
+                把手位置
               </span>
               <SegmentedControl
                 onChange={(v) => handleUpdate({ handleSide: v })}
                 options={[
-                  { label: 'Left', value: 'left' },
-                  { label: 'Right', value: 'right' },
+                  { label: '左', value: 'left' },
+                  { label: '右', value: 'right' },
                 ]}
                 value={node.handleSide}
               />
@@ -389,18 +389,18 @@ export function DoorPanel() {
       <PanelSection title="五金">
         <ToggleControl
           checked={node.doorCloser}
-          label="Door Closer"
+          label="闭门器"
           onChange={(checked) => handleUpdate({ doorCloser: checked })}
         />
         <ToggleControl
           checked={node.panicBar}
-          label="Panic Bar"
+          label="推杆锁"
           onChange={(checked) => handleUpdate({ panicBar: checked })}
         />
         {node.panicBar && (
           <div className="mt-1 flex flex-col gap-1">
             <SliderControl
-              label="Bar Height"
+              label="推杆高度"
               max={node.height - 0.1}
               min={0.5}
               onChange={(v) => handleUpdate({ panicBarHeight: v })}
@@ -449,7 +449,7 @@ export function DoorPanel() {
               />
 
               <SliderControl
-                label="Columns"
+                label="列数"
                 max={8}
                 min={1}
                 onChange={(v) => {
@@ -469,7 +469,7 @@ export function DoorPanel() {
                   {normCols.map((ratio, ci) => (
                     <SliderControl
                       key={`c-${ci}`}
-                      label={`C${ci + 1}`}
+                      label={`列${ci + 1}`}
                       max={95}
                       min={5}
                       onChange={(v) => setSegmentColumnRatio(i, ci, v / 100)}
@@ -480,7 +480,7 @@ export function DoorPanel() {
                     />
                   ))}
                   <SliderControl
-                    label="Divider"
+                    label="分隔条"
                     max={0.1}
                     min={0.005}
                     onChange={(v) => {
@@ -500,7 +500,7 @@ export function DoorPanel() {
               {seg.type === 'panel' && (
                 <div className="mt-1 border-border/50 border-t pt-1">
                   <SliderControl
-                    label="Inset"
+                    label="内嵌"
                     max={0.1}
                     min={0}
                     onChange={(v) => {

@@ -64,7 +64,7 @@ export function CeilingTreeNode({ node, depth, isLast }: CeilingTreeNodeProps) {
 
   // Calculate approximate area from polygon
   const area = calculatePolygonArea(node.polygon).toFixed(1)
-  const defaultName = `Ceiling (${area}m²)`
+  const defaultName = `天花板 (${area}m²)`
 
   return (
     <TreeNodeWrapper

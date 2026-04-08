@@ -19,7 +19,6 @@ import {
 } from './../../../../../components/ui/primitives/dialog'
 import { Switch } from './../../../../../components/ui/primitives/switch'
 import useEditor from './../../../../../store/use-editor'
-import { AudioSettingsDialog } from './audio-settings-dialog'
 import { KeyboardShortcutsDialog } from './keyboard-shortcuts-dialog'
 
 type SceneNode = Record<string, unknown> & {
@@ -269,12 +268,12 @@ export function SettingsPanel({
       {/* Visibility Section (only for cloud projects) */}
       {projectId && !isLocalProject && (
         <div className="space-y-3">
-          <label className="font-medium text-muted-foreground text-xs uppercase">Visibility</label>
+          <label className="font-medium text-muted-foreground text-xs uppercase">可见性</label>
           <div className="flex items-center justify-between">
             <div>
-              <div className="font-medium text-sm">Public</div>
+              <div className="font-medium text-sm">公开</div>
               <div className="text-muted-foreground text-xs">
-                {projectVisibility?.isPrivate ? 'Only you' : 'Anyone'} can view
+                {projectVisibility?.isPrivate ? '仅自己' : '任何人'} 可见
               </div>
             </div>
             <Switch
@@ -284,8 +283,8 @@ export function SettingsPanel({
           </div>
           <div className="flex items-center justify-between">
             <div>
-              <div className="font-medium text-sm">Show 3D Scans</div>
-              <div className="text-muted-foreground text-xs">Visible to public viewers</div>
+              <div className="font-medium text-sm">显示 3D 扫描</div>
+              <div className="text-muted-foreground text-xs">公开可见</div>
             </div>
             <Switch
               checked={projectVisibility?.showScansPublic ?? true}
@@ -294,8 +293,8 @@ export function SettingsPanel({
           </div>
           <div className="flex items-center justify-between">
             <div>
-              <div className="font-medium text-sm">Show Floorplans</div>
-              <div className="text-muted-foreground text-xs">Visible to public viewers</div>
+              <div className="font-medium text-sm">显示平面图</div>
+              <div className="text-muted-foreground text-xs">公开可见</div>
             </div>
             <Switch
               checked={projectVisibility?.showGuidesPublic ?? true}
@@ -304,8 +303,8 @@ export function SettingsPanel({
           </div>
           <div className="flex items-center justify-between">
             <div>
-              <div className="font-medium text-sm">Show Grid</div>
-              <div className="text-muted-foreground text-xs">Visible only in the editor</div>
+              <div className="font-medium text-sm">显示网格</div>
+              <div className="text-muted-foreground text-xs">仅编辑器内可见</div>
             </div>
             <Switch
               checked={showGrid}
@@ -320,22 +319,22 @@ export function SettingsPanel({
         <label className="font-medium text-muted-foreground text-xs uppercase">导出</label>
         <Button className="w-full justify-start gap-2" onClick={() => handle导出('glb')} variant="outline">
           <Download className="size-4" />
-          导出 as GLB
+          导出 3D 模型 (GLB)
         </Button>
         <Button className="w-full justify-start gap-2" onClick={() => handle导出('stl')} variant="outline">
           <Download className="size-4" />
-          导出 as STL
+          导出 STL
         </Button>
         <Button className="w-full justify-start gap-2" onClick={() => handle导出('obj')} variant="outline">
           <Download className="size-4" />
-          导出 as OBJ
+          导出 OBJ
         </Button>
       </div>
 
       {/* Thumbnail Section (only for cloud projects) */}
       {projectId && !isLocalProject && (
         <div className="space-y-2">
-          <label className="font-medium text-muted-foreground text-xs uppercase">Thumbnail</label>
+          <label className="font-medium text-muted-foreground text-xs uppercase">缩略图</label>
           <Button
             className="w-full justify-start gap-2"
             disabled={isGeneratingThumbnail}
@@ -343,14 +342,14 @@ export function SettingsPanel({
             variant="outline"
           >
             <Camera className="size-4" />
-            {isGeneratingThumbnail ? 'Generating...' : 'Generate Thumbnail'}
+            {isGeneratingThumbnail ? '生成中...' : '生成缩略图'}
           </Button>
         </div>
       )}
 
       {/* Save/Load Section */}
       <div className="space-y-2">
-        <label className="font-medium text-muted-foreground text-xs uppercase">Save & Load</label>
+        <label className="font-medium text-muted-foreground text-xs uppercase">保存与加载</label>
 
         <Button className="w-full justify-start gap-2" onClick={handleSaveBuild} variant="outline">
           <Save className="size-4" />
@@ -375,15 +374,9 @@ export function SettingsPanel({
         />
       </div>
 
-      {/* Audio Section */}
-      <div className="space-y-2">
-        <label className="font-medium text-muted-foreground text-xs uppercase">Audio</label>
-        <AudioSettingsDialog />
-      </div>
-
       {/* Keyboard Section */}
       <div className="space-y-2">
-        <label className="font-medium text-muted-foreground text-xs uppercase">Keyboard</label>
+        <label className="font-medium text-muted-foreground text-xs uppercase">键盘</label>
         <KeyboardShortcutsDialog />
       </div>
 
@@ -393,7 +386,7 @@ export function SettingsPanel({
         <Dialog>
           <DialogTrigger asChild>
             <Button className="h-auto justify-start p-0 text-sm" variant="link">
-              Explore scene graph
+              浏览场景树
             </Button>
           </DialogTrigger>
           <DialogContent className="h-[80vh] max-w-[95vw] gap-0 overflow-hidden border-0 bg-[#1e1e1e] p-0 shadow-none sm:max-w-5xl">
@@ -415,7 +408,7 @@ export function SettingsPanel({
 
       {/* Danger Zone */}
       <div className="space-y-2">
-        <label className="font-medium text-destructive text-xs uppercase">Danger Zone</label>
+        <label className="font-medium text-destructive text-xs uppercase">危险区域</label>
 
         <Button
           className="w-full justify-start gap-2"
@@ -423,7 +416,7 @@ export function SettingsPanel({
           variant="destructive"
         >
           <Trash2 className="size-4" />
-          Clear & Start New
+          清空并新建
         </Button>
       </div>
     </div>

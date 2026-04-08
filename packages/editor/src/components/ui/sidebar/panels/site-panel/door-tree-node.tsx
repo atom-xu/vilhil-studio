@@ -23,7 +23,7 @@ export function DoorTreeNode({ node, depth, isLast }: DoorTreeNodeProps) {
   const setSelection = useViewer((state) => state.setSelection)
   const setHoveredId = useViewer((state) => state.setHoveredId)
 
-  const defaultName = 'Door'
+  const defaultName = '门'
 
   return (
     <TreeNodeWrapper

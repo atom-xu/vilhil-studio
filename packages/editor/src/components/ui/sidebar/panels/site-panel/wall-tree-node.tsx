@@ -62,7 +62,7 @@ export function WallTreeNode({ node, depth, isLast }: WallTreeNodeProps) {
     setHoveredId(null)
   }
 
-  const defaultName = 'Wall'
+  const defaultName = '墙体'
 
   return (
     <TreeNodeWrapper

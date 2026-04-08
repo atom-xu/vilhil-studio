@@ -48,6 +48,8 @@ export const DeviceParamsSchema = z.object({
   elevation: z.number().min(-90).max(90).optional(),
   coverageRadius: z.number().optional(),
   coverageAngle: z.number().optional(),
+  beamAngle: z.number().optional(),
+  curtainWidth: z.number().optional(),
   wallId: z.string().optional(),
   wallT: z.number().min(0).max(1).optional(),
   openingId: z.string().optional(),
@@ -66,7 +68,7 @@ export type DeviceParams = z.infer<typeof DeviceParamsSchema>
 export const DeviceNode = BaseNode.extend({
   id: objectId('device'),
   type: nodeType('device'),
-  parentId: z.string(),
+  parentId: z.string().nullable(),
   subsystem: SubsystemEnum,
   renderType: z.string(),
   position: z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0]),

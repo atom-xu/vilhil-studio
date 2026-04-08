@@ -246,7 +246,7 @@ function CameraPopover({
             buttonClassName,
           )}
           onClick={(e) => e.stopPropagation()}
-          title="Camera snapshot"
+          title="相机快照"
         >
           <Camera className="h-3.5 w-3.5" />
           {hasCamera && (
@@ -357,7 +357,7 @@ function ReferenceItem({
           />
         )}
         <InlineRenameInput
-          defaultName={refNode.type === 'scan' ? '3D Scan' : 'Guide Image'}
+          defaultName={refNode.type === 'scan' ? '3D 扫描' : '平面参考图'}
           isEditing={isEditing}
           node={refNode}
           onStartEditing={() => setIsEditing(true)}
@@ -368,7 +368,7 @@ function ReferenceItem({
       <button
         className="z-20 flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 transition-colors hover:bg-black/5 hover:text-foreground group-hover/ref:opacity-100 dark:hover:bg-white/10"
         onClick={(e) => handleDelete(refNode.id, e)}
-        title="Delete"
+        title="删除"
       >
         <Trash2 className="h-3 w-3" />
       </button>
@@ -752,7 +752,7 @@ function LevelItem({
               title={canDeleteLevel ? '删除楼层' : '首层不能删除'}
             >
               <Trash2 className="h-3.5 w-3.5" />
-              Delete
+              删除
             </button>
           </PopoverContent>
         </Popover>
@@ -1161,11 +1161,11 @@ function MultiSelectionBadge() {
   return (
     <div className="pointer-events-none sticky top-4 z-50 flex h-0 w-full justify-center overflow-visible">
       <div className="pointer-events-auto flex items-center gap-2.5 rounded-full border border-primary/20 bg-primary px-0.5 py-4 pl-2 font-medium text-primary-foreground text-xs shadow-black/10 shadow-lg backdrop-blur-md">
-        <span>{selectedIds.length} objects selected</span>
+        <span>已选 {selectedIds.length} 个对象</span>
         <button
           className="cursor-pointer rounded-full p-1.5 transition-colors hover:bg-primary-foreground/20"
           onClick={() => setSelection({ selectedIds: [] })}
-          title="Clear selection"
+          title="清除选择"
         >
           <X className="h-4 w-4" />
         </button>

@@ -160,9 +160,9 @@ export function RoofSegmentPanel() {
         />
       </PanelSection>
 
-      <PanelSection title="Heights">
+      <PanelSection title="高度">
         <SliderControl
-          label="Wall"
+          label="墙体"
           max={5}
           min={0}
           onChange={(v) => handleUpdate({ wallHeight: v })}
@@ -172,7 +172,7 @@ export function RoofSegmentPanel() {
           value={Math.round(node.wallHeight * 100) / 100}
         />
         <SliderControl
-          label="Roof"
+          label="屋顶"
           max={15}
           min={0}
           onChange={(v) => handleUpdate({ roofHeight: v })}
@@ -183,9 +183,9 @@ export function RoofSegmentPanel() {
         />
       </PanelSection>
 
-      <PanelSection title="Structure">
+      <PanelSection title="结构">
         <SliderControl
-          label="Wall Thick."
+          label="墙厚"
           max={1}
           min={0.05}
           onChange={(v) => handleUpdate({ wallThickness: v })}
@@ -195,7 +195,7 @@ export function RoofSegmentPanel() {
           value={Math.round(node.wallThickness * 100) / 100}
         />
         <SliderControl
-          label="Deck Thick."
+          label="屋面厚"
           max={0.3}
           min={0.04}
           onChange={(v) => handleUpdate({ deckThickness: v })}
@@ -205,7 +205,7 @@ export function RoofSegmentPanel() {
           value={Math.round(node.deckThickness * 100) / 100}
         />
         <SliderControl
-          label="Overhang"
+          label="挑檐"
           max={1}
           min={0}
           onChange={(v) => handleUpdate({ overhang: v })}
@@ -215,7 +215,7 @@ export function RoofSegmentPanel() {
           value={Math.round(node.overhang * 100) / 100}
         />
         <SliderControl
-          label="Shingle Thick."
+          label="瓦片厚"
           max={0.3}
           min={0.02}
           onChange={(v) => handleUpdate({ shingleThickness: v })}

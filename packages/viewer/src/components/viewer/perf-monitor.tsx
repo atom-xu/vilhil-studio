@@ -50,10 +50,10 @@ export const PerfMonitor = () => {
           whiteSpace: 'pre',
         }}
       >
-        {`FPS  ${stats.fps}
-DRAW ${stats.drawCalls}
-TRI  ${(stats.triangles / 1000).toFixed(1)}k
-DIRTY ${stats.dirty}`}
+        {`帧率 ${stats.fps}
+绘制 ${stats.drawCalls}
+三角 ${(stats.triangles / 1000).toFixed(1)}k
+脏节点 ${stats.dirty}`}
       </div>
     </Html>
   )

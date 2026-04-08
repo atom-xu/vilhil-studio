@@ -29,6 +29,7 @@ export const tools: ToolConfig[] = [
   { id: 'door', iconSrc: '/icons/door.png', label: '门' },
   { id: 'window', iconSrc: '/icons/window.png', label: '窗' },
   { id: 'zone', iconSrc: '/icons/zone.png', label: '区域' },
+  { id: 'device', iconSrc: '/icons/device.png', label: '智能家居' },
 ]
 
 export function StructureTools() {

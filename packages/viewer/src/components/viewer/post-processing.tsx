@@ -220,10 +220,10 @@ const PostProcessingPasses = () => {
       }
 
       function generateHoverOutlinePass() {
-        const edgeStrength = uniform(5)
-        const edgeGlow = uniform(0.5)
-        const edgeThickness = uniform(1.5)
-        const pulsePeriod = uniform(3)
+        const edgeStrength = uniform(0)  // 设为0禁用悬停轮廓
+        const edgeGlow = uniform(0)
+        const edgeThickness = uniform(0)
+        const pulsePeriod = uniform(0)
         const visibleEdgeColor = uniform(new Color(0x00_aa_ff))
         const hiddenEdgeColor = uniform(new Color(0xf3_ff_47))
 

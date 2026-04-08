@@ -236,7 +236,7 @@ export function WindowPanel() {
           <ActionButton
             className="w-full"
             icon={<FlipHorizontal2 className="h-4 w-4" />}
-            label="Flip Side"
+            label="翻转"
             onClick={handleFlip}
           />
         </div>
@@ -380,7 +380,7 @@ export function WindowPanel() {
       <PanelSection title="窗台">
         <ToggleControl
           checked={node.sill}
-          label="Enable Sill"
+          label="启用窗台"
           onChange={(checked) => handleUpdate({ sill: checked })}
         />
         {node.sill && (

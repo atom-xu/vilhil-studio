@@ -1,6 +1,7 @@
 'use client'
 
-import type { AssetInput } from '@pascal-app/core'
+import type { AssetInput, DeviceNode } from '@pascal-app/core'
+import type { DeviceDefinition } from '@vilhil/smarthome'
 import {
   type BuildingNode,
   type DoorNode,
@@ -44,6 +45,7 @@ export type StructureTool =
   | 'zone'
   | 'window'
   | 'door'
+  | 'device'
 
 // Furnish mode tools (items and decoration)
 export type FurnishTool = 'item'
@@ -81,6 +83,8 @@ type EditorState = {
   setCatalogCategory: (category: CatalogCategory | null) => void
   selectedItem: AssetInput | null
   setSelectedItem: (item: AssetInput) => void
+  selectedDevice: DeviceDefinition | null
+  setSelectedDevice: (device: DeviceDefinition | null) => void
   movingNode: ItemNode | WindowNode | DoorNode | RoofNode | RoofSegmentNode | StairNode | StairSegmentNode | null
   setMovingNode: (
     node: ItemNode | WindowNode | DoorNode | RoofNode | RoofSegmentNode | null,
@@ -403,6 +407,8 @@ const useEditor = create<EditorState>()(
       setCatalogCategory: (category) => set({ catalogCategory: category }),
       selectedItem: null,
       setSelectedItem: (item) => set({ selectedItem: item }),
+      selectedDevice: null,
+      setSelectedDevice: (device) => set({ selectedDevice: device }),
       movingNode: null as ItemNode | WindowNode | DoorNode | RoofNode | RoofSegmentNode | null,
       setMovingNode: (node) => set({ movingNode: node }),
       selectedReferenceId: null,

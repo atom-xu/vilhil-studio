@@ -3,6 +3,7 @@
 import { type AnyNode, useScene } from '@pascal-app/core'
 import { BuildingRenderer } from './building/building-renderer'
 import { CeilingRenderer } from './ceiling/ceiling-renderer'
+import { DeviceRenderer } from './device/device-renderer'
 import { DoorRenderer } from './door/door-renderer'
 import { GuideRenderer } from './guide/guide-renderer'
 import { ItemRenderer } from './item/item-renderer'
@@ -41,6 +42,7 @@ export const NodeRenderer = ({ nodeId }: { nodeId: AnyNode['id'] }) => {
       {node.type === 'stair-segment' && <StairSegmentRenderer node={node} />}
       {node.type === 'scan' && <ScanRenderer node={node} />}
       {node.type === 'guide' && <GuideRenderer node={node} />}
+      {node.type === 'device' && <DeviceRenderer node={node} />}
     </>
   )
 }

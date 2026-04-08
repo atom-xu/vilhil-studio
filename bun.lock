@@ -113,6 +113,7 @@
         "@types/react": "19.2.2",
         "@types/react-dom": "19.2.2",
         "@types/three": "^0.183.1",
+        "@vilhil/smarthome": "*",
         "typescript": "5.9.3",
       },
       "peerDependencies": {
@@ -120,6 +121,7 @@
         "@pascal-app/viewer": "*",
         "@react-three/drei": "^10",
         "@react-three/fiber": "^9",
+        "@vilhil/smarthome": "*",
         "next": ">=15",
         "react": "^18 || ^19",
         "react-dom": "^18 || ^19",
@@ -141,6 +143,18 @@
         "globals": "^16.5.0",
         "typescript": "^5.9.2",
         "typescript-eslint": "^8.50.0",
+      },
+    },
+    "packages/smarthome": {
+      "name": "@vilhil/smarthome",
+      "version": "0.1.0",
+      "dependencies": {
+        "@pascal-app/core": "workspace:*",
+        "zustand": "^5.0.0",
+      },
+      "devDependencies": {
+        "@pascal/typescript-config": "workspace:*",
+        "typescript": "^5.0.0",
       },
     },
     "packages/typescript-config": {
@@ -182,6 +196,7 @@
         "@pascal-app/core": "^0.1.4",
         "@react-three/drei": "^10",
         "@react-three/fiber": "^9",
+        "@vilhil/smarthome": "workspace:*",
         "react": "^18 || ^19",
         "three": "^0.183",
       },
@@ -651,6 +666,8 @@
     "@use-gesture/core": ["@use-gesture/core@10.3.1", "", {}, "sha512-WcINiDt8WjqBdUXye25anHiNxPc0VOrlT8F6LLkU6cycrOGUDyY/yyFmsg3k8i5OLvv25llc0QC45GhR/C8llw=="],
 
     "@use-gesture/react": ["@use-gesture/react@10.3.1", "", { "dependencies": { "@use-gesture/core": "10.3.1" }, "peerDependencies": { "react": ">= 16.8.0" } }, "sha512-Yy19y6O2GJq8f7CHf7L0nxL8bf4PZCPaVOCgJrusOeFHY1LvHgYXnmnXg6N5iwAnbgbZCDjo60SiM6IPJi9C5g=="],
+
+    "@vilhil/smarthome": ["@vilhil/smarthome@workspace:packages/smarthome"],
 
     "@visual-json/core": ["@visual-json/core@0.3.1", "", {}, "sha512-rjRbcCbKBixuQpXqVPgzKl3Nfk0QLD1NJhuHittM0ASYETozxTsou4fL6g/IWz/BaYiAAjKnrkb8aasbzJGcvg=="],
 

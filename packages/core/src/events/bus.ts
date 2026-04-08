@@ -3,6 +3,7 @@ import mitt from 'mitt'
 import type {
   BuildingNode,
   CeilingNode,
+  DeviceNode,
   DoorNode,
   ItemNode,
   LevelNode,
@@ -47,6 +48,7 @@ export type StairEvent = NodeEvent<StairNode>
 export type StairSegmentEvent = NodeEvent<StairSegmentNode>
 export type WindowEvent = NodeEvent<WindowNode>
 export type DoorEvent = NodeEvent<DoorNode>
+export type DeviceEvent = NodeEvent<DeviceNode>
 
 // Event suffixes - exported for use in hooks
 export const eventSuffixes = [
@@ -112,6 +114,7 @@ type EditorEvents = GridEvents &
   NodeEvents<'stair-segment', StairSegmentEvent> &
   NodeEvents<'window', WindowEvent> &
   NodeEvents<'door', DoorEvent> &
+  NodeEvents<'device', DeviceEvent> &
   CameraControlEvents &
   ToolEvents &
   PresetEvents

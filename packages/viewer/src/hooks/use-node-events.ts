@@ -3,6 +3,8 @@ import {
   type BuildingNode,
   type CeilingEvent,
   type CeilingNode,
+  type DeviceEvent,
+  type DeviceNode,
   type DoorEvent,
   type DoorNode,
   type EventSuffix,
@@ -48,6 +50,7 @@ type NodeConfig = {
   'stair-segment': { node: StairSegmentNode; event: StairSegmentEvent }
   window: { node: WindowNode; event: WindowEvent }
   door: { node: DoorNode; event: DoorEvent }
+  device: { node: DeviceNode; event: DeviceEvent }
 }
 
 type NodeType = keyof NodeConfig
