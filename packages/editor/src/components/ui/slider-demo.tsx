@@ -20,7 +20,7 @@ export function SliderDemo() {
         </div>
 
         <Slider
-          aria-label="Temperature"
+          aria-label="温度"
           max={100}
           min={0}
           onValueChange={setValue}

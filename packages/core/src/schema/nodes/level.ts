@@ -1,4 +1,4 @@
-import dedent from 'dedent'
+import dedent from 'ts-dedent'
 import { z } from 'zod'
 import { BaseNode, nodeType, objectId } from '../base'
 import { CeilingNode } from './ceiling'

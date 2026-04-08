@@ -67,7 +67,7 @@ export function WallPanel() {
     <PanelWrapper
       icon="/icons/wall.png"
       onClose={handleClose}
-      title={node.name || 'Wall'}
+      title={node.name || '墙体'}
       width={280}
     >
       <PanelSection title="尺寸">

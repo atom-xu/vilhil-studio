@@ -22,6 +22,11 @@ import { PanelSection } from '../controls/panel-section'
 import { SliderControl } from '../controls/slider-control'
 import { PanelWrapper } from './panel-wrapper'
 
+const SEGMENT_TYPE_LABELS: Record<string, string> = {
+  stair: '梯段',
+  landing: '平台',
+}
+
 export function StairPanel() {
   const selectedIds = useViewer((s) => s.selection.selectedIds)
   const setSelection = useViewer((s) => s.setSelection)
@@ -176,7 +181,7 @@ export function StairPanel() {
     <PanelWrapper
       icon="/icons/stairs.png"
       onClose={handleClose}
-      title={node.name || 'Staircase'}
+      title={node.name || '楼梯'}
       width={300}
     >
       <PanelSection title="分段">
@@ -188,8 +193,8 @@ export function StairPanel() {
               onClick={() => handleSelectSegment(seg.id)}
               type="button"
             >
-              <span className="truncate">{seg.name || `Segment ${i + 1}`}</span>
-              <span className="text-muted-foreground text-xs capitalize">{seg.segmentType}</span>
+              <span className="truncate">{seg.name || `分段 ${i + 1}`}</span>
+              <span className="text-muted-foreground text-xs">{SEGMENT_TYPE_LABELS[seg.segmentType] || seg.segmentType}</span>
             </button>
           ))}
         </div>

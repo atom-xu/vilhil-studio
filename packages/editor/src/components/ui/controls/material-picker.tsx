@@ -17,16 +17,16 @@ const PRESET_COLORS: Record<MaterialPreset, string> = {
 }
 
 const PRESET_LABELS: Record<MaterialPreset, string> = {
-  white: 'White',
-  brick: 'Brick',
-  concrete: 'Concrete',
-  wood: 'Wood',
-  glass: 'Glass',
-  metal: 'Metal',
-  plaster: 'Plaster',
-  tile: 'Tile',
-  marble: 'Marble',
-  custom: 'Custom',
+  white: '白色',
+  brick: '砖块',
+  concrete: '混凝土',
+  wood: '木材',
+  glass: '玻璃',
+  metal: '金属',
+  plaster: '石膏',
+  tile: '瓷砖',
+  marble: '大理石',
+  custom: '自定义',
 }
 
 type MaterialPickerProps = {
@@ -96,7 +96,7 @@ export function MaterialPicker({ value, onChange }: MaterialPickerProps) {
       {showCustom && (
         <div className="space-y-2 pt-2">
           <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-500 w-16">Color</label>
+            <label className="text-xs text-gray-500 w-16">颜色</label>
             <input
               className="h-7 w-12 rounded border border-gray-300 cursor-pointer"
               onChange={(e) => handlePropertyChange('color', e.target.value)}
@@ -112,7 +112,7 @@ export function MaterialPicker({ value, onChange }: MaterialPickerProps) {
           </div>
 
           <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-500 w-16">Roughness</label>
+            <label className="text-xs text-gray-500 w-16">粗糙度</label>
             <input
               className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
               max={1}
@@ -126,7 +126,7 @@ export function MaterialPicker({ value, onChange }: MaterialPickerProps) {
           </div>
 
           <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-500 w-16">Metalness</label>
+            <label className="text-xs text-gray-500 w-16">金属度</label>
             <input
               className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
               max={1}
@@ -140,7 +140,7 @@ export function MaterialPicker({ value, onChange }: MaterialPickerProps) {
           </div>
 
           <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-500 w-16">Opacity</label>
+            <label className="text-xs text-gray-500 w-16">不透明度</label>
             <input
               className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer"
               max={1}
@@ -160,15 +160,15 @@ export function MaterialPicker({ value, onChange }: MaterialPickerProps) {
           </div>
 
           <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-500 w-16">Side</label>
+            <label className="text-xs text-gray-500 w-16">渲染面</label>
             <select
               className="flex-1 h-7 px-2 text-xs border border-gray-300 rounded"
               onChange={(e) => handlePropertyChange('side', e.target.value as 'front' | 'back' | 'double')}
               value={currentProps.side}
             >
-              <option value="front">Front</option>
-              <option value="back">Back</option>
-              <option value="double">Double</option>
+              <option value="front">正面</option>
+              <option value="back">背面</option>
+              <option value="double">双面</option>
             </select>
           </div>
         </div>

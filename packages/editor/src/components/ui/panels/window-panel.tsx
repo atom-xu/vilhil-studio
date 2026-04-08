@@ -183,7 +183,7 @@ export function WindowPanel() {
     <PanelWrapper
       icon="/icons/window.png"
       onClose={handleClose}
-      title={node.name || 'Window'}
+      title={node.name || '窗户'}
       width={320}
     >
       {/* Presets strip */}

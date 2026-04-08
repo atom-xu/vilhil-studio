@@ -71,6 +71,7 @@ export const RoofSystem = () => {
               const placeholder = new THREE.BufferGeometry()
               placeholder.setAttribute('position', new THREE.Float32BufferAttribute([], 3))
               placeholder.computeBoundsTree = computeBoundsTree
+              // @ts-ignore
               placeholder.computeBoundsTree({ maxLeafSize: 10 })
               mesh.geometry = placeholder
             }
@@ -125,6 +126,7 @@ function updateRoofSegmentGeometry(node: RoofSegmentNode, mesh: THREE.Mesh) {
   mesh.geometry.dispose()
   mesh.geometry = newGeo
   newGeo.computeBoundsTree = computeBoundsTree
+  // @ts-ignore
   newGeo.computeBoundsTree({ maxLeafSize: 10 })
 
   mesh.position.set(node.position[0], node.position[1], node.position[2])
@@ -506,6 +508,7 @@ export function getRoofSegmentBrushes(
     if (!geo?.attributes.position || geo.attributes.position.count === 0) return null
     if (!geo.index) return null
     geo.computeBoundsTree = computeBoundsTree
+    // @ts-ignore
     geo.computeBoundsTree({ maxLeafSize: 10 })
     const brush = new Brush(geo, dummyMats)
     brush.updateMatrixWorld()

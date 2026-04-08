@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "@pascal/typescript-config": "*",
+    "@swc/helpers": "0.5.17",
     "@types/howler": "^2.2.12",
     "@types/node": "^22.19.12",
     "@types/react": "19.2.2",

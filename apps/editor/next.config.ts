@@ -24,6 +24,12 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  turbopack: {
+    resolveAlias: {
+      '@react-three/fiber': './node_modules/@react-three/fiber',
+      '@react-three/drei': './node_modules/@react-three/drei',
+    },
+  },
 }
 
 export default nextConfig

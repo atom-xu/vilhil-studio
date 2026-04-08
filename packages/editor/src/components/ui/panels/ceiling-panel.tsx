@@ -123,7 +123,7 @@ export function CeilingPanel() {
     <PanelWrapper
       icon="/icons/ceiling.png"
       onClose={handleClose}
-      title={node.name || 'Ceiling'}
+      title={node.name || '天花板'}
       width={320}
     >
       <PanelSection title="高度">

@@ -152,11 +152,11 @@ function OptionItem({
 // Sub-page label map
 // ---------------------------------------------------------------------------
 const PAGE_LABEL: Record<string, string> = {
-  'wall-mode': 'Wall Mode',
-  'level-mode': 'Level Mode',
-  'rename-level': 'Rename Level',
-  'goto-level': 'Go to Level',
-  'camera-view': 'Camera Snapshot',
+  'wall-mode': '墙体模式',
+  'level-mode': '楼层模式',
+  'rename-level': '重命名楼层',
+  'goto-level': '跳转到楼层',
+  'camera-view': '相机快照',
   'camera-scope': '',
 }
 
@@ -237,15 +237,15 @@ export function CommandPalette() {
   }
 
   const wallModeLabel: Record<'cutaway' | 'up' | 'down', string> = {
-    cutaway: 'Cutaway',
-    up: 'Up',
-    down: 'Down',
+    cutaway: '剖切',
+    up: '全高',
+    down: '低矮',
   }
   const levelModeLabel: Record<'manual' | 'stacked' | 'exploded' | 'solo', string> = {
-    manual: 'Manual',
-    stacked: 'Stacked',
-    exploded: 'Exploded',
-    solo: 'Solo',
+    manual: '手动',
+    stacked: '堆叠',
+    exploded: '展开',
+    solo: '独立',
   }
 
   // Camera snapshot helpers (used by sub-pages registered via EditorCommands)
@@ -308,7 +308,7 @@ export function CommandPalette() {
   return (
     <Dialog onOpenChange={setOpen} open={open}>
       <DialogContent className="max-w-lg gap-0 overflow-hidden p-0" showCloseButton={false}>
-        <DialogTitle className="sr-only">Command Palette</DialogTitle>
+        <DialogTitle className="sr-only">命令面板</DialogTitle>
 
         {modeView && <modeView.Component onBack={onBack} onClose={onClose} />}
 
@@ -343,10 +343,10 @@ export function CommandPalette() {
                 onValueChange={setInputValue}
                 placeholder={
                   page === 'rename-level'
-                    ? 'Type a new name…'
+                    ? '输入新名称…'
                     : page
-                      ? 'Filter options…'
-                      : 'Search actions…'
+                      ? '筛选选项…'
+                      : '搜索操作…'
                 }
                 value={inputValue}
               />
@@ -354,7 +354,7 @@ export function CommandPalette() {
 
             <Command.List className="max-h-100 overflow-y-auto p-1.5">
               <Command.Empty className="py-8 text-center text-muted-foreground text-sm">
-                No commands found.
+                未找到命令。
               </Command.Empty>
 
               {/* ── Registered page view (e.g. 'ai') ─────────────────────── */}
@@ -672,18 +672,18 @@ export function CommandPalette() {
             {/* Footer hint */}
             <div className="flex items-center justify-between border-border/50 border-t px-3 py-2">
               <span className="text-[11px] text-muted-foreground">
-                <Shortcut keys={['↑', '↓']} /> navigate
+                <Shortcut keys={['↑', '↓']} /> 导航
               </span>
               <span className="text-[11px] text-muted-foreground">
-                <Shortcut keys={['↵']} /> select
+                <Shortcut keys={['↵']} /> 选择
               </span>
               {page ? (
                 <span className="text-[11px] text-muted-foreground">
-                  <Shortcut keys={['⌫']} /> back
+                  <Shortcut keys={['⌫']} /> 返回
                 </span>
               ) : (
                 <span className="text-[11px] text-muted-foreground">
-                  <Shortcut keys={['Esc']} /> close
+                  <Shortcut keys={['Esc']} /> 关闭
                 </span>
               )}
             </div>

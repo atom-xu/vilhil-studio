@@ -1172,7 +1172,7 @@ function buildDraftWall(levelId: string, start: WallPlanPoint, end: WallPlanPoin
     object: 'node',
     id: 'wall_draft' as WallNode['id'],
     type: 'wall',
-    name: 'Draft wall',
+    name: '墙体草图',
     parentId: levelId,
     visible: true,
     metadata: {},

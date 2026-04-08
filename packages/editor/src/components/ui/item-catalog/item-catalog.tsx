@@ -15,6 +15,33 @@ import { CATALOG_ITEMS } from './catalog-items'
 
 const PLACEMENT_TAGS = new Set(['floor', 'wall', 'ceiling', 'countertop'])
 
+const TAG_LABELS: Record<string, string> = {
+  all: '全部',
+  floor: '地面',
+  wall: '墙面',
+  ceiling: '天花板',
+  countertop: '台面',
+  fitness: '健身',
+  kids: '儿童',
+  decor: '装饰',
+  leisure: '休闲',
+  vegetation: '植物',
+  storage: '储物',
+  structure: '结构',
+  lighting: '照明',
+  bedroom: '卧室',
+  seating: '座椅',
+  table: '桌子',
+  garage: '车库',
+  fencing: '围栏',
+  sports: '运动',
+  electronics: '电子',
+  electrical: '电气',
+  climate: '气候',
+  safety: '安全',
+  large: '大型',
+}
+
 export function ItemCatalog({ category }: { category: CatalogCategory }) {
   const selectedItem = useEditor((state) => state.selectedItem)
   const setSelectedItem = useEditor((state) => state.setSelectedItem)
@@ -91,7 +118,7 @@ export function ItemCatalog({ category }: { category: CatalogCategory }) {
                 onClick={() => setActivePlacementTag(null)}
                 type="button"
               >
-                All
+                {TAG_LABELS['all']}
               </button>
               {placementTags.map((tag) => {
                 const count = placementCount(tag)
@@ -100,7 +127,7 @@ export function ItemCatalog({ category }: { category: CatalogCategory }) {
                 return (
                   <button
                     className={cn(
-                      'inline-flex cursor-pointer items-center gap-1 rounded-md py-0.5 pr-1.5 pl-2 font-medium text-xs capitalize transition-colors',
+                      'inline-flex cursor-pointer items-center gap-1 rounded-md py-0.5 pr-1.5 pl-2 font-medium text-xs transition-colors',
                       isActive
                         ? 'bg-blue-500 text-white'
                         : isEmpty
@@ -112,7 +139,7 @@ export function ItemCatalog({ category }: { category: CatalogCategory }) {
                     onClick={() => setActivePlacementTag(isActive ? null : tag)}
                     type="button"
                   >
-                    {tag}
+                    {TAG_LABELS[tag] || tag}
                     <span
                       className={cn(
                         'text-[10px]',
@@ -137,7 +164,7 @@ export function ItemCatalog({ category }: { category: CatalogCategory }) {
                 return (
                   <button
                     className={cn(
-                      'inline-flex cursor-pointer items-center gap-1 rounded-md py-0.5 pr-1.5 pl-2 font-medium text-xs capitalize transition-colors',
+                      'inline-flex cursor-pointer items-center gap-1 rounded-md py-0.5 pr-1.5 pl-2 font-medium text-xs transition-colors',
                       isActive
                         ? 'bg-violet-500 text-white'
                         : isEmpty
@@ -149,7 +176,7 @@ export function ItemCatalog({ category }: { category: CatalogCategory }) {
                     onClick={() => setActiveFunctionalTag(isActive ? null : tag)}
                     type="button"
                   >
-                    {tag}
+                    {TAG_LABELS[tag] || tag}
                     <span
                       className={cn(
                         'text-[10px]',

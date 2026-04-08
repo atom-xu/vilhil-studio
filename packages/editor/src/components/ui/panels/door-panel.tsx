@@ -178,7 +178,7 @@ export function DoorPanel() {
     <PanelWrapper
       icon="/icons/door.png"
       onClose={handleClose}
-      title={node.name || 'Door'}
+      title={node.name || '门'}
       width={320}
     >
       {/* Presets strip */}
@@ -197,7 +197,7 @@ export function DoorPanel() {
         >
           <button className="flex w-full items-center gap-2 rounded-lg border border-border/50 bg-[#2C2C2E] px-3 py-2 font-medium text-muted-foreground text-xs transition-colors hover:bg-[#3e3e3e] hover:text-foreground">
             <BookMarked className="h-3.5 w-3.5 shrink-0" />
-            <span>Presets</span>
+            <span>预设</span>
           </button>
         </PresetsPopover>
       </div>
@@ -302,26 +302,26 @@ export function DoorPanel() {
         <div className="flex flex-col gap-2 px-1 pb-1">
           <div className="space-y-1">
             <span className="font-medium text-[10px] text-muted-foreground/80 uppercase tracking-wider">
-              Hinges Side
+              合页侧
             </span>
             <SegmentedControl
               onChange={(v) => handleUpdate({ hingesSide: v })}
               options={[
-                { label: 'Left', value: 'left' },
-                { label: 'Right', value: 'right' },
+                { label: '左', value: 'left' },
+                { label: '右', value: 'right' },
               ]}
               value={node.hingesSide}
             />
           </div>
           <div className="space-y-1">
             <span className="font-medium text-[10px] text-muted-foreground/80 uppercase tracking-wider">
-              Direction
+              方向
             </span>
             <SegmentedControl
               onChange={(v) => handleUpdate({ swingDirection: v })}
               options={[
-                { label: 'Inward', value: 'inward' },
-                { label: 'Outward', value: 'outward' },
+                { label: '向内', value: 'inward' },
+                { label: '向外', value: 'outward' },
               ]}
               value={node.swingDirection}
             />
@@ -421,7 +421,7 @@ export function DoorPanel() {
           return (
             <div className="mb-2 flex flex-col gap-1" key={i}>
               <div className="flex items-center justify-between pb-1">
-                <span className="font-medium text-white/80 text-xs">Segment {i + 1}</span>
+                <span className="font-medium text-white/80 text-xs">分段 {i + 1}</span>
               </div>
 
               <SegmentedControl
@@ -430,9 +430,9 @@ export function DoorPanel() {
                   handleUpdate({ segments: updated })
                 }}
                 options={[
-                  { label: 'Panel', value: 'panel' },
-                  { label: 'Glass', value: 'glass' },
-                  { label: 'Empty', value: 'empty' },
+                  { label: '面板', value: 'panel' },
+                  { label: '玻璃', value: 'glass' },
+                  { label: '空', value: 'empty' },
                 ]}
                 value={seg.type}
               />
@@ -537,7 +537,7 @@ export function DoorPanel() {
 
         <div className="flex gap-1.5 px-1 pt-1">
           <ActionButton
-            label="+ Add Segment"
+            label="+ 添加分段"
             onClick={() => {
               const updated = [
                 ...node.segments,
@@ -556,7 +556,7 @@ export function DoorPanel() {
           {node.segments.length > 1 && (
             <ActionButton
               className="text-white/60 hover:text-white"
-              label="- Remove"
+              label="- 删除"
               onClick={() => handleUpdate({ segments: node.segments.slice(0, -1) })}
             />
           )}

@@ -22,6 +22,16 @@ import { PanelSection } from '../controls/panel-section'
 import { SliderControl } from '../controls/slider-control'
 import { PanelWrapper } from './panel-wrapper'
 
+const ROOF_TYPE_LABELS: Record<string, string> = {
+  hip: '四坡顶',
+  gable: '人字顶',
+  shed: '单坡顶',
+  gambrel: '谷仓顶',
+  dutch: '荷兰顶',
+  mansard: '孟莎顶',
+  flat: '平顶',
+}
+
 export function RoofPanel() {
   const selectedIds = useViewer((s) => s.selection.selectedIds)
   const setSelection = useViewer((s) => s.setSelection)
@@ -138,7 +148,7 @@ export function RoofPanel() {
     <PanelWrapper
       icon="/icons/roof.png"
       onClose={handleClose}
-      title={node.name || 'Roof'}
+      title={node.name || '屋顶'}
       width={300}
     >
       <PanelSection title="分段">
@@ -150,8 +160,8 @@ export function RoofPanel() {
               onClick={() => handleSelectSegment(seg.id)}
               type="button"
             >
-              <span className="truncate">{seg.name || `Segment ${i + 1}`}</span>
-              <span className="text-muted-foreground text-xs capitalize">{seg.roofType}</span>
+              <span className="truncate">{seg.name || `分段 ${i + 1}`}</span>
+              <span className="text-muted-foreground text-xs">{ROOF_TYPE_LABELS[seg.roofType] || seg.roofType}</span>
             </button>
           ))}
         </div>

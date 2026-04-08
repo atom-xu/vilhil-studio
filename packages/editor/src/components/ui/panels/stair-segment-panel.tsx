@@ -24,14 +24,14 @@ import { SliderControl } from '../controls/slider-control'
 import { PanelWrapper } from './panel-wrapper'
 
 const SEGMENT_TYPE_OPTIONS: { label: string; value: StairSegmentType }[] = [
-  { label: 'Flight', value: 'stair' },
-  { label: 'Landing', value: 'landing' },
+  { label: '梯段', value: 'stair' },
+  { label: '平台', value: 'landing' },
 ]
 
 const ATTACHMENT_SIDE_OPTIONS: { label: string; value: AttachmentSide }[] = [
-  { label: 'Front', value: 'front' },
-  { label: 'Left', value: 'left' },
-  { label: 'Right', value: 'right' },
+  { label: '前', value: 'front' },
+  { label: '左', value: 'left' },
+  { label: '右', value: 'right' },
 ]
 
 export function StairSegmentPanel() {

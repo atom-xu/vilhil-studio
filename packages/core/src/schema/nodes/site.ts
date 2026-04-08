@@ -1,6 +1,6 @@
 // lib/scenegraph/schema/nodes/site.ts
 
-import dedent from 'dedent'
+import dedent from 'ts-dedent'
 import { z } from 'zod'
 import { BaseNode, nodeType, objectId } from '../base'
 import { BuildingNode } from './building'
