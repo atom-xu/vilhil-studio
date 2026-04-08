@@ -421,7 +421,7 @@ function LevelReferences({
 
     if (!projectId) {
       useUploadStore.getState().startUpload(levelId, 'scan', file.name)
-      useUploadStore.getState().setError(levelId, 'No active project. Please open a project first.')
+      useUploadStore.getState().setError(levelId, '没有活跃项目。请先打开一个项目。')
       return
     }
 
@@ -431,7 +431,7 @@ function LevelReferences({
         .getState()
         .setError(
           levelId,
-          `File is too large (${(file.size / 1024 / 1024).toFixed(0)} MB). Maximum size is 200 MB.`,
+          `文件太大 (${(file.size / 1024 / 1024).toFixed(0)} MB)。最大大小为 200 MB。`,
         )
       return
     }
@@ -445,7 +445,7 @@ function LevelReferences({
       useUploadStore.getState().startUpload(levelId, 'scan', file.name)
       useUploadStore
         .getState()
-        .setError(levelId, 'Invalid file type. Please upload a .glb/.gltf scan or an image.')
+        .setError(levelId, '无效的文件类型。请上传 .glb/.gltf 扫描文件或图片。')
       return
     }
 

@@ -131,7 +131,7 @@ export function CollectionsPopover({ nodeId, collectionIds, children }: Collecti
                   setCreateName('')
                 }
               }}
-              placeholder="Collection name…"
+              placeholder="收藏名称…"
               value={createName}
             />
             <button

@@ -420,7 +420,7 @@ export function CommandPalette() {
                     <OptionItem
                       isActive={level.id === activeLevelId}
                       key={level.id}
-                      label={level.name ?? `Level ${level.level}`}
+                      label={level.name ?? `楼层 ${level.level}`}
                       onSelect={() =>
                         run(() => useViewer.getState().setSelection({ levelId: level.id }))
                       }
@@ -431,7 +431,7 @@ export function CommandPalette() {
 
               {/* ── Rename Level sub-page ─────────────────────────────────── */}
               {page === 'rename-level' && (
-                <Command.Group heading="Rename Level">
+                <Command.Group heading="重命名楼层">
                   <Command.Item
                     className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-foreground text-sm transition-colors data-[disabled=true]:cursor-not-allowed data-[selected=true]:bg-accent data-[disabled=true]:opacity-40"
                     disabled={!inputValue.trim()}
@@ -457,10 +457,10 @@ export function CommandPalette() {
                     <span className="flex-1 truncate">
                       {inputValue.trim() ? (
                         <>
-                          Rename to <span className="font-medium">"{inputValue.trim()}"</span>
+                          重命名为 <span className="font-medium">"{inputValue.trim()}"</span>
                         </>
                       ) : (
-                        <span className="text-muted-foreground">Type a new name above…</span>
+                        <span className="text-muted-foreground">在上面输入新名称…</span>
                       )}
                     </span>
                   </Command.Item>
@@ -469,7 +469,7 @@ export function CommandPalette() {
 
               {/* ── Camera Snapshot: scope picker ─────────────────────────── */}
               {page === 'camera-view' && (
-                <Command.Group heading="Camera Snapshot — Select Scope">
+                <Command.Group heading="相机快照 — 选择范围">
                   <OptionItem
                     icon={
                       <svg
@@ -483,12 +483,12 @@ export function CommandPalette() {
                         <path d="M3 9h18M9 21V9" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     }
-                    label="Site"
+                    label="场地"
                     onSelect={() => {
                       const { rootNodeIds } = useScene.getState()
                       const siteId = rootNodeIds[0]
                       if (siteId) {
-                        setCameraScope({ nodeId: siteId, label: 'Site' })
+                        setCameraScope({ nodeId: siteId, label: '场地' })
                         navigateTo('camera-scope')
                       }
                     }}
@@ -514,13 +514,13 @@ export function CommandPalette() {
                         />
                       </svg>
                     }
-                    label="Building"
+                    label="建筑"
                     onSelect={() => {
                       const building = Object.values(useScene.getState().nodes).find(
                         (n) => n.type === 'building',
                       )
                       if (building) {
-                        setCameraScope({ nodeId: building.id, label: 'Building' })
+                        setCameraScope({ nodeId: building.id, label: '建筑' })
                         navigateTo('camera-scope')
                       }
                     }}
@@ -547,10 +547,10 @@ export function CommandPalette() {
                         />
                       </svg>
                     }
-                    label="Level"
+                    label="楼层"
                     onSelect={() => {
                       if (activeLevelId) {
-                        setCameraScope({ nodeId: activeLevelId, label: 'Level' })
+                        setCameraScope({ nodeId: activeLevelId, label: '楼层' })
                         navigateTo('camera-scope')
                       }
                     }}
@@ -568,11 +568,11 @@ export function CommandPalette() {
                         <path d="M5 3l14 9-14 9V3z" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     }
-                    label="Selection"
+                    label="选择"
                     onSelect={() => {
                       const firstId = useViewer.getState().selection.selectedIds[0]
                       if (firstId) {
-                        setCameraScope({ nodeId: firstId, label: 'Selection' })
+                        setCameraScope({ nodeId: firstId, label: '选择' })
                         navigateTo('camera-scope')
                       }
                     }}
@@ -582,7 +582,7 @@ export function CommandPalette() {
 
               {/* ── Camera Snapshot: actions for selected scope ───────────── */}
               {page === 'camera-scope' && cameraScope && (
-                <Command.Group heading={`${cameraScope.label} Snapshot`}>
+                <Command.Group heading={`${cameraScope.label} 快照`}>
                   <OptionItem
                     icon={
                       <svg
@@ -606,7 +606,7 @@ export function CommandPalette() {
                         />
                       </svg>
                     }
-                    label={hasScopeSnapshot ? 'Update Snapshot' : 'Take Snapshot'}
+                    label={hasScopeSnapshot ? '更新快照' : '拍摄快照'}
                     onSelect={takeSnapshot}
                   />
                   {hasScopeSnapshot && (
@@ -633,7 +633,7 @@ export function CommandPalette() {
                           />
                         </svg>
                       }
-                      label="View Snapshot"
+                      label="查看快照"
                       onSelect={viewSnapshot}
                     />
                   )}
@@ -661,7 +661,7 @@ export function CommandPalette() {
                           <path d="M9 6V4h6v2" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
                       }
-                      label="Clear Snapshot"
+                      label="清除快照"
                       onSelect={clearSnapshot}
                     />
                   )}

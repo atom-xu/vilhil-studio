@@ -193,7 +193,7 @@ export function PresetsPopover({
                   setSaveName('')
                 }
               }}
-              placeholder="Preset name…"
+              placeholder="预设名称…"
               value={saveName}
             />
             <button
@@ -320,10 +320,10 @@ function EmptyState({ tab, isAuthenticated }: { tab: PresetsTab; isAuthenticated
       <BookMarked className="h-6 w-6 text-muted-foreground/40" />
       <p className="text-muted-foreground text-xs">
         {tab === 'community'
-          ? 'No community presets yet.'
+          ? '暂无社区预设。'
           : isAuthenticated
-            ? 'No presets saved yet. Use "Save new" to save the current configuration.'
-            : 'Sign in to save and view your presets.'}
+            ? '暂无预设。使用"保存新预设"来保存当前配置。'
+            : '登录以保存和查看您的预设。'}
       </p>
     </div>
   )

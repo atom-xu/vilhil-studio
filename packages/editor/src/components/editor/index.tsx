@@ -472,6 +472,39 @@ function ViewerCanvasControlsHint({
   )
 }
 
+// 在 Canvas 内部渲染的场景内容 — 确保 R3F hooks 在 context 内
+function ViewerSceneContent({
+  isFirstPersonMode,
+  isLoading,
+  onThumbnailCapture,
+}: {
+  isFirstPersonMode: boolean
+  isLoading: boolean
+  onThumbnailCapture?: (dataUrl: string) => void
+}) {
+  return (
+    <>
+      {!isFirstPersonMode && <SelectionManager />}
+      {!isFirstPersonMode && <BoxSelectTool />}
+      {!isFirstPersonMode && <FloatingActionMenu />}
+      {!isFirstPersonMode && <WallMeasurementLabel />}
+      <ExportManager />
+      {isFirstPersonMode ? <ViewerZoneSystem /> : <ZoneSystem />}
+      <CeilingSystem />
+      <RoofEditSystem />
+      <StairEditSystem />
+      {!isLoading && !isFirstPersonMode && <Grid cellColor="#aaa" fadeDistance={500} sectionColor="#ccc" />}
+      {!isLoading && !isFirstPersonMode && <ToolManager />}
+      <CustomCameraControls />
+      {isFirstPersonMode && <FirstPersonControls />}
+      <ThumbnailGenerator onThumbnailCapture={onThumbnailCapture} />
+      <PresetThumbnailGenerator />
+      {!isFirstPersonMode && <SiteEdgeLabels />}
+      {isFirstPersonMode && <InteractiveSystem />}
+    </>
+  )
+}
+
 export default function Editor({
   layoutVersion = 'v1',
   appMenuButton,
@@ -619,28 +652,7 @@ export default function Editor({
     writeCameraControlsHintDismissed(true)
   }, [])
 
-  // ── Shared viewer scene content ──
-  const viewerSceneContent = (
-    <>
-      {!isFirstPersonMode && <SelectionManager />}
-      {!isFirstPersonMode && <BoxSelectTool />}
-      {!isFirstPersonMode && <FloatingActionMenu />}
-      {!isFirstPersonMode && <WallMeasurementLabel />}
-      <ExportManager />
-      {isFirstPersonMode ? <ViewerZoneSystem /> : <ZoneSystem />}
-      <CeilingSystem />
-      <RoofEditSystem />
-      <StairEditSystem />
-      {!isLoading && !isFirstPersonMode && <Grid cellColor="#aaa" fadeDistance={500} sectionColor="#ccc" />}
-      {!isLoading && !isFirstPersonMode && <ToolManager />}
-      <CustomCameraControls />
-      {isFirstPersonMode && <FirstPersonControls />}
-      <ThumbnailGenerator onThumbnailCapture={onThumbnailCapture} />
-      <PresetThumbnailGenerator />
-      {!isFirstPersonMode && <SiteEdgeLabels />}
-      {isFirstPersonMode && <InteractiveSystem />}
-    </>
-  )
+  // viewerSceneContent 已移到 ViewerSceneContent 组件中
 
   const previewViewerContent = (
     <Viewer selectionManager="default">
@@ -698,7 +710,13 @@ export default function Editor({
             />
           ) : null}
           <SelectionPersistenceManager enabled={hasLoadedInitialScene && !showLoader} />
-          <Viewer selectionManager={isFirstPersonMode ? 'default' : 'custom'}>{viewerSceneContent}</Viewer>
+          <Viewer selectionManager={isFirstPersonMode ? 'default' : 'custom'}>
+              <ViewerSceneContent
+                isFirstPersonMode={isFirstPersonMode}
+                isLoading={isLoading}
+                onThumbnailCapture={onThumbnailCapture}
+              />
+            </Viewer>
         </div>
       </div>
       {!isLoading && <ZoneLabelEditorSystem />}

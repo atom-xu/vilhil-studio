@@ -42,32 +42,32 @@ const levelModeBadgeLabels: Record<'manual' | 'stacked' | 'exploded' | 'solo', s
 const wallModeConfig = {
   up: {
     icon: (props: any) => (
-      <img alt="Full Height" height={28} src="/icons/room.png" width={28} {...props} />
+      <img alt="全高" height={28} src="/icons/room.png" width={28} {...props} />
     ),
-    label: 'Full Height',
+    label: '全高',
   },
   cutaway: {
     icon: (props: any) => (
-      <img alt="Cutaway" height={28} src="/icons/wallcut.png" width={28} {...props} />
+      <img alt="剖切" height={28} src="/icons/wallcut.png" width={28} {...props} />
     ),
-    label: 'Cutaway',
+    label: '剖切',
   },
   down: {
     icon: (props: any) => (
-      <img alt="Low" height={28} src="/icons/walllow.png" width={28} {...props} />
+      <img alt="低矮" height={28} src="/icons/walllow.png" width={28} {...props} />
     ),
-    label: 'Low',
+    label: '低矮',
   },
 }
 
 const getNodeName = (node: AnyNode): string => {
   if ('name' in node && node.name) return node.name
-  if (node.type === 'wall') return 'Wall'
-  if (node.type === 'item') return (node as { asset: { name: string } }).asset?.name || 'Item'
-  if (node.type === 'slab') return 'Slab'
-  if (node.type === 'ceiling') return 'Ceiling'
-  if (node.type === 'roof') return 'Roof'
-  if (node.type === 'roof-segment') return 'Roof Segment'
+  if (node.type === 'wall') return '墙体'
+  if (node.type === 'item') return (node as { asset: { name: string } }).asset?.name || '物品'
+  if (node.type === 'slab') return '楼板'
+  if (node.type === 'ceiling') return '天花板'
+  if (node.type === 'roof') return '屋顶'
+  if (node.type === 'roof-segment') return '屋顶段'
   return node.type
 }
 
@@ -336,7 +336,7 @@ export const ViewerOverlay = ({
                 variant="ghost"
               >
                 <img
-                  alt="Scans"
+                  alt="扫描"
                   className="h-[28px] w-[28px] object-contain"
                   src="/icons/mesh.png"
                 />
@@ -350,14 +350,14 @@ export const ViewerOverlay = ({
                     ? 'bg-white/10'
                     : 'opacity-60 grayscale hover:bg-white/5 hover:opacity-100 hover:grayscale-0'
                 }
-                label={`Guides: ${showGuides ? 'Visible' : 'Hidden'}`}
+                label={`参考图: ${showGuides ? '显示' : '隐藏'}`}
                 onClick={() => useViewer.getState().setShowGuides(!showGuides)}
                 size="icon"
                 tooltipSide="top"
                 variant="ghost"
               >
                 <img
-                  alt="Guides"
+                  alt="参考图"
                   className="h-[28px] w-[28px] object-contain"
                   src="/icons/floorplan.png"
                 />
@@ -457,7 +457,7 @@ export const ViewerOverlay = ({
               variant="ghost"
             >
               <img
-                alt="Orbit Left"
+                alt="向左环绕"
                 className="h-[28px] w-[28px] -scale-x-100 object-contain opacity-70 transition-opacity group-hover:opacity-100"
                 src="/icons/rotate.png"
               />
@@ -472,7 +472,7 @@ export const ViewerOverlay = ({
               variant="ghost"
             >
               <img
-                alt="Orbit Right"
+                alt="向右环绕"
                 className="h-[28px] w-[28px] object-contain opacity-70 transition-opacity group-hover:opacity-100"
                 src="/icons/rotate.png"
               />
@@ -487,7 +487,7 @@ export const ViewerOverlay = ({
               variant="ghost"
             >
               <img
-                alt="Top View"
+                alt="顶视图"
                 className="h-[28px] w-[28px] object-contain opacity-70 transition-opacity group-hover:opacity-100"
                 src="/icons/topview.png"
               />
