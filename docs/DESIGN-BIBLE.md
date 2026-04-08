@@ -5,7 +5,14 @@
 
 ---
 
-## 一、视觉规范：实体沙盘风格
+## 一、视觉规范
+
+### 两种视觉模式
+
+- **编辑模式**：使用 Pascal 原生风格（白墙 + 亮色/暗色主题 + 天花板/屋顶正常渲染）
+- **展示模式**：沙盘风格（开顶 + 深色背景 + 设备动画效果）
+
+以下沙盘风格规范**仅适用于展示模式**，编辑模式不改 Pascal 原生渲染。
 
 **核心概念：去掉屋顶的白色建筑沙盘。**
 
@@ -122,22 +129,22 @@ network       #60a5fa  网络    WiFi AP/交换机
 
 ---
 
-## 五、数据 Schema（已锁定）
+## 五、数据模型
 
-### 项目结构
+### Pascal 节点系统（实际使用的）
+
+VilHil 使用 Pascal 的 flat node dictionary，不使用 3Dhouse 的旧 JSON 格式。
+
+```typescript
+// Pascal 节点存储方式
+useScene.nodes = {
+  [id]: { type: 'wall', parentId: 'level-1', ... },
+  [id]: { type: 'device', parentId: 'level-1', subsystem: 'lighting', ... },
+  [id]: { type: 'scene', effects: [...], ... },
+}
 ```
-Project
-├── meta（项目信息）
-├── floors[]（楼层）
-│   ├── rooms[]（房间多边形）
-│   ├── walls[]（墙体路径 + 开口）
-│   ├── devices[]（设备列表）
-│   ├── furniture[]（家具）
-│   └── busRoutes[]（总线路径）
-├── scenes[]（场景定义）
-├── cameras[]（镜头预设）
-└── config（全局配置）
-```
+
+Device 和 Scene 作为 Pascal 的节点类型，存在同一个 Zustand store 里，跟随 Pascal 的 IndexedDB 持久化和 Undo/Redo。
 
 ### 设备字段
 ```typescript
