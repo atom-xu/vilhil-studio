@@ -26,6 +26,7 @@
 - 3D Viewer 独立嵌入官网
 - Home Assistant WebSocket 对接，3D 操控 = 真实设备控制
 - 设备状态双向同步（SimulateAdapter → HAAdapter 切换）
+- AI 接口：自然语言生成方案 / 智能布点推荐 / 场景自动编排
 
 ---
 
