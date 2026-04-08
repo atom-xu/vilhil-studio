@@ -121,10 +121,10 @@ export function RoofSegmentPanel() {
       icon="/icons/roof.png"
       onBack={handleBack}
       onClose={handleClose}
-      title={node.name || 'Roof Segment'}
+      title={node.name || '屋顶段'}
       width={300}
     >
-      <PanelSection title="Roof Type">
+      <PanelSection title="屋顶类型">
         <SegmentedControl
           onChange={(v) => handleUpdate({ roofType: v })}
           options={ROOF_TYPE_OPTIONS}

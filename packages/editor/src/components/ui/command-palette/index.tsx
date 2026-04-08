@@ -387,7 +387,7 @@ export function CommandPalette() {
 
               {/* ── Wall Mode sub-page ────────────────────────────────────── */}
               {page === 'wall-mode' && (
-                <Command.Group heading="Wall Mode">
+                <Command.Group heading="墙体模式">
                   {(['cutaway', 'up', 'down'] as const).map((mode) => (
                     <OptionItem
                       isActive={wallMode === mode}
@@ -401,7 +401,7 @@ export function CommandPalette() {
 
               {/* ── Level Mode sub-page ───────────────────────────────────── */}
               {page === 'level-mode' && (
-                <Command.Group heading="Level Mode">
+                <Command.Group heading="楼层模式">
                   {(['stacked', 'exploded', 'solo'] as const).map((mode) => (
                     <OptionItem
                       isActive={levelMode === mode}
@@ -415,7 +415,7 @@ export function CommandPalette() {
 
               {/* ── Go to Level sub-page ──────────────────────────────────── */}
               {page === 'goto-level' && (
-                <Command.Group heading="Go to Level">
+                <Command.Group heading="跳转到楼层">
                   {allLevels.map((level) => (
                     <OptionItem
                       isActive={level.id === activeLevelId}

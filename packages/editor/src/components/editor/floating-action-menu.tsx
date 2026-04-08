@@ -13,8 +13,8 @@ import {
 } from '@pascal-app/core'
 import { useViewer } from '@pascal-app/viewer'
 import { Html } from '@react-three/drei'
-import { useFrame } from '@react-three/fiber'
-import { useCallback, useRef } from 'react'
+import { context as R3FContext, useFrame } from '@react-three/fiber'
+import { useCallback, useContext, useRef } from 'react'
 import * as THREE from 'three'
 import { sfxEmitter } from '../../lib/sfx-bus'
 import useEditor from '../../store/use-editor'
@@ -23,7 +23,15 @@ import { NodeActionMenu } from './node-action-menu'
 const ALLOWED_TYPES = ['item', 'door', 'window', 'roof', 'roof-segment', 'wall', 'slab']
 const DELETE_ONLY_TYPES = ['wall', 'slab']
 
+// 外壳：检查是否在 Canvas 内，不在则跳过
 export function FloatingActionMenu() {
+  const store = useContext(R3FContext)
+  if (!store) return null
+  return <FloatingActionMenuInner />
+}
+
+// 内部：所有 R3F hooks 在这里安全使用
+function FloatingActionMenuInner() {
   const selectedIds = useViewer((s) => s.selection.selectedIds)
   const nodes = useScene((s) => s.nodes)
   const mode = useEditor((s) => s.mode)

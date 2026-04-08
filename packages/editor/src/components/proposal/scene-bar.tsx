@@ -39,7 +39,7 @@ export function SceneBar({ className, scenes = [], onSceneExecute }: SceneBarPro
       ? scenes
       : sceneNodes.map((n) => ({
           id: n.id,
-          name: (n as any).name || 'Scene',
+          name: (n as any).name || '场景',
           icon: (n as any).icon,
           description: (n as any).description,
         }))

@@ -275,7 +275,7 @@ export function DoorPanel() {
         />
       </PanelSection>
 
-      <PanelSection title="Content Padding">
+      <PanelSection title="内容边距">
         <SliderControl
           label="水平"
           max={0.2}

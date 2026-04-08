@@ -131,7 +131,7 @@ export function StairSegmentPanel() {
       icon="/icons/stairs.png"
       onBack={handleBack}
       onClose={handleClose}
-      title={node.name || 'Stair Segment'}
+      title={node.name || '楼梯段'}
       width={300}
     >
       <PanelSection title="类型">
