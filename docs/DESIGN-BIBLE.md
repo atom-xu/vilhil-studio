@@ -222,13 +222,14 @@ strokeLinejoin="round"
 
 ### 设计 Token
 
-| Token | 值 |
-|-------|------|
-| 品牌主色 | `#2D7FF9` |
-| 字体 | DM Sans / Noto Sans SC / system-ui |
-| 圆角 | 8px |
-| 间距网格 | 8px |
-| 顶栏高度 | 44px |
+| Token | 值 | 备注 |
+|-------|------|------|
+| 品牌主色 | `#2D7FF9` | |
+| 字体 | Barlow / GeistSans / system-ui | Pascal 已配置 |
+| 圆角 | 跟随 Tailwind（sm/md/lg/xl） | 不硬定死，用 Pascal 现有的 |
+| 间距 | 跟随 Tailwind（4px 网格） | 不另起一套 |
+
+**原则：VilHil 新增的 UI 组件必须跟 Pascal 现有组件保持一致的圆角、间距、阴影。不要自己定义新的设计 Token，直接用 Tailwind + Pascal 的 globals.css 变量。**
 
 ### 颜色引用规则
 - 子系统颜色从 `subsystemMeta` 导入，不硬编码
