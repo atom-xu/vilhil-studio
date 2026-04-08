@@ -212,36 +212,36 @@ await placeDevice('living-room', 'ceiling_light', [3,2.5,4], { beamAngle: 30 })
 - 涉及子系统分类时对照9分类表
 - Pascal 核心代码（wall/slab/ceiling/roof）谨慎修改
 
-### 2. 性能规则
+### 3. 性能规则
 - useFrame 内绝不触发 React re-render
 - 动画用 ref 直接更新，不用 setState
 - 新增 3D 组件必须考虑 geometry dispose
 - 粒子系统优先用 shader 驱动（GPU 端），避免 JS 逐粒子更新
 
-### 3. 状态管理
+### 4. 状态管理
 - 全局状态用 Zustand（useScene / useViewer / useDeviceState）
 - 设备物理状态统一在 packages/smarthome/device-state.ts
 - 不在组件内另立全局 state
 
-### 4. 视觉规范
+### 5. 视觉规范
 - 软边缘、自然写实、在空间内
 - 不要硬边光圈、不要装饰性动画
 - 每个视觉效果必须传递具体信息
 - 设备本身变色表示选中，不额外加标记球
 
-### 5. 节点类型
+### 6. 节点类型
 - 建筑节点：Wall / Door / Window / Slab / Ceiling / Roof / Stair / Zone
 - 智能家居节点：Device / Scene（VilHil 新增）
 - 所有节点用 Zod Schema 定义，存在 packages/core/src/schema/
 
-### 6. UI 设计原则
+### 7. UI 设计原则
 - **尊重现有信息架构** — Pascal Editor 的 UI 布局是经过设计的，新功能要融入而不是硬塞
 - **用户认知负荷** — 同一时刻不展示超过用户需要的信息
 - **渐进式披露** — 常用功能一步到位，高级功能折叠/收起
 - **位置合理性** — 新功能放在用户会自然寻找的位置，不需要学习
 - **一致性** — 新增面板/工具的样式、交互模式与 Pascal 现有组件保持一致
 
-### 7. 文件组织
+### 8. 文件组织
 - 建筑编辑相关 → packages/core + packages/viewer + packages/editor
 - 智能家居相关 → packages/smarthome + packages/viewer/renderers/device
 - 展示模式 UI → packages/editor/src/components/proposal/

@@ -22,14 +22,17 @@ Then  他看到一个白色沙盘房间
 
 ### 技术任务
 
+**先工具函数，再 UI：**
+
 | # | 任务 | 包 | 验证标准 |
 |---|------|-----|---------|
-| 1 | 设备目录 UI 接入编辑器工具栏 | editor | 左侧栏有"设备"Tab，点开看到 9 子系统设备列表 |
-| 2 | 设备拖拽放置到 3D 场景 | editor/tools | 从目录拖灯具到场景，自动吸附天花板 |
+| 0 | 工具函数：placeDevice / removeDevice / setDeviceParams | smarthome/tools | 纯函数可独立调用，不依赖 UI |
+| 1 | 设备目录 UI — Furnish 旁加 [Smart] Tab | editor | 左侧栏有"智能"Tab，展开看到 9 子系统设备列表 |
+| 2 | 设备拖拽放置到 3D 场景 | editor/tools | 从目录拖灯具到场景，自动吸附天花板，调用 placeDevice() |
 | 3 | 设备渲染器基础 | viewer/renderers | 放置的灯具在 3D 中可见（简单几何体 + 子系统色） |
 | 4 | 灯具光效（L1 常驻可视化） | viewer/effects | 灯具发出可见光锥 + PointLight 照亮地面 |
-| 5 | 展示模式入口 | editor/proposal | 顶栏有"展示"按钮，点击隐藏编辑 UI，显示简洁展示界面 |
-| 6 | 设备属性面板 | editor/panels | 选中灯具右侧显示：亮度/色温/光束角 |
+| 5 | 展示模式入口 | editor/proposal | 顶栏有"展示"按钮，点击隐藏编辑 UI |
+| 6 | 设备属性面板 | editor/panels | 选中灯具右侧显示：亮度/色温/光束角，调用 setDeviceParams() |
 
 ### 不做
 
