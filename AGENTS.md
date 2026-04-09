@@ -249,6 +249,80 @@ await placeDevice('living-room', 'ceiling_light', [3,2.5,4], { beamAngle: 30 })
 
 ---
 
+---
+
+## 账号体系（架构预留）
+
+当前不做用户系统，但架构上预留三种角色：
+
+| 角色 | 权限 | 场景 |
+|------|------|------|
+| 设计师 | 编辑模式全功能 | 画户型、放设备、配场景 |
+| 客户 | 展示模式只读 + 操控 | 浏览方案、点灯按面板 |
+| 管理员 | 设计师权限 + 账号管理 | 团队管理 |
+
+**实现思路**：
+- 编辑模式 = 设计师（需登录）
+- 展示模式 = 客户（无需登录，通过分享链接进入）
+- 分享链接的权限由 `readOnly` 字段控制
+- Pascal 的 `useScene.readOnly` 已支持只读模式
+
+**当前做法**：不做登录，所有人都能编辑。等 S5 做分享链接时再加权限控制。
+
+---
+
+## Pascal 上游更新策略
+
+### Git 结构
+
+```
+origin    → github.com/atom-xu/vilhil-studio（我们的仓库）
+upstream  → github.com/pascalorg/editor（Pascal 原始仓库）
+```
+
+### 合并上游更新的流程
+
+```bash
+# 1. 拉取上游最新代码
+git fetch upstream
+
+# 2. 查看上游有哪些新 commit
+git log upstream/main --oneline -10
+
+# 3. 合并到我们的 main（可能有冲突）
+git merge upstream/main
+
+# 4. 解决冲突（重点关注我们改过的文件）
+# 5. 测试通过后推送
+git push origin main
+```
+
+### 冲突风险评估
+
+| 我们改过的区域 | 冲突风险 | 处理方式 |
+|-------------|---------|---------|
+| `apps/editor/app/layout.tsx` | 低 | 我们只删了 React Scan |
+| `apps/editor/app/globals.css` | 中 | 我们改了 outline 和品牌色 |
+| `apps/editor/next.config.ts` | 低 | 我们加了 reactStrictMode |
+| `packages/editor/src/` 汉化 | 高 | 上游更新 UI 文本时会冲突，手动合并 |
+| `packages/core/src/schema/` | 中 | 我们加了 Device/Scene，上游加新节点类型时可能冲突 |
+| `packages/smarthome/` | 无 | 完全是我们的新包，上游不会动 |
+| `packages/viewer/src/renderers/device/` | 无 | 完全是我们的新目录 |
+
+### 合并频率建议
+
+- **不要每次上游更新都合并** — 只在上游有重要功能/修复时才合
+- 建议每 2-4 周检查一次上游更新
+- 重大版本更新（如 Pascal 0.4.0）前做一次完整合并
+
+### 降低冲突的原则
+
+1. **VilHil 新代码尽量放在新文件/新目录里**，不改 Pascal 原有文件
+2. 汉化是唯一大量改 Pascal 文件的操作，冲突时以我们的中文版为准
+3. `packages/smarthome/` 是我们的独立包，永远不会跟上游冲突
+
+---
+
 ## 关键决策历史
 
 | 决策 | 原因 |
