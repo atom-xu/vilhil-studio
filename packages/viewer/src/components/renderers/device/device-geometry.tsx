@@ -3,11 +3,28 @@ import { useMemo } from 'react'
 import * as THREE from 'three'
 import { getSubsystemColor } from '@vilhil/smarthome'
 
+// 设备运行时视觉状态 — 与 @vilhil/smarthome DeviceVisualState 保持同步
+export interface DeviceVisualState {
+  on?: boolean
+  brightness?: number     // 0-100
+  color?: string          // hex
+  colorTemp?: number      // 2700-6500K
+  position?: number       // 窗帘 0-100
+  angle?: number          // 百叶 0-90
+  targetTemp?: number
+  currentTemp?: number
+  locked?: boolean
+  triggered?: boolean
+  signalStrength?: number // 0-100
+}
+
 interface DeviceGeometryProps {
   mountType: MountType
   renderType: string
   size?: [number, number, number]
   subsystem: Subsystem
+  /** 设备运行时视觉状态 — Kimi 3D 模型接入后通过此 prop 驱动动画 */
+  visualState?: DeviceVisualState
 }
 
 // Device geometry renderer - creates appropriate 3D geometry based on device type
@@ -16,6 +33,7 @@ export const DeviceGeometry = ({
   renderType,
   size = [0.1, 0.1, 0.1],
   subsystem,
+  visualState,
 }: DeviceGeometryProps) => {
   const [width, height, depth] = size
   const color = useMemo(() => getSubsystemColor(subsystem), [subsystem])

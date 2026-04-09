@@ -54,14 +54,11 @@ export function FurnishTools() {
   const catalogCategory = useEditor((state) => state.catalogCategory)
   const setCatalogCategory = useEditor((state) => state.setCatalogCategory)
 
-  const hasActiveTool = furnishTools.some(
-    (tool) => mode === 'build' && activeTool === 'item' && catalogCategory === tool.catalogCategory,
-  )
+  const isSmartActive = mode === 'build' && activeTool === 'device'
 
   return (
     <div className="flex items-center gap-1.5 px-1">
       {furnishTools.map((tool, index) => {
-        // For item tools with catalog category, check both tool and category match
         const isActive =
           mode === 'build' && activeTool === 'item' && catalogCategory === tool.catalogCategory
 
@@ -97,6 +94,38 @@ export function FurnishTools() {
           </ActionButton>
         )
       })}
+
+      {/* 智能家居设备分类 */}
+      <div className="mx-0.5 h-6 w-px bg-white/10" />
+      <ActionButton
+        className={cn(
+          'rounded-lg duration-300',
+          isSmartActive
+            ? 'z-10 scale-110 bg-black/40 hover:bg-black/40'
+            : 'scale-95 bg-transparent opacity-60 hover:bg-black/20 hover:opacity-100',
+        )}
+        label="智能"
+        onClick={() => {
+          if (!isSmartActive) {
+            setCatalogCategory(null)
+            setActiveTool('device')
+            if (mode !== 'build') {
+              setMode('build')
+            }
+          }
+        }}
+        size="icon"
+        variant="ghost"
+      >
+        {/* 用品牌主色的小圆点作为图标，不依赖图片资源 */}
+        <div className="flex flex-col items-center gap-0.5">
+          <div
+            className="h-4 w-4 rounded-full"
+            style={{ backgroundColor: isSmartActive ? '#2D7FF9' : '#6b7280' }}
+          />
+          <span className="text-[8px] font-medium leading-none">智能</span>
+        </div>
+      </ActionButton>
     </div>
   )
 }

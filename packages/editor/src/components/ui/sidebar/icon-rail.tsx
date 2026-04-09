@@ -1,7 +1,7 @@
 'use client'
 
 import { useViewer } from '@pascal-app/viewer'
-import { Moon, Ruler, Sun } from 'lucide-react'
+import { Moon, Sparkles, Sun } from 'lucide-react'
 import { motion } from 'motion/react'
 import { type ReactNode, useEffect, useState } from 'react'
 import {
@@ -11,7 +11,14 @@ import {
 } from './../../../components/ui/primitives/tooltip'
 import { cn } from './../../../lib/utils'
 
-export type PanelId = 'site' | 'settings'
+export type PanelId = 'site' | 'settings' | 'scenes'
+
+/** 外部注入的额外面板（供 Editor 消费者扩展侧边栏使用） */
+export type ExtraPanel = {
+  id: string
+  label: string
+  component: React.ComponentType
+}
 
 interface IconRailProps {
   activePanel: PanelId
@@ -20,8 +27,13 @@ interface IconRailProps {
   className?: string
 }
 
-const panels: { id: PanelId; iconSrc: string; label: string }[] = [
+type PanelEntry =
+  | { id: PanelId; iconSrc: string; label: string; icon?: never }
+  | { id: PanelId; icon: ReactNode; label: string; iconSrc?: never }
+
+const panels: PanelEntry[] = [
   { id: 'site', iconSrc: '/icons/level.png', label: '项目' },
+  { id: 'scenes', icon: <Sparkles className="h-5 w-5" />, label: '场景' },
   { id: 'settings', iconSrc: '/icons/settings.png', label: '设置' },
 ]
 
@@ -62,14 +74,25 @@ export function IconRail({ activePanel, onPanelChange, appMenuButton, className 
                 onClick={() => onPanelChange(panel.id)}
                 type="button"
               >
-                <img
-                  alt={panel.label}
-                  className={cn(
-                    'h-6 w-6 object-contain transition-all',
-                    !isActive && 'opacity-50 saturate-0',
-                  )}
-                  src={panel.iconSrc}
-                />
+                {panel.icon ? (
+                  <span
+                    className={cn(
+                      'transition-all',
+                      isActive ? 'text-foreground' : 'text-muted-foreground/60',
+                    )}
+                  >
+                    {panel.icon}
+                  </span>
+                ) : (
+                  <img
+                    alt={panel.label}
+                    className={cn(
+                      'h-6 w-6 object-contain transition-all',
+                      !isActive && 'opacity-50 saturate-0',
+                    )}
+                    src={panel.iconSrc}
+                  />
+                )}
               </button>
             </TooltipTrigger>
             <TooltipContent side="right">{panel.label}</TooltipContent>

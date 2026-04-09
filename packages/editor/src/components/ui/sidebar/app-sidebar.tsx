@@ -11,6 +11,7 @@ import {
 } from './../../../components/ui/primitives/sidebar'
 import { cn } from './../../../lib/utils'
 import { IconRail, type PanelId } from './icon-rail'
+import { ScenePanel } from './panels/scene-panel'
 import { SettingsPanel, type SettingsPanelProps } from './panels/settings-panel'
 import { SitePanel, type SitePanelProps } from './panels/site-panel'
 
@@ -41,6 +42,8 @@ export function AppSidebar({
     switch (activePanel) {
       case 'site':
         return <SitePanel {...sitePanelProps} />
+      case 'scenes':
+        return <ScenePanel />
       case 'settings':
         return <SettingsPanel {...settingsPanelProps} />
       default:

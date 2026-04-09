@@ -43,6 +43,29 @@ export type MountType = z.infer<typeof MountTypeEnum>
 // 设备参数定义
 // ═══════════════════════════════════════════════════════════════
 
+// 面板按键动作类型
+const PanelActionSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('toggle'),
+    deviceIds: z.array(z.string()),
+  }),
+  z.object({
+    type: z.literal('set'),
+    deviceIds: z.array(z.string()),
+    state: z.record(z.string(), z.unknown()),
+  }),
+  z.object({
+    type: z.literal('scene'),
+    sceneId: z.string(),
+  }),
+])
+
+const PanelKeyConfigSchema = z.object({
+  keyIndex: z.number().int().min(0),
+  label: z.string(),
+  action: PanelActionSchema,
+})
+
 export const DeviceParamsSchema = z.object({
   direction: z.number().min(0).max(360).optional(),
   elevation: z.number().min(-90).max(90).optional(),
@@ -56,6 +79,8 @@ export const DeviceParamsSchema = z.object({
   ipAddress: z.string().optional(),
   macAddress: z.string().optional(),
   protocol: z.enum(['knx', 'zigbee', 'zwave', 'wifi', 'bluetooth', 'matter']).optional(),
+  /** 面板按键配置（panel 子系统专用） */
+  panelKeys: z.array(PanelKeyConfigSchema).optional(),
   custom: z.any().optional(),
 })
 

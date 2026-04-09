@@ -13,6 +13,7 @@ import { ViewerOverlay } from '../../components/viewer-overlay'
 import { ViewerZoneSystem } from '../../components/viewer-zone-system'
 import { type PresetsAdapter, PresetsProvider } from '../../contexts/presets-context'
 import { type SaveStatus, useAutoSave } from '../../hooks/use-auto-save'
+import { useDeviceInteraction } from '../../hooks/use-device-interaction'
 import { useKeyboard } from '../../hooks/use-keyboard'
 import {
   applySceneGraphToEditor,
@@ -498,6 +499,10 @@ export default function Editor({
 }: EditorProps) {
   useKeyboard()
 
+  const isPreviewMode = useEditor((s) => s.isPreviewMode)
+  // L2 设备交互：编辑模式下点击 → 翻转开关+更新选中；预览模式只翻转
+  useDeviceInteraction({ editMode: !isPreviewMode })
+
   const { isLoadingSceneRef } = useAutoSave({
     onSave,
     onDirty,
@@ -510,7 +515,6 @@ export default function Editor({
   const [isCameraControlsHintVisible, setIsCameraControlsHintVisible] = useState<boolean | null>(
     null,
   )
-  const isPreviewMode = useEditor((s) => s.isPreviewMode)
   const isFirstPersonMode = useEditor((s) => s.isFirstPersonMode)
   const isFloorplanOpen = useEditor((s) => s.isFloorplanOpen)
   const floorplanPaneRatio = useEditor((s) => s.floorplanPaneRatio)

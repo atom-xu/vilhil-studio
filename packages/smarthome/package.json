@@ -19,14 +19,27 @@
     "./subsystem": {
       "types": "./src/subsystem-meta.ts",
       "default": "./src/subsystem-meta.ts"
+    },
+    "./models": {
+      "types": "./src/models/index.ts",
+      "default": "./src/models/index.ts"
     }
   },
   "dependencies": {
     "@pascal-app/core": "workspace:*",
     "zustand": "^5.0.0"
   },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "three": "^0.183.0",
+    "@react-three/fiber": "^9.0.0",
+    "@react-three/drei": "^10.0.0"
+  },
   "devDependencies": {
     "@pascal/typescript-config": "workspace:*",
+    "@types/react": "^19.0.0",
+    "@types/three": "^0.183.0",
     "typescript": "^5.0.0"
   }
 }

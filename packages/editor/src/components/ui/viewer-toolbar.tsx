@@ -2,7 +2,7 @@
 
 import { Icon as IconifyIcon } from '@iconify/react'
 import { useViewer } from '@pascal-app/viewer'
-import { ChevronsLeft, ChevronsRight, Columns2, Eye, Footprints, Moon, Sun } from 'lucide-react'
+import { ChevronsLeft, ChevronsRight, Columns2, Eye, Footprints, Moon, Sparkles, Sun } from 'lucide-react'
 import { useCallback } from 'react'
 import { cn } from '../../lib/utils'
 import useEditor from '../../store/use-editor'
@@ -314,6 +314,25 @@ function PreviewButton() {
   )
 }
 
+function ProposalDemoButton() {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <a
+          className="flex items-center gap-1.5 px-2.5 font-medium text-[#2D7FF9] text-xs transition-colors hover:bg-[#2D7FF9]/10"
+          href="/proposal-demo"
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          <Sparkles className="h-3.5 w-3.5 shrink-0" />
+          <span>提案演示</span>
+        </a>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">打开客户提案演示</TooltipContent>
+    </Tooltip>
+  )
+}
+
 // ── Composed toolbar sections ───────────────────────────────────────────────
 
 export function ViewerToolbarLeft() {
@@ -337,6 +356,8 @@ export function ViewerToolbarRight() {
       <div className="my-1.5 w-px bg-border/50" />
       <WalkthroughButton />
       <PreviewButton />
+      <div className="my-1.5 w-px bg-border/50" />
+      <ProposalDemoButton />
     </div>
   )
 }

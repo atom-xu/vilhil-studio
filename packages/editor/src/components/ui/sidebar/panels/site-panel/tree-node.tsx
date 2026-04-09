@@ -56,10 +56,12 @@ export function focusTreeNode(nodeId: AnyNodeId) {
 import { cn } from '../../../../../lib/utils'
 import { BuildingTreeNode } from './building-tree-node'
 import { CeilingTreeNode } from './ceiling-tree-node'
+import { DeviceTreeNode } from './device-tree-node'
 import { DoorTreeNode } from './door-tree-node'
 import { ItemTreeNode } from './item-tree-node'
 import { LevelTreeNode } from './level-tree-node'
 import { RoofTreeNode } from './roof-tree-node'
+import { SceneTreeNode } from './scene-tree-node'
 import { SlabTreeNode } from './slab-tree-node'
 import { StairTreeNode } from './stair-tree-node'
 import { WallTreeNode } from './wall-tree-node'
@@ -94,6 +96,10 @@ export function TreeNode({ nodeId, depth = 0, isLast }: TreeNodeProps) {
       return <StairTreeNode depth={depth} isLast={isLast} node={node as any} />
     case 'item':
       return <ItemTreeNode depth={depth} isLast={isLast} node={node as any} />
+    case 'device':
+      return <DeviceTreeNode depth={depth} isLast={isLast} node={node as any} />
+    case 'scene':
+      return <SceneTreeNode depth={depth} isLast={isLast} node={node as any} />
     case 'door':
       return <DoorTreeNode depth={depth} isLast={isLast} node={node as any} />
     case 'window':

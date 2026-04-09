@@ -6,6 +6,7 @@ import {
   ViewerToolbarLeft,
   ViewerToolbarRight,
 } from '@pascal-app/editor'
+import { DevBridge } from './dev-bridge'
 
 const SIDEBAR_TABS: (SidebarTab & { component: React.ComponentType })[] = [
   {
@@ -18,6 +19,7 @@ const SIDEBAR_TABS: (SidebarTab & { component: React.ComponentType })[] = [
 export default function Home() {
   return (
     <div className="h-screen w-screen">
+      <DevBridge />
       <Editor
         layoutVersion="v2"
         projectId="local-editor"

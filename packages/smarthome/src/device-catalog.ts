@@ -22,6 +22,8 @@ export interface DeviceDefinition {
   size: [number, number, number] // [w, h, d]
   subsystem: Subsystem
   mountType: MountType
+  /** 参考售价（元人民币） */
+  price?: number
   // 可选字段
   modelId?: string
   iconType?: string
@@ -84,6 +86,7 @@ const LIGHTING_FIXTURES: DeviceDefinition[] = [
     subsystem: 'lighting',
     mountType: 'ceiling',
     lightType: 'point',
+    price: 680,
   },
   {
     catalogId: 'LIGHT-STRIP',
@@ -97,6 +100,7 @@ const LIGHTING_FIXTURES: DeviceDefinition[] = [
     subsystem: 'lighting',
     mountType: 'hidden',
     lightType: 'line',
+    price: 280,
   },
   {
     catalogId: 'LIGHT-PENDANT',
@@ -110,6 +114,7 @@ const LIGHTING_FIXTURES: DeviceDefinition[] = [
     subsystem: 'lighting',
     mountType: 'ceiling_suspended',
     lightType: 'physical',
+    price: 1200,
   },
   {
     catalogId: 'LIGHT-WALL',
@@ -123,6 +128,7 @@ const LIGHTING_FIXTURES: DeviceDefinition[] = [
     subsystem: 'lighting',
     mountType: 'wall',
     lightType: 'physical',
+    price: 550,
   },
 ]
 
@@ -140,6 +146,7 @@ const LIGHTING_CONTROLS: DeviceDefinition[] = [
     mountType: 'wall_switch',
     buttonCount: 1,
     controlType: 'switch',
+    price: 380,
   },
   {
     catalogId: 'PANEL-SWITCH-2KEY',
@@ -154,6 +161,7 @@ const LIGHTING_CONTROLS: DeviceDefinition[] = [
     mountType: 'wall_switch',
     buttonCount: 2,
     controlType: 'switch',
+    price: 480,
   },
   {
     catalogId: 'PANEL-SWITCH-3KEY',
@@ -168,6 +176,7 @@ const LIGHTING_CONTROLS: DeviceDefinition[] = [
     mountType: 'wall_switch',
     buttonCount: 3,
     controlType: 'switch',
+    price: 580,
   },
   {
     catalogId: 'PANEL-DIMMER-KNOB',
@@ -181,6 +190,7 @@ const LIGHTING_CONTROLS: DeviceDefinition[] = [
     subsystem: 'panel',
     mountType: 'wall_switch',
     controlType: 'dimmer',
+    price: 680,
   },
   {
     catalogId: 'PANEL-SCENE-4KEY',
@@ -195,6 +205,7 @@ const LIGHTING_CONTROLS: DeviceDefinition[] = [
     mountType: 'wall_switch',
     buttonCount: 4,
     controlType: 'scene',
+    price: 880,
   },
   {
     catalogId: 'PANEL-SCENE-6KEY',
@@ -209,6 +220,7 @@ const LIGHTING_CONTROLS: DeviceDefinition[] = [
     mountType: 'wall_switch',
     buttonCount: 6,
     controlType: 'scene',
+    price: 1200,
   },
 ]
 
@@ -226,6 +238,7 @@ const HVAC_DEVICES: DeviceDefinition[] = [
     mountType: 'wall_switch',
     hasScreen: true,
     controlType: 'thermostat',
+    price: 1800,
   },
   {
     catalogId: 'HVAC-VENT-4WAY',
@@ -238,6 +251,7 @@ const HVAC_DEVICES: DeviceDefinition[] = [
     size: [0.3, 0.05, 0.3],
     subsystem: 'hvac',
     mountType: 'ceiling',
+    price: 600,
   },
 ]
 
@@ -253,6 +267,7 @@ const CURTAIN_DEVICES: DeviceDefinition[] = [
     size: [0.05, 0.3, 0.05],
     subsystem: 'curtain',
     mountType: 'hidden',
+    price: 1200,
   },
 ]
 
@@ -268,6 +283,7 @@ const SECURITY_DEVICES: DeviceDefinition[] = [
     size: [0.07, 0.18, 0.06],
     subsystem: 'security',
     mountType: 'door',
+    price: 2800,
   },
   {
     catalogId: 'SECURITY-PIR',
@@ -281,6 +297,7 @@ const SECURITY_DEVICES: DeviceDefinition[] = [
     subsystem: 'sensor',
     mountType: 'ceiling',
     coverageRadius: 5,
+    price: 320,
   },
   {
     catalogId: 'SECURITY-CAMERA-DOME',
@@ -293,6 +310,7 @@ const SECURITY_DEVICES: DeviceDefinition[] = [
     size: [0.12, 0.08, 0.12],
     subsystem: 'security',
     mountType: 'ceiling',
+    price: 1500,
   },
   {
     catalogId: 'SECURITY-SMOKE',
@@ -305,6 +323,7 @@ const SECURITY_DEVICES: DeviceDefinition[] = [
     size: [0.11, 0.04, 0.11],
     subsystem: 'sensor',
     mountType: 'ceiling',
+    price: 280,
   },
 ]
 
@@ -321,6 +340,7 @@ const NETWORK_DEVICES: DeviceDefinition[] = [
     subsystem: 'network',
     mountType: 'ceiling',
     coverageRadius: 10,
+    price: 1200,
   },
   {
     catalogId: 'NETWORK-AP-WALL',
@@ -334,6 +354,7 @@ const NETWORK_DEVICES: DeviceDefinition[] = [
     subsystem: 'network',
     mountType: 'wall_switch',
     coverageRadius: 8,
+    price: 800,
   },
 ]
 
@@ -349,6 +370,7 @@ const INFRA_DEVICES: DeviceDefinition[] = [
     size: [0.09, 0.06, 0.072],
     subsystem: 'architecture',
     mountType: 'din_rail',
+    price: 3500,
   },
   {
     catalogId: 'INFRA-SMART-HOST',
@@ -361,6 +383,7 @@ const INFRA_DEVICES: DeviceDefinition[] = [
     size: [0.3, 0.1, 0.4],
     subsystem: 'architecture',
     mountType: 'wall',
+    price: 8000,
   },
 ]
 

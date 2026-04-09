@@ -4,6 +4,7 @@ import { type AnyNodeId, useScene } from '@pascal-app/core'
 import { useViewer } from '@pascal-app/viewer'
 import useEditor from '../../../store/use-editor'
 import { CeilingPanel } from './ceiling-panel'
+import { DevicePanel } from './device-panel'
 import { DoorPanel } from './door-panel'
 import { ItemPanel } from './item-panel'
 import { ReferencePanel } from './reference-panel'
@@ -14,6 +15,8 @@ import { StairPanel } from './stair-panel'
 import { StairSegmentPanel } from './stair-segment-panel'
 import { WallPanel } from './wall-panel'
 import { WindowPanel } from './window-panel'
+// 场景节点属性面板（选中场景节点时显示）
+import { SceneNodePanel } from './scene-node-panel'
 
 export function PanelManager() {
   const selectedIds = useViewer((s) => s.selection.selectedIds)
@@ -31,6 +34,10 @@ export function PanelManager() {
     const node = nodes[selectedNode as AnyNodeId]
     if (node) {
       switch (node.type) {
+        case 'device':
+          return <DevicePanel />
+        case 'scene':
+          return <SceneNodePanel sceneId={node.id} />
         case 'item':
           return <ItemPanel />
         case 'roof':

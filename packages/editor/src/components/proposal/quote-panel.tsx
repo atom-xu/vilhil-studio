@@ -2,7 +2,7 @@
 
 import { useScene } from '@pascal-app/core'
 import type { Subsystem } from '@pascal-app/core'
-import { SUBSYSTEM_META } from '@vilhil/smarthome'
+import { getDeviceDefinition, SUBSYSTEM_META } from '@vilhil/smarthome'
 import { X } from 'lucide-react'
 import { useMemo } from 'react'
 import { useShallow } from 'zustand/shallow'
@@ -33,19 +33,21 @@ export function QuotePanel({ className, isOpen, onClose, items = [] }: QuotePane
   const allNodes = useMemo(() => Object.values(nodes), [nodes])
   const deviceNodes = useMemo(() => allNodes.filter((n: any) => n?.type === 'device'), [allNodes])
 
-  // 如果没有传入报价项，从设备节点生成
+  // 如果没有传入报价项，从设备节点生成（价格来自产品目录）
   const displayItems: QuoteItem[] =
     items.length > 0
       ? items
       : deviceNodes.map((n: any) => {
           const device = n
+          const def = device.productId ? getDeviceDefinition(device.productId) : undefined
+          const unitPrice = def?.price ?? 0
           return {
             id: device.id,
-            name: device.productName || 'Device',
+            name: device.productName || def?.name || '未知设备',
             subsystem: device.subsystem,
             quantity: 1,
-            unitPrice: device.unitPrice || 0,
-            totalPrice: device.unitPrice || 0,
+            unitPrice,
+            totalPrice: unitPrice,
           }
         })
 

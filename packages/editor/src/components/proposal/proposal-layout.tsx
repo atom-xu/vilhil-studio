@@ -6,6 +6,7 @@ import { useViewer } from '@pascal-app/viewer'
 import { ArrowLeft, ChevronRight, FileText } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useShallow } from 'zustand/shallow'
+import { useDeviceInteraction } from '../../hooks/use-device-interaction'
 import { cn } from '../../lib/utils'
 import { DeviceInfoCard } from './device-info-card'
 import { QuotePanel } from './quote-panel'
@@ -49,7 +50,10 @@ export function ProposalLayout({
     ? (nodes[effectiveDeviceId as AnyNodeId] as any | undefined)
     : null
 
-  // Listen for device clicks in the viewer
+  // L2 展示模式：点击设备 → 翻转开关
+  useDeviceInteraction({ editMode: false })
+
+  // 展示模式下仍需要同步 selectedDeviceId，用于 DeviceInfoCard 展示
   useEffect(() => {
     const handleDeviceClick = (event: any) => {
       if (event.node?.type === 'device') {

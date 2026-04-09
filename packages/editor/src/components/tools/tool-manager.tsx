@@ -37,6 +37,7 @@ const tools: Record<Phase, Partial<Record<Tool, React.FC>>> = {
   },
   furnish: {
     item: ItemTool,
+    device: DeviceTool,
   },
 }
 

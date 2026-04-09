@@ -15,6 +15,7 @@
     "@pascal-app/core": "*",
     "@pascal-app/editor": "*",
     "@pascal-app/viewer": "*",
+    "@vilhil/smarthome": "*",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
     "@tailwindcss/postcss": "^4.2.1",

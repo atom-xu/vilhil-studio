@@ -1,13 +1,12 @@
 {
-  "extends": "@pascal/typescript-config/base.json",
+  "extends": "@pascal/typescript-config/react-library.json",
   "compilerOptions": {
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "composite": true,
-    "noEmit": false,
-    "lib": ["es2022", "DOM", "DOM.Iterable"]
+    "baseUrl": ".",
+    "paths": {
+      "@pascal-app/core": ["../core/src"],
+      "@pascal-app/viewer": ["../viewer/src"]
+    }
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"],
-  "references": [{ "path": "../core" }]
+  "exclude": ["node_modules", "dist"]
 }
