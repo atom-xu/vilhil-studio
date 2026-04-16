@@ -69,13 +69,14 @@ export const DeviceLight = ({ brightness, color, colorTemp, renderType }: Device
         />
       )
     case 'strip':
+      // 用 pointLight 代替 rectAreaLight —— WebGPU 下 RectAreaLight 需要 LTC
+      // 纹理初始化，而 pointLight 对灯带的氛围效果已经足够自然。
       return (
-        <rectAreaLight
+        <pointLight
           ref={lightRef as any}
-          height={0.02}
-          position={[0, -0.02, 0]}
-          rotation={[-Math.PI / 2, 0, 0]}
-          width={0.5}
+          decay={1.2}
+          distance={6}
+          position={[0, 0, 0]}
         />
       )
     case 'wall-light':

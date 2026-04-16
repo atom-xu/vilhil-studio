@@ -38,6 +38,7 @@ export const useKeyboard = () => {
           // Clear selections to close UI panels, but KEEP the active building and level context.
           useViewer.getState().setSelection({ selectedIds: [], zoneId: null })
           useEditor.getState().setSelectedReferenceId(null)
+          useEditor.getState().cancelLevelAlignment()
         }
       } else if (e.key === '1' && !e.metaKey && !e.ctrlKey) {
         e.preventDefault()
@@ -166,6 +167,8 @@ export const useKeyboard = () => {
           }
 
           useScene.getState().deleteNodes(selectedNodeIds)
+          // 删除后清空选中，避免残留死 ID 导致下次 Delete 无效
+          useViewer.getState().setSelection({ selectedIds: [] })
         }
       }
     }

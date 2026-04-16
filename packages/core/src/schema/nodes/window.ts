@@ -2,13 +2,18 @@ import dedent from 'ts-dedent'
 import { z } from 'zod'
 import { BaseNode, nodeType, objectId } from '../base'
 import { MaterialSchema } from '../material'
+import { quantizePoint3 } from '../precision'
 
 export const WindowNode = BaseNode.extend({
   id: objectId('window'),
   type: nodeType('window'),
   material: MaterialSchema.optional(),
 
-  position: z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0]),
+  // 窗位置：墙局部坐标系。挂 1cm 量化
+  position: z
+    .tuple([z.number(), z.number(), z.number()])
+    .default([0, 0, 0])
+    .transform(quantizePoint3),
   rotation: z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0]),
   side: z.enum(['front', 'back']).optional(),
 

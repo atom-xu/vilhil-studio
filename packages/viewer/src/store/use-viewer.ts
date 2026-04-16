@@ -48,6 +48,10 @@ type ViewerState = {
   showGuides: boolean
   setShowGuides: (show: boolean) => void
 
+  /** 参考楼层 ID —— 在 2D floorplan 里半透明显示该层的底图作为对齐参考 */
+  referenceLevelId: LevelNode['id'] | null
+  setReferenceLevelId: (id: LevelNode['id'] | null) => void
+
   showGrid: boolean
   setShowGrid: (show: boolean) => void
 
@@ -126,6 +130,9 @@ const useViewer = create<ViewerState>()(
           }
           return { showGuides: show, projectPreferences }
         }),
+
+      referenceLevelId: null,
+      setReferenceLevelId: (id) => set({ referenceLevelId: id }),
 
       showGrid: true,
       setShowGrid: (show) =>

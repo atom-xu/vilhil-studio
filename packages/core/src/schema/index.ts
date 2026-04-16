@@ -2,6 +2,16 @@
 export { BaseNode, generateId, nodeType, objectId } from './base'
 // Camera
 export { CameraSchema } from './camera'
+// Precision —— 全局位置精度守恒（1cm 原子单位）
+export {
+  ATOM,
+  positionKey,
+  quantize,
+  quantizeNodePatch,
+  quantizePoint,
+  quantizePoint3,
+  quantizePolygon,
+} from './precision'
 // Collections
 export { type Collection, type CollectionId, generateCollectionId } from './collections'
 // Material
@@ -55,6 +65,7 @@ export { SiteNode } from './nodes/site'
 export { SlabNode } from './nodes/slab'
 export { StairNode } from './nodes/stair'
 export { AttachmentSide, StairSegmentNode, StairSegmentType } from './nodes/stair-segment'
+export { VertexNode, VertexNodeKind } from './nodes/vertex'
 export { WallNode } from './nodes/wall'
 export { WindowNode } from './nodes/window'
 export { ZoneNode } from './nodes/zone'

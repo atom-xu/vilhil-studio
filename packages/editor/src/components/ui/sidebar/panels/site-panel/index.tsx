@@ -14,6 +14,8 @@ import { useViewer } from '@pascal-app/viewer'
 import {
   Camera,
   ChevronDown,
+  Eye,
+  EyeOff,
   Loader2,
   MoreHorizontal,
   Pencil,
@@ -316,12 +318,20 @@ function ReferenceItem({
   handleDelete: (id: string, e: React.MouseEvent) => void
 }) {
   const [isEditing, setIsEditing] = useState(false)
+  const updateNode = useScene((s) => s.updateNode)
+  const isVisible = refNode.visible !== false
+
   const handleSelect = () => {
     setSelectedReferenceId(refNode.id)
   }
 
   const handleDoubleClick = () => {
     focusTreeNode(refNode.id as AnyNodeId)
+  }
+
+  const handleToggleVisible = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    updateNode(refNode.id as AnyNodeId, { visible: !isVisible })
   }
 
   return (
@@ -342,7 +352,10 @@ function ReferenceItem({
         style={{ left: 45, width: 8 }}
       />
 
-      <div className="flex h-8 min-w-0 flex-1 cursor-pointer items-center gap-2 py-0 pl-[60px] text-muted-foreground group-hover/ref:text-foreground">
+      <div className={cn(
+        'flex h-8 min-w-0 flex-1 cursor-pointer items-center gap-2 py-0 pl-[60px] text-muted-foreground group-hover/ref:text-foreground',
+        !isVisible && 'opacity-40',
+      )}>
         {refNode.type === 'scan' ? (
           <img
             alt="Scan"
@@ -364,6 +377,18 @@ function ReferenceItem({
           onStopEditing={() => setIsEditing(false)}
         />
       </div>
+
+      {/* 显隐切换按钮 —— 隐藏时常驻显示，可见时 hover 显示 */}
+      <button
+        className={cn(
+          'z-20 flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10',
+          isVisible ? 'opacity-0 group-hover/ref:opacity-100' : 'opacity-100',
+        )}
+        onClick={handleToggleVisible}
+        title={isVisible ? '隐藏' : '显示'}
+      >
+        {isVisible ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+      </button>
 
       <button
         className="z-20 flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 transition-colors hover:bg-black/5 hover:text-foreground group-hover/ref:opacity-100 dark:hover:bg-white/10"
@@ -437,15 +462,17 @@ function LevelReferences({
     }
 
     // Auto-detect type based on file extension/mime type
-    const isScan =
-      file.name.toLowerCase().endsWith('.glb') || file.name.toLowerCase().endsWith('.gltf')
+    const lowerName = file.name.toLowerCase()
+    const isScan = lowerName.endsWith('.glb') || lowerName.endsWith('.gltf')
     const isImage = file.type.startsWith('image/')
+    const isPdf = file.type === 'application/pdf' || lowerName.endsWith('.pdf')
+    const isDxf = lowerName.endsWith('.dxf')
 
-    if (!(isScan || isImage)) {
+    if (!(isScan || isImage || isPdf || isDxf)) {
       useUploadStore.getState().startUpload(levelId, 'scan', file.name)
       useUploadStore
         .getState()
-        .setError(levelId, '无效的文件类型。请上传 .glb/.gltf 扫描文件或图片。')
+        .setError(levelId, '无效的文件类型。支持：图片、PDF、DXF、GLB/GLTF。')
       return
     }
 
@@ -515,7 +542,7 @@ function LevelReferences({
               </button>
 
               <input
-                accept=".glb,.gltf,image/jpeg,image/png,image/webp,image/gif"
+                accept=".glb,.gltf,.pdf,.dxf,image/jpeg,image/png,image/webp,image/gif,application/pdf"
                 className="hidden"
                 onChange={handleAddAsset}
                 ref={scanInputRef}

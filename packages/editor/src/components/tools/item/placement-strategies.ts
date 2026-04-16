@@ -31,6 +31,147 @@ import type {
 
 const DEFAULT_DIMENSIONS: [number, number, number] = [1, 1, 1]
 
+/** Snap item edge flush to wall face when within this distance (metres). */
+const WALL_SNAP_DIST = 0.20
+/** Snap item edge to neighbouring item edge when within this distance (metres). */
+const ITEM_SNAP_DIST = 0.12
+
+/**
+ * Apply two layers of proximity snapping on top of the 5 cm grid snap.
+ *
+ * Layer 1 – Wall-face snap: if any item edge is within WALL_SNAP_DIST of a
+ * wall face, push the edge perfectly flush with that face.
+ *
+ * Layer 2 – Item-edge snap: if our edge is within ITEM_SNAP_DIST of another
+ * floor item's edge (along the same axis), align the two edges.
+ *
+ * @param x   item centre X, already 5 cm grid-snapped
+ * @param z   item centre Z, already 5 cm grid-snapped
+ * @param hx  item half-width  (X axis)
+ * @param hz  item half-depth  (Z axis)
+ * @param levelId    parent level ID – used to filter walls and items
+ * @param excludeIds node IDs to ignore (the transient draft itself)
+ */
+function snapWithProximity(
+  x: number,
+  z: number,
+  hx: number,
+  hz: number,
+  levelId: string,
+  excludeIds: string[],
+): [number, number] {
+  const nodes = useScene.getState().nodes
+
+  // ── Layer 1: Wall-face snap ────────────────────────────────────────────────
+  let bestWallGap = WALL_SNAP_DIST
+  let wallDeltaX = 0
+  let wallDeltaZ = 0
+
+  for (const node of Object.values(nodes)) {
+    if (node.type !== 'wall') continue
+    if (node.parentId !== levelId) continue
+
+    const wall = node as WallNode
+    const halfThick = (wall.thickness ?? 0.2) / 2
+
+    const dx = wall.end[0] - wall.start[0]
+    const dz = wall.end[1] - wall.start[1]
+    const len = Math.sqrt(dx * dx + dz * dz)
+    if (len < 0.01) continue
+
+    const wdirX = dx / len   // unit vec along wall (XZ world)
+    const wdirZ = dz / len
+    const wnX = -wdirZ       // unit normal (left of direction)
+    const wnZ = wdirX
+
+    // Item centre relative to wall start
+    const relX = x - wall.start[0]
+    const relZ = z - wall.start[1]
+
+    const perp  = relX * wnX   + relZ * wnZ    // signed ⊥ distance to centreline
+    const along = relX * wdirX + relZ * wdirZ  // signed ∥ distance from start
+
+    // Item's projected half-extents
+    const itemHalfAlong = hx * Math.abs(wdirX) + hz * Math.abs(wdirZ)
+    const itemHalfPerp  = hx * Math.abs(wnX)   + hz * Math.abs(wnZ)
+
+    // No lateral overlap with this wall segment → skip
+    if (along + itemHalfAlong < 0 || along - itemHalfAlong > len) continue
+
+    // Front face (+halfThick) — item must lie on the positive normal side
+    if (perp > halfThick) {
+      const nearEdge = perp - itemHalfPerp          // item edge closest to face
+      const gap = nearEdge - halfThick              // positive = outside wall
+      if (gap >= 0 && gap < bestWallGap) {
+        bestWallGap = gap
+        const delta = halfThick + itemHalfPerp - perp
+        wallDeltaX = wnX * delta
+        wallDeltaZ = wnZ * delta
+      }
+    }
+
+    // Back face (−halfThick) — item must lie on the negative normal side
+    if (perp < -halfThick) {
+      const nearEdge = perp + itemHalfPerp
+      const gap = -halfThick - nearEdge
+      if (gap >= 0 && gap < bestWallGap) {
+        bestWallGap = gap
+        const delta = -halfThick - itemHalfPerp - perp
+        wallDeltaX = wnX * delta
+        wallDeltaZ = wnZ * delta
+      }
+    }
+  }
+
+  // Apply wall snap correction
+  x += wallDeltaX
+  z += wallDeltaZ
+
+  // ── Layer 2: Item-edge snap ────────────────────────────────────────────────
+  let bestXGap = ITEM_SNAP_DIST
+  let bestZGap = ITEM_SNAP_DIST
+  let snapX = x
+  let snapZ = z
+
+  for (const node of Object.values(nodes)) {
+    if (node.type !== 'item') continue
+    if (excludeIds.includes(node.id)) continue
+
+    const item = node as ItemNode
+    if (item.asset.attachTo) continue       // wall/ceiling items — skip
+    if (item.parentId !== levelId) continue
+
+    const [ox, , oz] = item.position
+    const [odimX, , odimZ] = getScaledDimensions(item)
+    const ohx = odimX / 2
+    const ohz = odimZ / 2
+
+    // X-axis edge snap — only when Z footprints overlap
+    const zOverlap = Math.min(z + hz, oz + ohz) - Math.max(z - hz, oz - ohz)
+    if (zOverlap > 0) {
+      // Our right edge → their left edge
+      const rToL = Math.abs((x + hx) - (ox - ohx))
+      if (rToL < bestXGap) { bestXGap = rToL; snapX = ox - ohx - hx }
+      // Our left edge → their right edge
+      const lToR = Math.abs((x - hx) - (ox + ohx))
+      if (lToR < bestXGap) { bestXGap = lToR; snapX = ox + ohx + hx }
+    }
+
+    // Z-axis edge snap — only when X footprints overlap
+    const xOverlap = Math.min(x + hx, ox + ohx) - Math.max(x - hx, ox - ohx)
+    if (xOverlap > 0) {
+      // Our front edge → their back edge
+      const fToB = Math.abs((z + hz) - (oz - ohz))
+      if (fToB < bestZGap) { bestZGap = fToB; snapZ = oz - ohz - hz }
+      // Our back edge → their front edge
+      const bToF = Math.abs((z - hz) - (oz + ohz))
+      if (bToF < bestZGap) { bestZGap = bToF; snapZ = oz + ohz + hz }
+    }
+  }
+
+  return [snapX, snapZ]
+}
+
 // ============================================================================
 // FLOOR STRATEGY
 // ============================================================================
@@ -47,8 +188,16 @@ export const floorStrategy = {
       ? getScaledDimensions(ctx.draftItem)
       : (ctx.asset.dimensions ?? DEFAULT_DIMENSIONS)
     const [dimX, , dimZ] = dims
-    const x = snapToGrid(event.position[0], dimX)
-    const z = snapToGrid(event.position[2], dimZ)
+
+    // 1. Coarse 5 cm grid snap
+    const gx = snapToGrid(event.position[0])
+    const gz = snapToGrid(event.position[2])
+
+    // 2. Proximity snap: flush to wall faces and neighbouring item edges
+    const excludeIds = ctx.draftItem ? [ctx.draftItem.id] : []
+    const [x, z] = ctx.levelId
+      ? snapWithProximity(gx, gz, dimX / 2, dimZ / 2, ctx.levelId, excludeIds)
+      : [gx, gz]
 
     return {
       gridPosition: [x, 0, z],

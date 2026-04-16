@@ -3,3 +3,5 @@ export { APCoverage, PIRCoverage, ParticleCoverage, PIRParticleCone } from './pa
 export { LightCone } from './light-cone'
 export { CurtainPanel } from './curtain-panel'
 export { BusVisualizer } from './bus-visualizer'
+export { HvacAirflow } from './hvac-airflow'
+export { CameraFOV } from './camera-fov'

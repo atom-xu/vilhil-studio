@@ -13,31 +13,89 @@ import { BoxGeometry, EdgesGeometry, type Group, type LineSegments } from 'three
 import { LineBasicNodeMaterial } from 'three/webgpu'
 import { EDITOR_LAYER } from '../../../lib/constants'
 import { sfxEmitter } from '../../../lib/sfx-bus'
+import useEditor from '../../../store/use-editor'
 import {
   calculateCursorRotation,
   calculateItemRotation,
   getSideFromNormal,
   isValidWallSideFace,
-  snapToHalf,
 } from '../item/placement-math'
 import { clampToWall, hasWallChildOverlap, wallLocalToWorld } from './window-math'
+import { getWindowPreset } from './window-presets'
 
-// Shared edge material — reuse across renders, just toggle color
+// ─── Snap constants ──────────────────────────────────────────────────────────
+const SNAP_GRID = 0.05    // 5 cm fine grid
+const SNAP_ENDPOINT = 0.12 // 12 cm — snap to wall start/end
+const MIN_WINDOW_WIDTH = 0.3 // reject commits narrower than this
+
+// ─── Unit-box cursor (1×1×0.07) — scaled at runtime via group.scale ──────────
+const _tmpBox = new BoxGeometry(1, 1, 0.07)
+const CURSOR_EDGES = new EdgesGeometry(_tmpBox)
+_tmpBox.dispose()
+
 const edgeMaterial = new LineBasicNodeMaterial({
-  color: 0xef_44_44, // red-500 default (invalid)
+  color: 0xef_44_44,
   linewidth: 3,
   depthTest: false,
   depthWrite: false,
 })
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Snap X to 5 cm grid, with endpoint gravity at wall start/end. */
+function snapWallX(rawX: number, wallLen: number): number {
+  if (rawX < SNAP_ENDPOINT) return 0
+  if (rawX > wallLen - SNAP_ENDPOINT) return wallLen
+  return Math.round(rawX / SNAP_GRID) * SNAP_GRID
+}
+
+function getWallLength(node: { start: [number, number]; end: [number, number] }): number {
+  const dx = node.end[0] - node.start[0]
+  const dz = node.end[1] - node.start[1]
+  return Math.sqrt(dx * dx + dz * dz)
+}
+
+/** Resolve drawn size from anchor → cursor position. */
+function resolveDrawn(
+  anchorX: number,
+  curX: number,
+  minWidth: number,
+): { width: number; centerX: number; tooNarrow: boolean } {
+  const left = Math.min(anchorX, curX)
+  const right = Math.max(anchorX, curX)
+  const width = right - left
+  if (width < minWidth) {
+    return { width: minWidth, centerX: anchorX, tooNarrow: true }
+  }
+  return { width, centerX: (left + right) / 2, tooNarrow: false }
+}
+
 /**
- * Window tool — places WindowNodes on walls only.
- * Shows a rectangle cursor (green = valid, red = invalid) matching window dimensions.
+ * Window tool — draw-to-size placement (like wall drawing).
+ *
+ * Interaction:
+ *   • Hover wall  → preview window at preset size (green/red cursor)
+ *   • Click 1     → anchor start edge, enter drawing phase
+ *   • Move        → stretch window width from anchor to cursor
+ *   • Click 2     → commit (reject if too narrow or overlapping)
+ *   • Leave wall  → cancel back to idle
+ *   • ESC         → cancel
+ *
+ * Window height and sill height are always determined by the active preset.
+ * Width is freely drawn. "落地窗 (floor-ceiling)" becomes an entire wall span
+ * simply by clicking at one wall end and the other.
  */
 export const WindowTool: React.FC = () => {
   const draftRef = useRef<WindowNode | null>(null)
   const cursorGroupRef = useRef<Group>(null!)
   const edgesRef = useRef<LineSegments>(null!)
+
+  // Drawing state — all mutable refs, zero React re-renders
+  const phase = useRef<'idle' | 'drawing'>('idle')
+  const anchorX = useRef(0)
+  const cachedItemRotation = useRef(0)
+  const cachedCursorRotation = useRef(0)
+  const cachedSide = useRef<'front' | 'back'>('front')
 
   useEffect(() => {
     useScene.temporal.getState().pause()
@@ -47,11 +105,11 @@ export const WindowTool: React.FC = () => {
       const id = getLevelId()
       return id ? (sceneRegistry.nodes.get(id as AnyNodeId)?.position.y ?? 0) : 0
     }
-    const getSlabElevation = (wallEvent: WallEvent) =>
+    const getSlabElevation = (e: WallEvent) =>
       spatialGridManager.getSlabElevationForWall(
-        wallEvent.node.parentId ?? '',
-        wallEvent.node.start,
-        wallEvent.node.end,
+        e.node.parentId ?? '',
+        e.node.start,
+        e.node.end,
       )
 
     const markWallDirty = (wallId: string) => {
@@ -63,7 +121,6 @@ export const WindowTool: React.FC = () => {
       const wallId = draftRef.current.parentId
       useScene.getState().deleteNode(draftRef.current.id)
       draftRef.current = null
-      // Rebuild wall so it removes the cutout from the deleted draft
       if (wallId) markWallDirty(wallId)
     }
 
@@ -71,63 +128,110 @@ export const WindowTool: React.FC = () => {
       if (cursorGroupRef.current) cursorGroupRef.current.visible = false
     }
 
-    const updateCursor = (
-      worldPosition: [number, number, number],
-      cursorRotationY: number,
+    /** Position + scale the wireframe cursor. */
+    const showCursor = (
+      worldPos: [number, number, number],
+      rotY: number,
+      w: number,
+      h: number,
       valid: boolean,
     ) => {
-      const group = cursorGroupRef.current
-      if (!group) return
-      group.visible = true
-      group.position.set(...worldPosition)
-      group.rotation.y = cursorRotationY
+      const g = cursorGroupRef.current
+      if (!g) return
+      g.visible = true
+      g.position.set(...worldPos)
+      g.rotation.y = rotY
+      g.scale.set(w, h, 1)
       edgeMaterial.color.setHex(valid ? 0x22_c5_5e : 0xef_44_44)
     }
+
+    /** Create or update the transient draft node. */
+    const upsertDraft = (
+      event: WallEvent,
+      centerX: number,
+      centerY: number,
+      width: number,
+      height: number,
+    ) => {
+      const preset = getWindowPreset(useEditor.getState().windowPresetId)
+      const iRot = cachedItemRotation.current
+      const side = cachedSide.current
+
+      if (draftRef.current) {
+        useScene.getState().updateNode(draftRef.current.id, {
+          position: [centerX, centerY, 0],
+          rotation: [0, iRot, 0],
+          side,
+          parentId: event.node.id,
+          wallId: event.node.id,
+          width,
+          height,
+        })
+      } else {
+        const node = WindowNode.parse({
+          position: [centerX, centerY, 0],
+          rotation: [0, iRot, 0],
+          side,
+          wallId: event.node.id,
+          parentId: event.node.id,
+          width,
+          height,
+          metadata: { isTransient: true },
+        })
+        useScene.getState().createNode(node, event.node.id as AnyNodeId)
+        draftRef.current = node
+      }
+    }
+
+    // ── Event handlers ──────────────────────────────────────────────────────
 
     const onWallEnter = (event: WallEvent) => {
       if (!isValidWallSideFace(event.normal)) return
       const levelId = getLevelId()
       if (!levelId) return
-      // Only interact with walls on the current level
       if (event.node.parentId !== levelId) return
+      if (phase.current === 'drawing') return // ignore re-enters mid-draw
 
       destroyDraft()
 
-      const side = getSideFromNormal(event.normal)
-      const itemRotation = calculateItemRotation(event.normal)
-      const cursorRotation = calculateCursorRotation(event.normal, event.node.start, event.node.end)
+      // Cache wall face orientation
+      cachedItemRotation.current = calculateItemRotation(event.normal)
+      cachedCursorRotation.current = calculateCursorRotation(
+        event.normal,
+        event.node.start,
+        event.node.end,
+      )
+      cachedSide.current = getSideFromNormal(event.normal)
 
-      const localX = snapToHalf(event.localPosition[0])
-      const localY = snapToHalf(event.localPosition[1])
+      const preset = getWindowPreset(useEditor.getState().windowPresetId)
+      const wLen = getWallLength(event.node)
+      const snappedX = snapWallX(event.localPosition[0], wLen)
+      // Window Y = sill + half-height (fixed by preset)
+      const localY = preset.sillHeight + preset.height / 2
+      const { clampedX, clampedY } = clampToWall(
+        event.node,
+        snappedX,
+        localY,
+        preset.width,
+        preset.height,
+      )
 
-      const width = 1.5
-      const height = 1.5
+      upsertDraft(event, clampedX, clampedY, preset.width, preset.height)
 
-      const { clampedX, clampedY } = clampToWall(event.node, localX, localY, width, height)
+      const valid = !hasWallChildOverlap(
+        event.node.id,
+        clampedX,
+        clampedY,
+        preset.width,
+        preset.height,
+        draftRef.current?.id,
+      )
 
-      const node = WindowNode.parse({
-        position: [clampedX, clampedY, 0],
-        rotation: [0, itemRotation, 0],
-        side,
-        wallId: event.node.id,
-        parentId: event.node.id,
-        metadata: { isTransient: true },
-      })
-
-      useScene.getState().createNode(node, event.node.id as AnyNodeId)
-      draftRef.current = node
-
-      const valid = !hasWallChildOverlap(event.node.id, clampedX, clampedY, width, height, node.id)
-
-      updateCursor(
-        wallLocalToWorld(
-          event.node,
-          clampedX,
-          clampedY,
-          getLevelYOffset(),
-          getSlabElevation(event),
-        ),
-        cursorRotation,
+      showCursor(
+        wallLocalToWorld(event.node, clampedX, clampedY, getLevelYOffset(), getSlabElevation(event)),
+        cachedCursorRotation.current,
+        preset.width,
+        preset.height,
         valid,
       )
       event.stopPropagation()
@@ -135,89 +239,112 @@ export const WindowTool: React.FC = () => {
 
     const onWallMove = (event: WallEvent) => {
       if (!isValidWallSideFace(event.normal)) return
-      // Only interact with walls on the current level
       if (event.node.parentId !== getLevelId()) return
 
-      const side = getSideFromNormal(event.normal)
-      const itemRotation = calculateItemRotation(event.normal)
-      const cursorRotation = calculateCursorRotation(event.normal, event.node.start, event.node.end)
+      const preset = getWindowPreset(useEditor.getState().windowPresetId)
+      const wLen = getWallLength(event.node)
+      const snappedX = snapWallX(event.localPosition[0], wLen)
 
-      const localX = snapToHalf(event.localPosition[0])
-      const localY = snapToHalf(event.localPosition[1])
-
-      const width = draftRef.current?.width ?? 1.5
-      const height = draftRef.current?.height ?? 1.5
-
-      const { clampedX, clampedY } = clampToWall(event.node, localX, localY, width, height)
-
-      if (draftRef.current) {
-        useScene.getState().updateNode(draftRef.current.id, {
-          position: [clampedX, clampedY, 0],
-          rotation: [0, itemRotation, 0],
-          side,
-          parentId: event.node.id,
-          wallId: event.node.id,
-        })
+      // In idle phase: keep orientation updated to the hovered face
+      if (phase.current !== 'drawing') {
+        cachedItemRotation.current = calculateItemRotation(event.normal)
+        cachedCursorRotation.current = calculateCursorRotation(
+          event.normal,
+          event.node.start,
+          event.node.end,
+        )
+        cachedSide.current = getSideFromNormal(event.normal)
       }
 
-      const valid = !hasWallChildOverlap(
+      let width: number
+      let centerX: number
+      const height = preset.height
+      // Y center is always determined by the preset (sill + half-height)
+      const localY = preset.sillHeight + height / 2
+
+      if (phase.current === 'drawing') {
+        const { width: w, centerX: cx } = resolveDrawn(anchorX.current, snappedX, MIN_WINDOW_WIDTH)
+        width = w
+        const { clampedX } = clampToWall(event.node, cx, localY, width, height)
+        centerX = clampedX
+      } else {
+        width = preset.width
+        const { clampedX } = clampToWall(event.node, snappedX, localY, width, height)
+        centerX = clampedX
+      }
+
+      const { clampedY } = clampToWall(event.node, centerX, localY, width, height)
+
+      upsertDraft(event, centerX, clampedY, width, height)
+
+      const tooNarrow =
+        phase.current === 'drawing' &&
+        resolveDrawn(anchorX.current, snappedX, MIN_WINDOW_WIDTH).tooNarrow
+      const hasOverlap = hasWallChildOverlap(
         event.node.id,
-        clampedX,
+        centerX,
         clampedY,
         width,
         height,
         draftRef.current?.id,
       )
 
-      updateCursor(
-        wallLocalToWorld(
-          event.node,
-          clampedX,
-          clampedY,
-          getLevelYOffset(),
-          getSlabElevation(event),
-        ),
-        cursorRotation,
-        valid,
+      showCursor(
+        wallLocalToWorld(event.node, centerX, clampedY, getLevelYOffset(), getSlabElevation(event)),
+        cachedCursorRotation.current,
+        width,
+        height,
+        !tooNarrow && !hasOverlap,
       )
       event.stopPropagation()
     }
 
     const onWallClick = (event: WallEvent) => {
-      if (!draftRef.current) return
       if (!isValidWallSideFace(event.normal)) return
-      // Only interact with walls on the current level
       if (event.node.parentId !== getLevelId()) return
 
-      const side = getSideFromNormal(event.normal)
-      const itemRotation = calculateItemRotation(event.normal)
+      const preset = getWindowPreset(useEditor.getState().windowPresetId)
+      const wLen = getWallLength(event.node)
+      const snappedX = snapWallX(event.localPosition[0], wLen)
 
-      const localX = snapToHalf(event.localPosition[0])
-      const localY = snapToHalf(event.localPosition[1])
-      const { clampedX, clampedY } = clampToWall(
-        event.node,
-        localX,
-        localY,
-        draftRef.current.width,
-        draftRef.current.height,
+      if (phase.current === 'idle') {
+        // First click — anchor start edge, enter drawing mode
+        phase.current = 'drawing'
+        anchorX.current = snappedX
+        event.stopPropagation()
+        return
+      }
+
+      // Second click — commit if valid
+      if (!draftRef.current) return
+
+      const { width, centerX, tooNarrow } = resolveDrawn(
+        anchorX.current,
+        snappedX,
+        MIN_WINDOW_WIDTH,
       )
-      const valid = !hasWallChildOverlap(
+      if (tooNarrow) return // force the user to draw a meaningful size
+
+      const height = preset.height
+      const localY = preset.sillHeight + height / 2
+      const { clampedX, clampedY } = clampToWall(event.node, centerX, localY, width, height)
+
+      const hasOverlap = hasWallChildOverlap(
         event.node.id,
         clampedX,
         clampedY,
-        draftRef.current.width,
-        draftRef.current.height,
+        width,
+        height,
         draftRef.current.id,
       )
-      if (!valid) return
+      if (hasOverlap) return
 
+      // Commit
       const draft = draftRef.current
       draftRef.current = null
+      phase.current = 'idle'
 
-      // Delete transient draft (paused, invisible to undo)
       useScene.getState().deleteNode(draft.id)
-
-      // Resume → create permanent node (single undoable action)
       useScene.temporal.getState().resume()
 
       const levelId = getLevelId()
@@ -232,12 +359,12 @@ export const WindowTool: React.FC = () => {
       const node = WindowNode.parse({
         name,
         position: [clampedX, clampedY, 0],
-        rotation: [0, itemRotation, 0],
-        side,
+        rotation: [0, cachedItemRotation.current, 0],
+        side: cachedSide.current,
         wallId: event.node.id,
         parentId: event.node.id,
-        width: draft.width,
-        height: draft.height,
+        width,
+        height,
         frameThickness: draft.frameThickness,
         frameDepth: draft.frameDepth,
         columnRatios: draft.columnRatios,
@@ -258,11 +385,14 @@ export const WindowTool: React.FC = () => {
     }
 
     const onWallLeave = () => {
+      // Cancel drawing when leaving the wall
+      phase.current = 'idle'
       destroyDraft()
       hideCursor()
     }
 
     const onCancel = () => {
+      phase.current = 'idle'
       destroyDraft()
       hideCursor()
     }
@@ -274,6 +404,7 @@ export const WindowTool: React.FC = () => {
     emitter.on('tool:cancel', onCancel)
 
     return () => {
+      phase.current = 'idle'
       destroyDraft()
       hideCursor()
       useScene.temporal.getState().resume()
@@ -285,15 +416,10 @@ export const WindowTool: React.FC = () => {
     }
   }, [])
 
-  // Cursor geometry: window outline rectangle (width × height × frameDepth)
-  const boxGeo = new BoxGeometry(1.5, 1.5, 0.07)
-  const edgesGeo = new EdgesGeometry(boxGeo)
-  boxGeo.dispose()
-
   return (
     <group ref={cursorGroupRef} visible={false}>
       <lineSegments
-        geometry={edgesGeo}
+        geometry={CURSOR_EDGES}
         layers={EDITOR_LAYER}
         material={edgeMaterial}
         ref={edgesRef}

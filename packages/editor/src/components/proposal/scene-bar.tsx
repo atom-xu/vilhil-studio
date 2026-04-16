@@ -76,7 +76,7 @@ export function SceneBar({ className, scenes = [], onSceneExecute }: SceneBarPro
               'group relative flex min-w-[100px] items-center gap-2 rounded-xl px-3 py-2 transition-all duration-200',
               'hover:bg-accent/50 active:scale-95',
               isActive
-                ? 'bg-violet-500/15 ring-1 ring-violet-500/40'
+                ? 'bg-primary/10 ring-1 ring-primary/40'
                 : 'hover:bg-accent/50'
             )}
             onClick={() => handleExecute(scene)}
@@ -85,18 +85,16 @@ export function SceneBar({ className, scenes = [], onSceneExecute }: SceneBarPro
             {/* 场景图标 */}
             <div
               className={cn(
-                'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-base transition-all duration-200',
+                'flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all duration-200',
                 isActive
-                  ? 'bg-violet-500 shadow-[0_0_12px_rgba(139,92,246,0.5)]'
-                  : 'bg-gradient-to-br from-violet-500 to-fuchsia-500'
+                  ? 'bg-primary shadow-[0_0_12px_rgba(45,127,249,0.4)]'
+                  : 'bg-accent/60',
               )}
             >
-              {icon ? (
-                <span>{icon}</span>
-              ) : isActive ? (
+              {isActive ? (
                 <CheckCircle className="h-4 w-4 text-white" />
               ) : (
-                <Play className="h-4 w-4 text-white" fill="white" />
+                <Play className="h-3.5 w-3.5 text-muted-foreground" />
               )}
             </div>
 
@@ -105,13 +103,13 @@ export function SceneBar({ className, scenes = [], onSceneExecute }: SceneBarPro
               <span
                 className={cn(
                   'font-medium text-sm transition-colors',
-                  isActive ? 'text-violet-400' : 'text-foreground'
+                  isActive ? 'text-primary' : 'text-foreground'
                 )}
               >
                 {scene.name}
               </span>
               {isActive ? (
-                <span className="text-violet-500 text-xs font-medium">已激活</span>
+                <span className="text-primary text-xs font-medium">已激活</span>
               ) : scene.description ? (
                 <span className="text-muted-foreground text-xs">{scene.description}</span>
               ) : null}

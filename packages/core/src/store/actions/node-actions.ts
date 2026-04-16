@@ -1,5 +1,6 @@
 import type { AnyNode, AnyNodeId } from '../../schema'
 import type { CollectionId } from '../../schema/collections'
+import { quantizeNodePatch } from '../../schema/precision'
 import type { SceneState } from '../use-scene'
 
 type AnyContainerNode = AnyNode & { children: string[] }
@@ -69,7 +70,12 @@ export const updateNodesAction = (
   set((state) => {
     const nextNodes = { ...state.nodes }
 
-    for (const { id, data } of updates) {
+    for (const entry of updates) {
+      const { id } = entry
+      // F1 精度守恒：patch 里的位置字段（start/end/polygon/holes/position）
+      // 统一走 `quantizeNodePatch` 量化到 1cm。Zod 的 schema transform 只在
+      // `.parse()` 时触发，这里的浅合并会绕过 transform，必须显式补这一刀。
+      const data = quantizeNodePatch(entry.data as Record<string, any>) as Partial<AnyNode>
       const currentNode = nextNodes[id]
       if (!currentNode) continue
 

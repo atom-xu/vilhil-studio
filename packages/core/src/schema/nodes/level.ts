@@ -29,11 +29,15 @@ export const LevelNode = BaseNode.extend({
     .default([]),
   // Specific props
   level: z.number().default(0),
+  // 建筑朝向：正北方向相对于平面图"上方"顺时针旋转的角度（度）
+  // 0 = 上北下南（默认）；90 = 北向右；180 = 北向下；270 = 北向左
+  northAngle: z.number().min(0).max(360).default(0),
 }).describe(
   dedent`
   Level node - used to represent a level in the building
   - children: array of floor, wall, ceiling, roof, item nodes
   - level: level number
+  - northAngle: degrees clockwise from screen-up to true north (0 = north up)
   `,
 )
 

@@ -198,10 +198,11 @@ export function DeviceInfoCard({ device, className }: DeviceInfoCardProps) {
               value={(deviceState.position as number) ?? 0}
             />
             <div className="grid grid-cols-3 gap-1.5">
+              {/* 窗帘语义：position 0=开（布收起）, 100=关（布展开） */}
               {[
-                { label: '全开', value: 100 },
+                { label: '全开', value: 0 },
                 { label: '一半', value: 50 },
-                { label: '全关', value: 0 },
+                { label: '全关', value: 100 },
               ].map(({ label, value }) => (
                 <button
                   key={value}
@@ -253,9 +254,9 @@ export function DeviceInfoCard({ device, className }: DeviceInfoCardProps) {
             <p className="text-center text-muted-foreground text-xs">
               {device.subsystem === 'sensor'
                 ? (deviceState.triggered as boolean)
-                  ? '⚡ 已触发'
-                  : '🟢 待机中'
-                : '📶 正常运行'}
+                  ? '已触发'
+                  : '待机中'
+                : '正常运行'}
             </p>
           </div>
         )}

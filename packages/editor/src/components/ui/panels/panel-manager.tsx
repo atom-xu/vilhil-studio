@@ -28,6 +28,12 @@ export function PanelManager() {
     return <ReferencePanel />
   }
 
+  // 多选：如果全部是墙，显示 WallPanel（支持批量改种类 + 批量删除）
+  if (selectedIds.length > 1) {
+    const allAreWalls = selectedIds.every((id) => nodes[id as AnyNodeId]?.type === 'wall')
+    if (allAreWalls) return <WallPanel />
+  }
+
   // Show appropriate panel based on selected node type
   if (selectedIds.length === 1) {
     const selectedNode = selectedIds[0]

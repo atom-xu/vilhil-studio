@@ -2,6 +2,7 @@ import dedent from 'ts-dedent'
 import { z } from 'zod'
 import { BaseNode, nodeType, objectId } from '../base'
 import { MaterialSchema } from '../material'
+import { quantizePoint3 } from '../precision'
 
 export const DoorSegment = z.object({
   type: z.enum(['panel', 'glass', 'empty']),
@@ -23,7 +24,12 @@ export const DoorNode = BaseNode.extend({
   type: nodeType('door'),
   material: MaterialSchema.optional(),
 
-  position: z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0]),
+  // 门位置：墙局部坐标系（[t, height, 0]）。挂 1cm 量化——沿墙的 t 位置
+  // 按 1cm 网格取整，高度也按 1cm 取整（国内门洞高度 2000/2100/2400mm 全部对齐）
+  position: z
+    .tuple([z.number(), z.number(), z.number()])
+    .default([0, 0, 0])
+    .transform(quantizePoint3),
   rotation: z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0]),
   side: z.enum(['front', 'back']).optional(),
   wallId: z.string().optional(),

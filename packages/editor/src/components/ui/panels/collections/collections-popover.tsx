@@ -101,7 +101,7 @@ export function CollectionsPopover({ nodeId, collectionIds, children }: Collecti
           <div className="flex items-center gap-1.5">
             <Layers className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="font-semibold text-foreground text-xs tracking-tight">
-              收藏
+              集合
             </span>
           </div>
           <button
@@ -131,7 +131,7 @@ export function CollectionsPopover({ nodeId, collectionIds, children }: Collecti
                   setCreateName('')
                 }
               }}
-              placeholder="收藏名称…"
+              placeholder="集合名称…"
               value={createName}
             />
             <button
@@ -161,7 +161,7 @@ export function CollectionsPopover({ nodeId, collectionIds, children }: Collecti
             <div className="flex flex-col items-center justify-center gap-2 px-4 py-8 text-center">
               <Layers className="h-6 w-6 text-muted-foreground/40" />
               <p className="text-muted-foreground text-xs">
-                暂无收藏。创建一个来分组物品。
+                暂无集合。创建一个来分组物品。
               </p>
             </div>
           ) : (

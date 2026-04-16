@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  transpilePackages: ['three', '@pascal-app/viewer', '@pascal-app/core', '@pascal-app/editor'],
+  transpilePackages: ['three', 'three-bvh-csg', '@pascal-app/viewer', '@pascal-app/core', '@pascal-app/editor'],
   experimental: {
     serverActions: {
       bodySizeLimit: '100mb',
@@ -28,6 +28,7 @@ const nextConfig: NextConfig = {
     resolveAlias: {
       '@react-three/fiber': './node_modules/@react-three/fiber',
       '@react-three/drei': './node_modules/@react-three/drei',
+      'three-bvh-csg': './node_modules/three-bvh-csg',
     },
   },
 }

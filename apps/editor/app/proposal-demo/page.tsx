@@ -1,450 +1,776 @@
 'use client'
 
-import { type DeviceNode, generateId, SceneNode, useScene } from '@pascal-app/core'
-import { ProposalLayout } from '@pascal-app/editor'
-import { useViewer, Viewer } from '@pascal-app/viewer'
+import type { WallNode } from '@pascal-app/core'
+import type { SceneGraph } from '@pascal-app/editor'
 import { OrbitControls } from '@react-three/drei'
-import { useThree } from '@react-three/fiber'
-import { useEffect, useRef, useState } from 'react'
+import { Canvas } from '@react-three/fiber'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import * as THREE from 'three'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 
-// ─── 演示场景 ───────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+//
+//  VilHil 演示渲染层 — 完全独立于编辑器 Viewer
+//
+//  核心技术（移植自 3Dhouse/WallGroup.jsx）：
+//    节点方块 + 内缩墙段 → 合并单 mesh → 零拼缝，零 z-sorting 闪烁
+//    ExtrudeGeometry with holes → 窗洞实际切开
+//    顶面 cap shader → 符合光学的亮度渐变轮廓
+//
+// ════════════════════════════════════════════════════════════════════════════
+
+const LOCAL_STORAGE_KEY = 'pascal-editor-scene'
+
+// ─── 类型 ─────────────────────────────────────────────────────────────────────
+
+interface OpeningData {
+  id: string
+  wallId: string
+  kind: 'window' | 'door'
+  position: [number, number, number]  // 墙局部坐标 [沿墙距起点, 中心高度, 0]
+  width: number
+  height: number
+}
+
+interface ConvertedWall {
+  start: { x: number; y: number }
+  end: { x: number; y: number }
+  thickness: number
+  height: number
+  id: string
+}
+
+interface SceneSeed {
+  walls: ConvertedWall[]
+  openingsByWall: Record<string, OpeningData[]>
+  bbox: { cx: number; cz: number; w: number; d: number }
+  buildingName: string
+  levelName: string
+  northAngle: number   // 顺时针度数，0 = 上北下南
+}
+
+// ─── 数据加载 ─────────────────────────────────────────────────────────────────
+
+function loadSeed(): SceneSeed | null {
+  if (typeof window === 'undefined') return null
+  let raw: SceneGraph
+  try {
+    const txt = window.localStorage.getItem(LOCAL_STORAGE_KEY)
+    if (!txt) return null
+    raw = JSON.parse(txt) as SceneGraph
+  } catch {
+    return null
+  }
+  if (!raw.nodes) return null
+
+  const all = Object.values(raw.nodes) as any[]
+  const buildings = all.filter((n) => n.type === 'building')
+  const buildingName = buildings[0]?.name ?? '建筑'
+
+  const rawWalls = all.filter((n) => n.type === 'wall') as WallNode[]
+  const wallsByLevel: Record<string, WallNode[]> = {}
+  for (const w of rawWalls) {
+    const pid = w.parentId as string
+    if (!pid) continue
+    ;(wallsByLevel[pid] ??= []).push(w)
+  }
+  let livingLevelId: string | null = null
+  let maxCount = 0
+  for (const [lid, ws] of Object.entries(wallsByLevel)) {
+    if (ws.length > maxCount) { maxCount = ws.length; livingLevelId = lid }
+  }
+  const targetWalls = livingLevelId ? wallsByLevel[livingLevelId] ?? [] : []
+  if (targetWalls.length === 0) return null
+
+  const levelNode = livingLevelId ? (raw.nodes[livingLevelId] as any) : null
+  const levelName = levelNode?.name ?? '楼层'
+
+  // 收集窗户和门，按 wallId 分组（Pascal schema 用 wallId，不是 parentId）
+  const openingsByWall: Record<string, OpeningData[]> = {}
+  for (const n of all) {
+    if (n.type !== 'window' && n.type !== 'door') continue
+    const wid = (n.wallId ?? n.parentId) as string
+    if (!wid) continue
+    ;(openingsByWall[wid] ??= []).push({
+      id:       n.id,
+      wallId:   wid,
+      kind:     n.type as 'window' | 'door',
+      position: (n.position ?? [0, n.type === 'door' ? (n.height ?? 2.1) / 2 : 1.2, 0]) as [number, number, number],
+      width:    n.width  ?? (n.type === 'door' ? 0.9 : 1.5),
+      height:   n.height ?? (n.type === 'door' ? 2.1 : 1.2),
+    })
+  }
+
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity
+  const walls: ConvertedWall[] = targetWalls.map((w) => {
+    minX = Math.min(minX, w.start[0], w.end[0])
+    maxX = Math.max(maxX, w.start[0], w.end[0])
+    minZ = Math.min(minZ, w.start[1], w.end[1])
+    maxZ = Math.max(maxZ, w.start[1], w.end[1])
+    return {
+      id:        w.id,
+      start:     { x: w.start[0], y: w.start[1] },
+      end:       { x: w.end[0],   y: w.end[1]   },
+      thickness: w.thickness ?? 0.24,
+      height:    w.height    ?? 2.7,
+    }
+  })
+
+  return {
+    walls,
+    openingsByWall,
+    bbox: {
+      cx: (minX + maxX) / 2,
+      cz: (minZ + maxZ) / 2,
+      w: maxX - minX,
+      d: maxZ - minZ,
+    },
+    buildingName,
+    levelName,
+    northAngle: (levelNode?.northAngle as number) ?? 0,
+  }
+}
+
+// ─── 风格常量 ─────────────────────────────────────────────────────────────────
+
+const STYLE = {
+  wallColor:   '#ccc4b8',   // 玻璃墙体色
+  capColorA:   '#2D7FF9',   // VilHil 品牌蓝（渐变起点）
+  capColorB:   '#A8D4FF',   // 浅冰蓝（渐变终点）
+  capOpacity:  0.72,
+  windowColor: '#b8d0e8',   // 窗玻璃蓝
+  doorColor:   '#c8bfb0',   // 门洞暗色
+  floorColor:  '#ede8df',
+  bgColor:     '#f4f0eb',
+}
+
+const WALL_HEIGHT = 2.7
+
+
+// ─── 太阳位置计算（无需第三方库）────────────────────────────────────────────
+//
+//  坐标约定（Pascal 户型标准朝向：上北下南）：
+//    +X = 东    -X = 西
+//    +Z = 北    -Z = 南   ← 平面图"上"对应 3D +Z
+//    +Y = 上
+//
+//  参数：
+//    hour      本地时间（如 8.0 = 早8点，14.5 = 下午2点半）
+//    lat       纬度，默认 31.2°N（上海）
+//    dayOfYear 一年第几天，默认 100（约4月中旬）
+//
+//  返回：朝太阳方向的单位向量，日出前/日落后返回 null
+//
+function computeSunDirection(
+  hour: number,
+  lat = 31.2,
+  dayOfYear = 100,
+): [number, number, number] | null {
+  const latR  = (lat * Math.PI) / 180
+  // 太阳赤纬
+  const declR = (23.45 * Math.PI / 180) * Math.sin((2 * Math.PI * (284 + dayOfYear)) / 365)
+  // 时角：正午=0，每小时±15°
+  const ha    = ((hour - 12) * 15 * Math.PI) / 180
+
+  // 高度角
+  const sinAlt = Math.sin(latR) * Math.sin(declR) + Math.cos(latR) * Math.cos(declR) * Math.cos(ha)
+  const alt    = Math.asin(Math.max(-1, Math.min(1, sinAlt)))
+  if (alt <= 0.04) return null  // 低于地平线
+
+  const cosAlt = Math.cos(alt)
+
+  // 方位角（从正南顺时针，正值=西，负值=东）
+  const cosAzRaw = (Math.sin(declR) - Math.sin(alt) * Math.sin(latR)) / (cosAlt * Math.cos(latR) + 1e-9)
+  const cosAz    = Math.max(-1, Math.min(1, cosAzRaw))
+  // 上午太阳在东（负方向），下午在西（正方向）
+  const azFromSouth = hour <= 12 ? -Math.acos(cosAz) : Math.acos(cosAz)
+
+  // 转换为世界坐标（+Z=北, +X=东）
+  const x =  -Math.sin(azFromSouth) * cosAlt   // 东=+X, 西=-X（注意：方位角从南顺时针为正，东=-sin）
+  const z =  -Math.cos(azFromSouth) * cosAlt   // 北=+Z, 南=-Z（正午太阳在南=−Z方向）
+  const y =   Math.sin(alt)
+  return [x, y, z]
+}
+
+// 示例：上午8点 上海纬度 春季 → 东偏北低角度阳光
+// 月光方向：满月近似 = 太阳位置偏移 12 小时（月亮与太阳在天球上相对）
+function computeMoonDirection(hour: number): [number, number, number] {
+  const shifted = (hour + 12) % 24
+  const d = computeSunDirection(shifted)
+  if (d) return d
+  return [0.3, 0.5, -0.4]  // fallback
+}
+
+// 获取当前实际小时数（含分钟小数）
+function getRealHour() {
+  const now = new Date()
+  return now.getHours() + now.getMinutes() / 60
+}
+
+// ─── 墙体几何构建 — 内缩墙段 + 节点方块（零叠加，零拼缝）──────────────────────
+//
+//  原理：每个连接端点放一个 T×T×H 节点方块，墙段两端向内缩进 T/2（嵌入 eps）
+//  使端面完全藏入节点方块内部，背面剔除后不可见。几何体完全不重叠。
 
 /**
- * 客厅场景 — 6m×5m 现代风格客厅
- * 材质使用深色暖调，灯光开启时有明显对比，关闭时仍能看清房间结构
+ * 把几何体拆成顶面 cap 和侧面 body。
+ * wallHeight：用于区分顶面（y ≈ H）与底面（y ≈ 0），不依赖法线方向，
+ * 这样即使法线因坐标变换被翻转也能正确识别。
  */
-function DemoRoom() {
+function splitCapBody(geoIn: THREE.BufferGeometry, wallHeight: number) {
+  // ExtrudeGeometry / BoxGeometry 都是索引几何体，需先展开为非索引才能按三角面遍历
+  const isIndexed = !!geoIn.index
+  const geo = isIndexed ? geoIn.toNonIndexed() : geoIn
+  const pos = geo.attributes.position
+  const nor = geo.attributes.normal
+  const bP: number[] = [], bN: number[] = []
+  const cP: number[] = [], cN: number[] = []
+  const midH = wallHeight * 0.5   // 顶面 y 坐标 > midH，底面 < midH
+  for (let i = 0; i < pos.count; i += 3) {
+    // 用三角面重心的 y 坐标判断是否为顶面（避免依赖法线方向）
+    const avgY = (pos.getY(i) + pos.getY(i + 1) + pos.getY(i + 2)) / 3
+    const isTop = Math.abs(nor.getY(i)) > 0.9 && avgY > midH
+    for (let v = 0; v < 3; v++) {
+      const j = i + v
+      const px = pos.getX(j), py = pos.getY(j), pz = pos.getZ(j)
+      if (isTop) { cP.push(px, py + 0.002, pz); cN.push(0, 1, 0) }
+      else       { bP.push(px, py, pz); bN.push(nor.getX(j), nor.getY(j), nor.getZ(j)) }
+    }
+  }
+  const body = new THREE.BufferGeometry()
+  body.setAttribute('position', new THREE.Float32BufferAttribute(bP, 3))
+  body.setAttribute('normal',   new THREE.Float32BufferAttribute(bN, 3))
+  let cap: THREE.BufferGeometry | null = null
+  if (cP.length > 0) {
+    cap = new THREE.BufferGeometry()
+    cap.setAttribute('position', new THREE.Float32BufferAttribute(cP, 3))
+    cap.setAttribute('normal',   new THREE.Float32BufferAttribute(cN, 3))
+  }
+  if (isIndexed) geo.dispose()
+  return { body, cap }
+}
+
+/** 从墙段 body 中移除端面（法线平行于墙方向），只保留侧面 */
+function stripEndFaces(geo: THREE.BufferGeometry, ux: number, uz: number): THREE.BufferGeometry {
+  const pos = geo.attributes.position
+  const nor = geo.attributes.normal
+  const newP: number[] = [], newN: number[] = []
+  for (let i = 0; i < pos.count; i += 3) {
+    // 端面：法线与墙走向的点积 ≈ ±1
+    if (Math.abs(nor.getX(i) * ux + nor.getZ(i) * uz) > 0.9) continue
+    for (let v = 0; v < 3; v++) {
+      const j = i + v
+      newP.push(pos.getX(j), pos.getY(j), pos.getZ(j))
+      newN.push(nor.getX(j), nor.getY(j), nor.getZ(j))
+    }
+  }
+  const result = new THREE.BufferGeometry()
+  result.setAttribute('position', new THREE.Float32BufferAttribute(newP, 3))
+  result.setAttribute('normal',   new THREE.Float32BufferAttribute(newN, 3))
+  return result
+}
+
+function buildWallGeo(walls: ConvertedWall[]): { bodyGeo: THREE.BufferGeometry | null; capGeo: THREE.BufferGeometry | null } {
+  const resolved = walls.filter(
+    (w) => w.start && w.end &&
+      isFinite(w.start.x) && isFinite(w.end.x) &&
+      isFinite(w.start.y) && isFinite(w.end.y) &&
+      w.thickness > 0 && w.height > 0,
+  )
+  if (resolved.length === 0) return { bodyGeo: null, capGeo: null }
+
+  const ptKey = (x: number, y: number) =>
+    `${Math.round(x * 1000)},${Math.round(y * 1000)}`
+
+  // 端点邻接表 — 找哪些端点是连接点（接 2+ 面墙）
+  const adj = new Map<string, { wall: ConvertedWall; atStart: boolean }[]>()
+  for (const w of resolved) {
+    const sk = ptKey(w.start.x, w.start.y)
+    const ek = ptKey(w.end.x, w.end.y)
+    if (!adj.has(sk)) adj.set(sk, [])
+    if (!adj.has(ek)) adj.set(ek, [])
+    adj.get(sk)!.push({ wall: w, atStart: true })
+    adj.get(ek)!.push({ wall: w, atStart: false })
+  }
+
+  const allBodyGeos: THREE.BufferGeometry[] = []
+  const allCapGeos:  THREE.BufferGeometry[] = []
+
+  // ── 内缩墙段：连接端精确缩进 T/2，侧面与节点方块首尾相邻（无重叠无缝隙）──
+  for (const w of resolved) {
+    const dx = w.end.x - w.start.x, dz = w.end.y - w.start.y
+    const rawLen = Math.hypot(dx, dz)
+    if (rawLen < 0.001) continue
+
+    const ux = dx / rawLen, uz = dz / rawLen
+    const half = w.thickness / 2
+
+    const sk = ptKey(w.start.x, w.start.y)
+    const ek = ptKey(w.end.x, w.end.y)
+    const shrinkS = (adj.get(sk)?.length ?? 0) > 1
+    const shrinkE = (adj.get(ek)?.length ?? 0) > 1
+
+    const sx = w.start.x + (shrinkS ? ux * half : 0)
+    const sz = w.start.y + (shrinkS ? uz * half : 0)
+    const ex = w.end.x   - (shrinkE ? ux * half : 0)
+    const ez = w.end.y   - (shrinkE ? uz * half : 0)
+
+    const len = Math.max(Math.hypot(ex - sx, ez - sz), 0.001)
+    const geo = new THREE.BoxGeometry(len, w.height, w.thickness)
+    geo.applyMatrix4(
+      new THREE.Matrix4()
+        .makeRotationY(-Math.atan2(ez - sz, ex - sx))
+        .setPosition((sx + ex) / 2, w.height / 2, (sz + ez) / 2),
+    )
+    const { body: rawBody, cap } = splitCapBody(geo, w.height)
+    geo.dispose()
+    const body = stripEndFaces(rawBody, ux, uz)
+    rawBody.dispose()
+    allBodyGeos.push(body)
+    if (cap) allCapGeos.push(cap)
+  }
+
+  // ── 节点方块：每个连接点（接 2+ 面墙）放一个 T×T×H 方块 ──────────────────
+  const processedJunctions = new Set<string>()
+  for (const w of resolved) {
+    for (const [px, py] of [[w.start.x, w.start.y], [w.end.x, w.end.y]] as [number, number][]) {
+      const key = ptKey(px, py)
+      if (processedJunctions.has(key)) continue
+      if ((adj.get(key)?.length ?? 0) < 2) continue
+      processedJunctions.add(key)
+
+      const T = w.thickness, H = w.height
+      const nodeGeo = new THREE.BoxGeometry(T, H, T)
+      nodeGeo.applyMatrix4(new THREE.Matrix4().setPosition(px, H / 2, py))
+      const { body, cap } = splitCapBody(nodeGeo, H)
+      nodeGeo.dispose()
+      allBodyGeos.push(body)
+      if (cap) allCapGeos.push(cap)
+    }
+  }
+
+  if (allBodyGeos.length === 0) return { bodyGeo: null, capGeo: null }
+
+  const bodyGeo = mergeGeometries(allBodyGeos) ?? null
+  const capGeo  = allCapGeos.length > 0 ? (mergeGeometries(allCapGeos) ?? null) : null
+  for (const g of allBodyGeos) g.dispose()
+  for (const g of allCapGeos)  g.dispose()
+  return { bodyGeo, capGeo }
+}
+
+// ─── 演示结构渲染器 ───────────────────────────────────────────────────────────
+
+interface StructureProps {
+  walls: ConvertedWall[]
+  openingsByWall: Record<string, OpeningData[]>
+  bbox: SceneSeed['bbox']
+  lightPos: [number, number, number]
+}
+
+function DemoStructure({ walls, openingsByWall, bbox, lightPos }: StructureProps) {
+  const { bodyGeo, capGeo } = useMemo(() => buildWallGeo(walls), [walls])
+  // 清理几何体
+  useEffect(() => {
+    return () => {
+      bodyGeo?.dispose()
+      capGeo?.dispose()
+    }
+  }, [bodyGeo, capGeo])
+
+  // 窗 / 门面板世界坐标
+  const openingPanels = useMemo(() => {
+    const panels: {
+      key: string
+      kind: 'window' | 'door'
+      position: [number, number, number]
+      rotation: [number, number, number]
+      width: number
+      height: number
+      thickness: number
+    }[] = []
+
+    for (const wall of walls) {
+      const openings = openingsByWall[wall.id] ?? []
+      if (openings.length === 0) continue
+      const dx  = wall.end.x - wall.start.x
+      const dz  = wall.end.y - wall.start.y
+      const len = Math.hypot(dx, dz)
+      if (len < 0.001) continue
+      const angle   = Math.atan2(dz, dx)
+      const wallDir = { x: dx / len, z: dz / len }
+
+      for (const op of openings) {
+        // 沿墙方向 position[0] 米处为中心，position[1] 为高度中心
+        const wx = wall.start.x + wallDir.x * op.position[0]
+        const wz = wall.start.y + wallDir.z * op.position[0]
+        const wy = op.position[1]
+        panels.push({
+          key:       op.id,
+          kind:      op.kind,
+          position:  [wx, wy, wz],
+          rotation:  [0, -angle, 0],
+          width:     op.width,
+          height:    op.height,
+          thickness: wall.thickness,
+        })
+      }
+    }
+    return panels
+  }, [walls, openingsByWall])
+
   return (
     <group>
-      {/* 补光：轻微底光，让房间结构在灯光关闭时也隐约可见 */}
-      <ambientLight color="#fff5e0" intensity={0.18} />
-      <directionalLight
-        castShadow
-        color="#fff8f0"
-        intensity={0.35}
-        position={[4, 6, 5]}
-      />
-
-      {/* 地板 — 深色实木纹 */}
-      <mesh position={[0, 0, 0]} receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[6.2, 5.2]} />
-        <meshStandardMaterial color="#3a2e20" metalness={0} roughness={0.85} />
+      {/* 超大地面，边缘移出视野 */}
+      <mesh position={[bbox.cx, 0, bbox.cz]} receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[400, 400]} />
+        <meshStandardMaterial color={STYLE.floorColor} roughness={0.8} metalness={0} />
       </mesh>
 
-      {/* 后墙（窗帘墙） */}
-      <mesh position={[0, 1.35, -2.6]} receiveShadow>
-        <boxGeometry args={[6.2, 2.7, 0.12]} />
-        <meshStandardMaterial color="#2e2820" roughness={0.95} />
-      </mesh>
+      {/* 合并墙体 — 内缩墙段 + 节点方块，几何体无叠加，FrontSide 背面剔除端面 */}
+      {bodyGeo && (
+        <mesh geometry={bodyGeo} castShadow receiveShadow>
+          <meshStandardMaterial
+            color={STYLE.wallColor}
+            transparent
+            opacity={0.48}
+            roughness={0.08}
+            metalness={0.02}
+            depthWrite={true}
+            side={THREE.FrontSide}
+          />
+        </mesh>
+      )}
 
-      {/* 左墙 */}
-      <mesh position={[-3.06, 1.35, 0]} receiveShadow>
-        <boxGeometry args={[0.12, 2.7, 5.2]} />
-        <meshStandardMaterial color="#2a2418" roughness={0.95} />
-      </mesh>
+      {/* 顶面 cap — 位置驱动渐变：品牌蓝 → 浅冰蓝，叠加光源高光 */}
+      {capGeo && (
+        <mesh geometry={capGeo} renderOrder={2}>
+          <shaderMaterial
+            key={STYLE.capColorA + STYLE.capColorB}
+            transparent
+            depthWrite={false}
+            uniforms={{
+              uColorA:  { value: new THREE.Color(STYLE.capColorA) },
+              uColorB:  { value: new THREE.Color(STYLE.capColorB) },
+              uOpacity: { value: STYLE.capOpacity },
+              uCenter:  { value: new THREE.Vector2(bbox.cx, bbox.cz) },
+              uLightPos:{ value: new THREE.Vector3(...lightPos) },
+            }}
+            vertexShader={`
+              varying vec3 vWorldPos;
+              void main() {
+                vec4 wp = modelMatrix * vec4(position, 1.0);
+                vWorldPos = wp.xyz;
+                gl_Position = projectionMatrix * viewMatrix * wp;
+              }
+            `}
+            fragmentShader={`
+              uniform vec3  uColorA;
+              uniform vec3  uColorB;
+              uniform float uOpacity;
+              uniform vec2  uCenter;
+              uniform vec3  uLightPos;
+              varying vec3  vWorldPos;
+              void main() {
+                // 太阳水平投影方向 → 渐变轴
+                vec2 sunDir = normalize(uLightPos.xz - uCenter);
+                vec2 rel    = vWorldPos.xz - uCenter;
+                float span  = max(length(uLightPos.xz - uCenter) * 0.5, 6.0);
+                float t     = dot(rel, sunDir) / span;
+                t = clamp(t * 0.5 + 0.5, 0.0, 1.0);
+                // 朝太阳那侧偏浅（uColorB），背太阳那侧偏深（uColorA）
+                vec3 col = mix(uColorA, uColorB, t);
+                gl_FragColor = vec4(col, uOpacity);
+              }
+            `}
+          />
+        </mesh>
+      )}
 
-      {/* 右墙 */}
-      <mesh position={[3.06, 1.35, 0]} receiveShadow>
-        <boxGeometry args={[0.12, 2.7, 5.2]} />
-        <meshStandardMaterial color="#2a2418" roughness={0.95} />
-      </mesh>
-
-      {/* 天花板 — 半透明磨砂玻璃，只显示边界轮廓，让摄像机从上方看透室内 */}
-      <mesh position={[0, 2.7, 0]} rotation={[Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[6.2, 5.2]} />
-        <meshStandardMaterial
-          color="#ffffff"
-          depthWrite={false}
-          metalness={0}
-          opacity={0.02}
-          roughness={1}
-          side={2}
-          transparent
-        />
-      </mesh>
-
-      {/* 踢脚线 — 浅色收边 */}
-      <mesh position={[0, 0.05, -2.53]}>
-        <boxGeometry args={[6.0, 0.10, 0.02]} />
-        <meshStandardMaterial color="#4a4030" roughness={0.6} />
-      </mesh>
-      <mesh position={[-2.99, 0.05, 0]}>
-        <boxGeometry args={[0.02, 0.10, 5.0]} />
-        <meshStandardMaterial color="#4a4030" roughness={0.6} />
-      </mesh>
-      <mesh position={[2.99, 0.05, 0]}>
-        <boxGeometry args={[0.02, 0.10, 5.0]} />
-        <meshStandardMaterial color="#4a4030" roughness={0.6} />
-      </mesh>
-
-      {/* ── 电视墙区域 ─────────────────────────────────────────── */}
-
-      {/* 电视背景墙装饰面板 */}
-      <mesh position={[0, 1.35, -2.57]}>
-        <boxGeometry args={[3.0, 2.4, 0.04]} />
-        <meshStandardMaterial color="#1e1a14" metalness={0.05} roughness={0.8} />
-      </mesh>
-
-      {/* 电视柜 */}
-      <mesh castShadow position={[0, 0.22, -2.43]}>
-        <boxGeometry args={[2.4, 0.44, 0.50]} />
-        <meshStandardMaterial color="#2d2518" metalness={0.08} roughness={0.55} />
-      </mesh>
-      {/* 电视柜腿 */}
-      {([-0.95, 0.95] as number[]).map((x) => (
-        <mesh castShadow key={x} position={[x, 0.06, -2.42]}>
-          <boxGeometry args={[0.06, 0.12, 0.06]} />
-          <meshStandardMaterial color="#5a4f3a" metalness={0.5} roughness={0.3} />
+      {/* 窗 / 门面板 — depthTest=false 确保始终可见（面板在墙体中心，否则被深度缓冲遮挡）*/}
+      {openingPanels.map((p) => (
+        <mesh key={p.key} position={p.position} rotation={p.rotation} renderOrder={3}>
+          {/* 厚度贯穿整面墙，从内外都能看到 */}
+          <boxGeometry args={[p.width, p.height, p.thickness + 0.01]} />
+          <meshBasicMaterial
+            color={p.kind === 'window' ? STYLE.windowColor : STYLE.doorColor}
+            transparent
+            opacity={p.kind === 'window' ? 0.22 : 0.08}
+            depthWrite={false}
+            depthTest={false}
+            side={THREE.DoubleSide}
+          />
         </mesh>
       ))}
-
-      {/* 电视屏幕（黑屏） */}
-      <mesh position={[0, 1.0, -2.55]}>
-        <boxGeometry args={[1.75, 1.0, 0.04]} />
-        <meshStandardMaterial color="#080707" metalness={0.9} roughness={0.05} />
-      </mesh>
-      {/* 电视边框 */}
-      <mesh position={[0, 1.0, -2.54]}>
-        <boxGeometry args={[1.83, 1.08, 0.02]} />
-        <meshStandardMaterial color="#2a2520" metalness={0.6} roughness={0.4} />
-      </mesh>
-
-      {/* ── 沙发区域 ──────────────────────────────────────────── */}
-
-      {/* 沙发座垫 — 深灰蓝布艺 */}
-      <mesh castShadow position={[0, 0.30, 1.4]}>
-        <boxGeometry args={[2.2, 0.60, 0.85]} />
-        <meshStandardMaterial color="#4a4035" roughness={0.95} />
-      </mesh>
-      {/* 沙发靠背 */}
-      <mesh castShadow position={[0, 0.78, 1.77]}>
-        <boxGeometry args={[2.2, 0.62, 0.18]} />
-        <meshStandardMaterial color="#4a4035" roughness={0.95} />
-      </mesh>
-      {/* 沙发靠背上沿（稍深） */}
-      <mesh castShadow position={[0, 1.10, 1.76]}>
-        <boxGeometry args={[2.2, 0.04, 0.20]} />
-        <meshStandardMaterial color="#3a3028" roughness={0.8} />
-      </mesh>
-      {/* 左扶手 */}
-      <mesh castShadow position={[-1.04, 0.50, 1.4]}>
-        <boxGeometry args={[0.18, 0.40, 0.85]} />
-        <meshStandardMaterial color="#3d3328" roughness={0.9} />
-      </mesh>
-      {/* 右扶手 */}
-      <mesh castShadow position={[1.04, 0.50, 1.4]}>
-        <boxGeometry args={[0.18, 0.40, 0.85]} />
-        <meshStandardMaterial color="#3d3328" roughness={0.9} />
-      </mesh>
-      {/* 沙发腿 */}
-      {([-0.95, 0.95] as number[]).flatMap((x) =>
-        ([1.06, 1.74] as number[]).map((z) => (
-          <mesh castShadow key={`${x}-${z}`} position={[x, 0.06, z]}>
-            <boxGeometry args={[0.06, 0.12, 0.06]} />
-            <meshStandardMaterial color="#6a5840" metalness={0.3} roughness={0.4} />
-          </mesh>
-        )),
-      )}
-      {/* 抱枕 */}
-      <mesh castShadow position={[-0.5, 0.72, 1.54]}>
-        <boxGeometry args={[0.42, 0.38, 0.12]} />
-        <meshStandardMaterial color="#5a4a68" roughness={0.9} />
-      </mesh>
-      <mesh castShadow position={[0.5, 0.72, 1.54]}>
-        <boxGeometry args={[0.42, 0.38, 0.12]} />
-        <meshStandardMaterial color="#3a4a5a" roughness={0.9} />
-      </mesh>
-
-      {/* ── 茶几 ─────────────────────────────────────────────── */}
-
-      {/* 台面 — 深色大理石纹 */}
-      <mesh castShadow position={[0, 0.42, 0.6]}>
-        <boxGeometry args={[0.95, 0.04, 0.52]} />
-        <meshStandardMaterial color="#2a241c" metalness={0.2} roughness={0.25} />
-      </mesh>
-      {/* 茶几下层 */}
-      <mesh castShadow position={[0, 0.18, 0.6]}>
-        <boxGeometry args={[0.75, 0.03, 0.36]} />
-        <meshStandardMaterial color="#2a241c" metalness={0.15} roughness={0.35} />
-      </mesh>
-      {/* 茶几腿 */}
-      {([-0.42, 0.42] as number[]).flatMap((x) =>
-        ([0.38, 0.82] as number[]).map((z) => (
-          <mesh castShadow key={`t${x}-${z}`} position={[x, 0.21, z]}>
-            <boxGeometry args={[0.04, 0.42, 0.04]} />
-            <meshStandardMaterial color="#4a4030" metalness={0.4} roughness={0.3} />
-          </mesh>
-        )),
-      )}
-
-      {/* ── 地毯 ─────────────────────────────────────────────── */}
-      <mesh position={[0, 0.003, 0.8]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[2.8, 2.4]} />
-        <meshStandardMaterial color="#3a3226" roughness={1} />
-      </mesh>
-      {/* 地毯内层图案感 */}
-      <mesh position={[0, 0.004, 0.8]} rotation={[-Math.PI / 2, 0, 0]}>
-        <planeGeometry args={[2.4, 1.8]} />
-        <meshStandardMaterial color="#2e2820" roughness={1} />
-      </mesh>
-
-      {/* ── 装饰 ─────────────────────────────────────────────── */}
-
-      {/* 落地灯（装饰性，右侧沙发旁） */}
-      <mesh castShadow position={[1.35, 0.9, 1.85]}>
-        <cylinderGeometry args={[0.015, 0.015, 1.8, 8]} />
-        <meshStandardMaterial color="#8a7860" metalness={0.6} roughness={0.3} />
-      </mesh>
-      <mesh castShadow position={[1.35, 1.82, 1.85]}>
-        <cylinderGeometry args={[0.18, 0.14, 0.28, 16]} />
-        <meshStandardMaterial color="#d4c4a0" roughness={0.9} />
-      </mesh>
     </group>
   )
 }
 
-/**
- * 相机设置 — 3/4 斜角，展现客厅纵深感
- */
-function DemoCamera() {
-  const { camera } = useThree()
-  const initialized = useRef(false)
+// ─── 演示灯光环境 ─────────────────────────────────────────────────────────────
 
-  useEffect(() => {
-    if (initialized.current) return
-    initialized.current = true
-    // 从右前方斜角俯瞰：近一点、低一点，让室内填满画面
-    camera.position.set(4.5, 3.0, 7.0)
-  }, [camera])
-
+function DemoEnvironment({
+  lightPos, isNight,
+}: { lightPos: [number, number, number]; isNight: boolean }) {
   return (
-    <OrbitControls
-      dampingFactor={0.08}
-      enableDamping
-      enablePan={false}
-      maxDistance={20}
-      maxPolarAngle={Math.PI / 2 - 0.02}
-      minDistance={2}
-      target={[0, 0.8, -0.5]}
-    />
+    <>
+      <hemisphereLight
+        skyColor={isNight ? '#0d1a2e' : '#d4e8ff'}
+        groundColor={isNight ? '#060c14' : '#c8b890'}
+        intensity={isNight ? 0.2 : 1.3}
+      />
+      <directionalLight
+        castShadow
+        color={isNight ? '#7bb8e8' : '#fff8ef'}
+        intensity={isNight ? 0.15 : 0.35}
+        position={lightPos}
+        shadow-mapSize={[2048, 2048]}
+        shadow-camera-far={100}
+        shadow-camera-left={-30}
+        shadow-camera-right={30}
+        shadow-camera-top={30}
+        shadow-camera-bottom={-30}
+        shadow-radius={isNight ? 8 : 4}
+      />
+    </>
   )
 }
 
-// ─── 演示页面 ───────────────────────────────────────────────────────────────
+// ─── 顶部信息条 ───────────────────────────────────────────────────────────────
+
+function DemoHeader({
+  buildingName, levelName, wallCount,
+  displayHour, realHour, isPreviewing, isNight,
+  onSliderChange, onSliderDown, onSyncNow,
+}: {
+  buildingName: string
+  levelName: string
+  wallCount: number
+  displayHour: number
+  realHour: number
+  isPreviewing: boolean
+  isNight: boolean
+  onSliderChange: (h: number) => void
+  onSliderDown: () => void
+  onSyncNow: () => void
+}) {
+  const fmt = (h: number) => {
+    const hh = Math.floor(h).toString().padStart(2, '0')
+    const mm = Math.round((h % 1) * 60).toString().padStart(2, '0')
+    return `${hh}:${mm}`
+  }
+
+  return (
+    <div className="pointer-events-none absolute top-0 right-0 left-0 z-10 flex items-start justify-between p-5">
+      {/* 左：建筑信息 */}
+      <div className="pointer-events-auto rounded-2xl border border-black/8 bg-white/70 px-4 py-3 backdrop-blur-xl">
+        <div className="flex items-center gap-3">
+          <a
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-neutral-400 transition-colors hover:bg-black/5 hover:text-neutral-700"
+            href="/" title="返回主编辑器"
+          >←</a>
+          <div>
+            <div className="font-semibold text-neutral-800 text-sm">{buildingName}</div>
+            <div className="text-neutral-400 text-xs">{levelName} · {wallCount} 面墙</div>
+          </div>
+        </div>
+      </div>
+
+      {/* 右：时间 + 滑块 */}
+      <div className="pointer-events-auto w-56 rounded-2xl border border-black/8 bg-white/70 px-4 py-3 backdrop-blur-xl">
+        {/* 时间显示行 */}
+        <div className="mb-2 flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <span className="text-base leading-none">{isNight ? '🌙' : '☀️'}</span>
+            <span className="font-mono font-semibold text-neutral-800 text-sm tabular-nums">
+              {fmt(displayHour)}
+            </span>
+            {isPreviewing && (
+              <span className="rounded bg-[#2D7FF9]/10 px-1 py-0.5 text-[10px] text-[#2D7FF9]">预览</span>
+            )}
+          </div>
+          <button
+            onClick={onSyncNow}
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-neutral-400 transition-colors hover:bg-black/5 hover:text-[#2D7FF9]"
+            title={`同步到现在 ${fmt(realHour)}`}
+          >
+            ↺ {fmt(realHour)}
+          </button>
+        </div>
+
+        {/* 滑块 */}
+        <input
+          type="range"
+          min={0}
+          max={24}
+          step={0.25}
+          value={displayHour}
+          onPointerDown={onSliderDown}
+          onChange={(e) => onSliderChange(Number(e.target.value))}
+          className="w-full cursor-pointer accent-[#2D7FF9]"
+        />
+
+        {/* 刻度标签 */}
+        <div className="mt-0.5 flex justify-between text-[10px] text-neutral-300">
+          <span>0</span>
+          <span>6</span>
+          <span>12</span>
+          <span>18</span>
+          <span>24</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── 主页面 ───────────────────────────────────────────────────────────────────
 
 export default function ProposalDemoPage() {
-  const [isReady, setIsReady] = useState(false)
-  const createNodes = useScene((s) => s.createNodes)
-  const setViewerSelection = useViewer((s: any) => s.setSelection)
+  const [seed, setSeed] = useState<SceneSeed | null>(null)
+  const [status, setStatus] = useState<'loading' | 'no-data' | 'ready'>('loading')
+
+  // 当前真实时间（每分钟自动更新）
+  const [realHour, setRealHour] = useState(getRealHour)
+  // 拖动滑块时的预览时间（null = 不在预览，使用 realHour）
+  const [previewHour, setPreviewHour] = useState<number | null>(null)
+  const isDraggingRef = useRef(false)
+
+  const displayHour = previewHour ?? realHour
+  const isPreviewing = previewHour !== null
 
   useEffect(() => {
-    if (isReady) return
+    const s = loadSeed()
+    if (!s) { setStatus('no-data'); return }
+    setSeed(s); setStatus('ready')
+  }, [])
 
-    // ── 层级结构 ──────────────────────────────────────────────────
-    const siteId = generateId('site')
-    const buildingId = generateId('building')
-    const levelId = generateId('level')
+  // 每分钟同步真实时间
+  useEffect(() => {
+    const tick = () => setRealHour(getRealHour())
+    const id = setInterval(tick, 60_000)
+    return () => clearInterval(id)
+  }, [])
 
-    createNodes([{
-      node: {
-        id: siteId, type: 'site', parentId: null, object: 'node',
-        visible: true, metadata: {}, children: [buildingId],
-        name: 'Demo Site',
-        polygon: { type: 'polygon', points: [[-10, -10], [10, -10], [10, 10], [-10, 10]] },
-      } as any,
-    }])
+  // 松手时（无论在哪里松手）恢复真实时间
+  useEffect(() => {
+    const onUp = () => {
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false
+        setPreviewHour(null)
+      }
+    }
+    window.addEventListener('pointerup', onUp)
+    return () => window.removeEventListener('pointerup', onUp)
+  }, [])
 
-    createNodes([{
-      node: {
-        id: buildingId, type: 'building', parentId: siteId, object: 'node',
-        visible: true, metadata: {}, children: [levelId],
-        name: '樾山半岛', position: [0, 0, 0], rotation: [0, 0, 0],
-      } as any,
-    }])
+  const handleSliderDown = useCallback(() => {
+    isDraggingRef.current = true
+  }, [])
 
-    createNodes([{
-      node: {
-        id: levelId, type: 'level', parentId: buildingId, object: 'node',
-        visible: true, metadata: {}, children: [],
-        name: 'F1 客厅', level: 0,
-      } as any,
-    }])
+  const handleSliderChange = useCallback((h: number) => {
+    if (isDraggingRef.current) setPreviewHour(h)
+  }, [])
 
-    // ── 设备工厂 ─────────────────────────────────────────────────
-    //  坐标系：x: -3(左)→+3(右)  z: -2.5(后/窗帘墙)→+2.5(前/入户)  y: 0(地)→2.7(天花)
+  const handleSyncNow = useCallback(() => {
+    setPreviewHour(null)
+    setRealHour(getRealHour())
+  }, [])
 
-    const makeLighting = (x: number, z: number, name: string, brightInit = 80, tempInit = 3000): DeviceNode => ({
-      id: generateId('device'), type: 'device', parentId: levelId,
-      object: 'node', visible: true, metadata: {},
-      subsystem: 'lighting', renderType: 'downlight', mountType: 'ceiling',
-      position: [x, 2.65, z], rotation: [0, 0, 0],
-      productId: 'LIGHT-DOWNLIGHT', productName: name, brand: 'Philips',
-      params: { beamAngle: 30 },
-      state: { on: true, brightness: brightInit, colorTemp: tempInit }, // 默认亮灯（回家模式）
-      showAnimation: true, linkedScenes: [],
-    })
-
-    const makePanel = (x: number, z: number, name: string): DeviceNode => ({
-      id: generateId('device'), type: 'device', parentId: levelId,
-      object: 'node', visible: true, metadata: {},
-      subsystem: 'panel', renderType: 'switch-3key', mountType: 'wall_switch',
-      position: [x, 1.2, z], rotation: [0, 0, 0],
-      productId: 'PANEL-SWITCH-3KEY', productName: name, brand: 'Jung',
-      params: {}, state: { on: true },
-      showAnimation: true, linkedScenes: [],
-    })
-
-    const makeSensor = (x: number, z: number, name: string): DeviceNode => ({
-      id: generateId('device'), type: 'device', parentId: levelId,
-      object: 'node', visible: true, metadata: {},
-      subsystem: 'sensor', renderType: 'pir', mountType: 'ceiling',
-      position: [x, 2.65, z], rotation: [0, 0, 0],
-      productId: 'SECURITY-PIR', productName: name, brand: 'Aqara',
-      params: { coverageRadius: 4 }, state: { triggered: false },
-      showAnimation: true, linkedScenes: [],
-    })
-
-    const makeCurtain = (x: number, z: number, name: string): DeviceNode => ({
-      id: generateId('device'), type: 'device', parentId: levelId,
-      object: 'node', visible: true, metadata: {},
-      subsystem: 'curtain', renderType: 'curtain-motor', mountType: 'ceiling',
-      position: [x, 2.5, z], rotation: [0, 0, 0],
-      productId: 'CURTAIN-TRACK-MOTOR', productName: name, brand: 'Aqara',
-      params: { curtainWidth: 2.8 },
-      state: { position: 0, angle: 0 }, // 初始拉开（0 = 收起/开）
-      showAnimation: true, linkedScenes: [],
-    })
-
-    const makeHvac = (x: number, z: number, name: string): DeviceNode => ({
-      id: generateId('device'), type: 'device', parentId: levelId,
-      object: 'node', visible: true, metadata: {},
-      subsystem: 'hvac', renderType: 'thermostat', mountType: 'wall',
-      position: [x, 1.4, z], rotation: [0, 0, 0],
-      productId: 'HVAC-THERMOSTAT', productName: name, brand: 'Siemens',
-      params: {}, state: { on: false, targetTemp: 24, currentTemp: 21, mode: 'heat' },
-      showAnimation: true, linkedScenes: [],
-    })
-
-    const makeNetwork = (x: number, z: number, name: string): DeviceNode => ({
-      id: generateId('device'), type: 'device', parentId: levelId,
-      object: 'node', visible: true, metadata: {},
-      subsystem: 'network', renderType: 'ap-ceiling', mountType: 'ceiling',
-      position: [x, 2.65, z], rotation: [0, 0, 0],
-      productId: 'NETWORK-AP-CEILING', productName: name, brand: 'Ubiquiti',
-      params: { coverageRadius: 6 }, state: {},
-      showAnimation: true, linkedScenes: [],
-    })
-
-    const makeSecurity = (x: number, z: number, name: string): DeviceNode => ({
-      id: generateId('device'), type: 'device', parentId: levelId,
-      object: 'node', visible: true, metadata: {},
-      subsystem: 'security', renderType: 'door-lock', mountType: 'door',
-      position: [x, 1.0, z], rotation: [0, 0, 0],
-      productId: 'SECURITY-DOOR-LOCK', productName: name, brand: 'Aqara',
-      params: {}, state: { locked: true },
-      showAnimation: true, linkedScenes: [],
-    })
-
-    // ── 创建设备 ──────────────────────────────────────────────────
-    const light1 = makeLighting(-1.5, -1.0, '客厅主灯 A')
-    const light2 = makeLighting(1.5, -1.0, '客厅主灯 B')
-    const light3 = makeLighting(-1.5, 1.0, '沙发区灯 A')
-    const light4 = makeLighting(1.5, 1.0, '沙发区灯 B')
-    const curtain = makeCurtain(0, -2.4, '客厅窗帘')
-
-    createNodes([
-      { node: light1 },
-      { node: light2 },
-      { node: light3 },
-      { node: light4 },
-      { node: makePanel(-2.9, 1.8, '入户开关') },
-      { node: makePanel(-2.9, 0, '客厅开关') },
-      { node: makeSensor(0, 0, '人体感应器') },
-      { node: curtain },
-      { node: makeHvac(2.9, 0.5, '客厅温控') },
-      { node: makeNetwork(0, 1.0, '客厅AP') },
-      { node: makeSecurity(-2.9, 2.0, '智能门锁') },
-    ])
-
-    // ── 场景（窗帘语义：0=开/收起，100=关/展开）────────────────
-    const allLightIds = [light1.id, light2.id, light3.id, light4.id]
-
-    const makeScene = (
-      name: string,
-      icon: string,
-      effects: { deviceId: string; state: Record<string, unknown> }[],
-    ) =>
-      SceneNode.parse({
-        id: generateId('scene'), type: 'scene', parentId: levelId,
-        object: 'node', visible: true, metadata: {},
-        name, icon,
-        effects: effects.map((e) => ({ ...e, delay: 0, duration: 0 })),
-      })
-
-    // 回家：暖白灯全亮，窗帘拉开
-    const sceneHome = makeScene('回家模式', '🏠', [
-      ...allLightIds.map((id) => ({
-        deviceId: id, state: { on: true, brightness: 80, colorTemp: 3000 },
-      })),
-      { deviceId: curtain.id, state: { position: 0 } },
-    ])
-
-    // 影院：主灯灭，氛围微光冷白，窗帘拉上
-    const sceneCinema = makeScene('影院模式', '🎬', [
-      { deviceId: light1.id, state: { on: false } },
-      { deviceId: light2.id, state: { on: true, brightness: 12, colorTemp: 5500 } },
-      { deviceId: light3.id, state: { on: false } },
-      { deviceId: light4.id, state: { on: true, brightness: 15, colorTemp: 5500 } },
-      { deviceId: curtain.id, state: { position: 100 } },
-    ])
-
-    // 离家：全灭，窗帘拉上
-    const sceneAway = makeScene('离家模式', '🌙', [
-      ...allLightIds.map((id) => ({ deviceId: id, state: { on: false } })),
-      { deviceId: curtain.id, state: { position: 100 } },
-    ])
-
-    // 晨间：自然白全亮，窗帘拉开迎接晨光
-    const sceneMorning = makeScene('晨间模式', '☀️', [
-      ...allLightIds.map((id) => ({
-        deviceId: id, state: { on: true, brightness: 100, colorTemp: 5500 },
-      })),
-      { deviceId: curtain.id, state: { position: 0 } },
-    ])
-
-    createNodes([
-      { node: sceneHome as any, parentId: levelId as any },
-      { node: sceneCinema as any, parentId: levelId as any },
-      { node: sceneAway as any, parentId: levelId as any },
-      { node: sceneMorning as any, parentId: levelId as any },
-    ])
-
-    setViewerSelection({ buildingId, levelId, zoneId: null, selectedIds: [] })
-    setTimeout(() => setIsReady(true), 100)
-  }, [isReady, createNodes, setViewerSelection])
-
-  if (!isReady) {
+  if (status === 'loading') {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-neutral-950 text-white">
+      <div className="flex h-screen w-screen items-center justify-center bg-neutral-50 text-neutral-400">
         <div className="text-center">
-          <div className="mb-4 h-8 w-8 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-          <p className="text-sm text-white/60">正在加载演示场景…</p>
+          <div className="mb-4 h-8 w-8 animate-spin rounded-full border-2 border-neutral-200 border-t-neutral-400" />
+          <p className="text-sm">正在加载方案…</p>
         </div>
       </div>
     )
   }
 
+  if (status === 'no-data') {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-neutral-50 text-neutral-800">
+        <div className="max-w-md text-center">
+          <h2 className="mb-3 font-semibold text-xl">还没有方案</h2>
+          <p className="mb-6 text-sm text-neutral-400">请先在主编辑器画一个方案，数据会自动同步到这里。</p>
+          <a className="inline-block rounded-xl bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700" href="/">
+            打开主编辑器
+          </a>
+        </div>
+      </div>
+    )
+  }
+
+  if (!seed) return null
+
+  // 相机初始位置：30° 仰角（elevation = 30°，polar from zenith = 60°）
+  const span  = Math.max(seed.bbox.w, seed.bbox.d, 8)
+  const dist  = span * 2.2
+  const tgt:  [number, number, number] = [seed.bbox.cx, 0.6, seed.bbox.cz]
+  const camX  = tgt[0] + dist * 0.612   // cos(30°) * cos(45°) ≈ 0.612
+  const camY  = tgt[1] + dist * 0.5     // sin(30°)
+  const camZ  = tgt[2] + dist * 0.612
+  // 太阳/月亮方向（随 displayHour 实时更新）
+  const sunDir    = computeSunDirection(displayHour)
+  const isNight   = sunDir === null
+  const lightDir0 = sunDir ?? computeMoonDirection(displayHour)
+  // 按楼层 northAngle 旋转光源方向（绕 Y 轴，顺时针）
+  const _nr  = (seed.northAngle * Math.PI) / 180
+  const _c   = Math.cos(_nr), _s = Math.sin(_nr)
+  const lightDir: [number, number, number] = [
+    lightDir0[0] * _c - lightDir0[2] * _s,
+    lightDir0[1],
+    lightDir0[0] * _s + lightDir0[2] * _c,
+  ]
+  const lightDist = span * 4
+  const lightPos: [number, number, number] = [
+    seed.bbox.cx + lightDir[0] * lightDist,
+    lightDir[1] * lightDist,
+    seed.bbox.cz + lightDir[2] * lightDist,
+  ]
+
   return (
-    <div className="h-screen w-screen bg-neutral-950">
-      <ProposalLayout
-        onBack={() => window.history.back()}
-        projectName="智能家居方案 · 樾山半岛 160㎡"
+    <div
+      className="h-screen w-screen transition-colors duration-700"
+      style={{ background: isNight ? '#0a0f1a' : STYLE.bgColor }}
+    >
+      <DemoHeader
+        buildingName={seed.buildingName}
+        levelName={seed.levelName}
+        wallCount={seed.walls.length}
+        displayHour={displayHour}
+        realHour={realHour}
+        isPreviewing={isPreviewing}
+        isNight={isNight}
+        onSliderChange={handleSliderChange}
+        onSliderDown={handleSliderDown}
+        onSyncNow={handleSyncNow}
+      />
+      <Canvas
+        key={`${seed.bbox.cx}-${seed.bbox.cz}`}
+        camera={{ fov: 50, near: 0.1, far: 500, position: [camX, camY, camZ] }}
+        gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping }}
+        shadows="soft"
+        style={{ background: isNight ? '#0a0f1a' : STYLE.bgColor }}
       >
-        <Viewer selectionManager="default">
-          <DemoRoom />
-          <DemoCamera />
-        </Viewer>
-      </ProposalLayout>
+        <DemoEnvironment lightPos={lightPos} isNight={isNight} />
+        <DemoStructure
+          walls={seed.walls}
+          openingsByWall={seed.openingsByWall}
+          bbox={seed.bbox}
+          lightPos={lightPos}
+        />
+        {/* 30° 仰角初始，允许垂直旋转 + 缩放 */}
+        <OrbitControls
+          target={tgt}
+          dampingFactor={0.08}
+          enableDamping
+          enablePan={false}
+          enableZoom
+          minDistance={3}
+          maxDistance={dist * 2}
+          minPolarAngle={Math.PI / 6}
+          maxPolarAngle={Math.PI * 17 / 36}
+        />
+      </Canvas>
     </div>
   )
 }

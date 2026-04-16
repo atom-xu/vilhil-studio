@@ -53,6 +53,9 @@ export type FurnishTool = 'item'
 // Site mode tools
 export type SiteTool = 'property-line'
 
+// 实用工具 — 不属于任何 phase，如标定比例、测量等
+export type UtilityTool = 'calibrate-scale' | 'measure'
+
 // Catalog categories for furnish mode items
 export type CatalogCategory =
   | 'furniture'
@@ -68,7 +71,7 @@ export type StructureLayer = 'zones' | 'elements'
 export type FloorplanSelectionTool = 'click' | 'marquee'
 
 // Combined tool type
-export type Tool = SiteTool | StructureTool | FurnishTool
+export type Tool = SiteTool | StructureTool | FurnishTool | UtilityTool
 
 type EditorState = {
   phase: Phase
@@ -91,6 +94,40 @@ type EditorState = {
   ) => void
   selectedReferenceId: string | null
   setSelectedReferenceId: (id: string | null) => void
+  // 底图比例标定（2D floorplan 中画线）
+  calibration: {
+    active: boolean
+    guideNodeId: string | null
+    points: Array<[number, number]>  // plan 坐标 [x, z]
+    measuredDistance: number | null
+  }
+  startCalibration: (guideNodeId: string) => void
+  addCalibrationPoint: (point: [number, number]) => void
+  finishCalibration: (realMeters: number) => void
+  cancelCalibration: () => void
+  // 多层底图 2 点对齐
+  levelAlignment: {
+    active: boolean
+    phase: 'ref' | 'cur'              // 当前收集哪一侧的点
+    aligningLevelId: string | null    // 被对齐的那一层（对齐开始时的"当前层"）
+    refPoints: Array<[number, number]> // 参考层上的点（世界坐标 XZ）
+    curPoints: Array<[number, number]> // 当前层上的点（世界坐标 XZ）
+  }
+  startLevelAlignment: (aligningLevelId?: string | null) => void
+  addLevelAlignmentPoint: (point: [number, number]) => void
+  cancelLevelAlignment: () => void
+  // 墙体参数 — 用 wallType 作为主选择器，thickness 和 justification 从 type 派生
+  /** 当前选中的墙种类 ID（'exterior' | 'interior' | ...） */
+  wallType: string
+  setWallType: (type: string) => void
+  /** 网格吸附步长（无底图时用） */
+  wallGridStep: number
+  setWallGridStep: (step: number) => void
+  // 门窗预设 — 放置前选好类型和尺寸
+  doorPresetId: string
+  setDoorPresetId: (id: string) => void
+  windowPresetId: string
+  setWindowPresetId: (id: string) => void
   // Space detection for cutaway mode
   spaces: Record<string, Space>
   setSpaces: (spaces: Record<string, Space>) => void
@@ -225,6 +262,21 @@ export function normalizePersistedEditorUiState(
       phase,
       mode,
       tool: 'zone',
+      structureLayer,
+      catalogCategory: null,
+      viewMode,
+      isFloorplanOpen,
+    }
+  }
+
+  // 不恢复工具类 mode（如标定、测量），这些工具在刷新后无意义
+  const persistedTool = state?.tool
+  const isUtilityTool = persistedTool === 'calibrate-scale' || persistedTool === 'measure'
+  if (isUtilityTool) {
+    return {
+      phase,
+      mode: 'select',
+      tool: null,
       structureLayer,
       catalogCategory: null,
       viewMode,
@@ -413,6 +465,72 @@ const useEditor = create<EditorState>()(
       setMovingNode: (node) => set({ movingNode: node }),
       selectedReferenceId: null,
       setSelectedReferenceId: (id) => set({ selectedReferenceId: id }),
+      calibration: { active: false, guideNodeId: null, points: [], measuredDistance: null },
+      startCalibration: (guideNodeId) =>
+        set({
+          calibration: { active: true, guideNodeId, points: [], measuredDistance: null },
+          tool: 'calibrate-scale',
+          mode: 'build',
+        }),
+      addCalibrationPoint: (point) => {
+        const cal = get().calibration
+        if (!cal?.active) return
+        if (cal.points.length >= 2) return
+        const pts = [...cal.points, point]
+        if (pts.length === 2) {
+          const dist = Math.sqrt((pts[1]![0] - pts[0]![0]) ** 2 + (pts[1]![1] - pts[0]![1]) ** 2)
+          set({ calibration: { ...cal, points: pts, measuredDistance: dist } })
+        } else {
+          set({ calibration: { ...cal, points: pts } })
+        }
+      },
+      finishCalibration: (realMeters) => {
+        const cal = get().calibration
+        if (!cal?.measuredDistance || !cal.guideNodeId) return
+        const scale = useScene.getState().nodes[cal.guideNodeId as any]?.scale ?? 1
+        const newScale = (scale as number) * (realMeters / cal.measuredDistance)
+        useScene.getState().updateNode(cal.guideNodeId as any, { scale: newScale })
+        set({
+          calibration: { active: false, guideNodeId: null, points: [], measuredDistance: null },
+          tool: null,
+          mode: 'select',
+        })
+      },
+      cancelCalibration: () =>
+        set({
+          calibration: { active: false, guideNodeId: null, points: [], measuredDistance: null },
+          tool: null,
+          mode: 'select',
+        }),
+      levelAlignment: { active: false, phase: 'cur' as const, aligningLevelId: null, refPoints: [], curPoints: [] },
+      startLevelAlignment: (aligningLevelId = null) =>
+        set({ levelAlignment: { active: true, phase: 'cur', aligningLevelId, refPoints: [], curPoints: [] } }),
+      addLevelAlignmentPoint: (point) => {
+        const la = get().levelAlignment
+        if (!la?.active) return
+        if (la.phase === 'cur') {
+          const curPoints = [...la.curPoints, point] as Array<[number, number]>
+          if (curPoints.length >= 2) {
+            // 当前层点收集完毕，切换到参考层
+            set({ levelAlignment: { ...la, curPoints: curPoints.slice(0, 2), phase: 'ref' } })
+          } else {
+            set({ levelAlignment: { ...la, curPoints } })
+          }
+        } else {
+          const refPoints = [...la.refPoints, point] as Array<[number, number]>
+          set({ levelAlignment: { ...la, refPoints: refPoints.slice(0, 2) } })
+        }
+      },
+      cancelLevelAlignment: () =>
+        set({ levelAlignment: { active: false, phase: 'cur', aligningLevelId: null, refPoints: [], curPoints: [] } }),
+      wallType: 'interior',
+      setWallType: (type) => set({ wallType: type }),
+      wallGridStep: 0.1,
+      setWallGridStep: (step) => set({ wallGridStep: step }),
+      doorPresetId: 'interior',
+      setDoorPresetId: (id) => set({ doorPresetId: id }),
+      windowPresetId: 'standard',
+      setWindowPresetId: (id) => set({ windowPresetId: id }),
       spaces: {},
       setSpaces: (spaces) => set({ spaces }),
       editingHole: null,

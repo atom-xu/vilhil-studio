@@ -2,6 +2,7 @@ import dedent from 'ts-dedent'
 import { z } from 'zod'
 import { BaseNode, nodeType, objectId } from '../base'
 import { MaterialSchema } from '../material'
+import { quantizePolygon } from '../precision'
 import { ItemNode } from './item'
 
 export const CeilingNode = BaseNode.extend({
@@ -9,8 +10,11 @@ export const CeilingNode = BaseNode.extend({
   type: nodeType('ceiling'),
   children: z.array(ItemNode.shape.id).default([]),
   material: MaterialSchema.optional(),
-  polygon: z.array(z.tuple([z.number(), z.number()])),
-  holes: z.array(z.array(z.tuple([z.number(), z.number()]))).default([]),
+  polygon: z.array(z.tuple([z.number(), z.number()])).transform(quantizePolygon),
+  holes: z
+    .array(z.array(z.tuple([z.number(), z.number()])))
+    .default([])
+    .transform((holes) => holes.map((h) => quantizePolygon(h))),
   height: z.number().default(2.5), // Height in meters
 }).describe(
   dedent`

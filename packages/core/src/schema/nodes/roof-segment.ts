@@ -2,6 +2,7 @@ import dedent from 'ts-dedent'
 import { z } from 'zod'
 import { BaseNode, nodeType, objectId } from '../base'
 import { MaterialSchema } from '../material'
+import { quantizePoint3 } from '../precision'
 
 export const RoofType = z.enum(['hip', 'gable', 'shed', 'gambrel', 'dutch', 'mansard', 'flat'])
 
@@ -11,7 +12,10 @@ export const RoofSegmentNode = BaseNode.extend({
   id: objectId('rseg'),
   type: nodeType('roof-segment'),
   material: MaterialSchema.optional(),
-  position: z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0]),
+  position: z
+    .tuple([z.number(), z.number(), z.number()])
+    .default([0, 0, 0])
+    .transform(quantizePoint3),
   // Rotation around Y axis in radians
   rotation: z.number().default(0),
   // Roof shape type

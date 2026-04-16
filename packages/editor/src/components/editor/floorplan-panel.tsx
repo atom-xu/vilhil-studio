@@ -21,7 +21,7 @@ import {
   type ZoneNode as ZoneNodeType,
 } from '@pascal-app/core'
 import { useViewer } from '@pascal-app/viewer'
-import { Command } from 'lucide-react'
+import { CheckCircle2, Command } from 'lucide-react'
 import {
   memo,
   type MouseEvent as ReactMouseEvent,
@@ -38,12 +38,22 @@ import { cn } from '../../lib/utils'
 import useEditor from '../../store/use-editor'
 import { snapToHalf } from '../tools/item/placement-math'
 import {
+  collectTrackingCandidates,
+  computeExtensionTracking,
+  computeOrthogonalTracking,
+  computeWallPerpendicularTracking,
   createWallOnCurrentLevel,
+  type ExtensionTrackingHit,
+  findWallSnapTarget,
+  getEffectiveSnapRadius,
   isWallLongEnough,
+  type OrthogonalTrackingHit,
   snapWallDraftPoint,
   WALL_GRID_STEP,
   type WallPlanPoint,
+  type WallPerpendicularHit,
 } from '../tools/wall/wall-drafting'
+import { WALL_TYPE_BY_ID } from '../tools/wall/wall-types'
 import { furnishTools } from '../ui/action-menu/furnish-tools'
 import { tools as structureTools } from '../ui/action-menu/structure-tools'
 
@@ -450,6 +460,521 @@ function getGuideWidth(scale: number) {
   return FLOORPLAN_GUIDE_BASE_WIDTH * scale
 }
 
+/**
+ * 标定点吸附 — 只吸附真实有意义的目标
+ * 1. 墙体端点（15cm 半径，如果已画了墙）
+ * 2. 底图的 4 个角点 + 中心点（15cm 半径，如果当前层有底图）
+ * 3. 轴约束（第二点时）：吸附到过第一点的水平或垂直轴
+ * 4. 否则不吸附，精确返回鼠标位置
+ *
+ * 不做网格吸附：用户要的是图纸上的精确位置，网格会把点拉偏
+ *
+ * `axisConstrain`：true = 把第二点吸附到水平/垂直轴（Shift 松开时）
+ */
+const CALIBRATION_SNAP_RADIUS = 0.15 // 15cm 吸附半径
+
+export type CalibrationSnapAxis = 'h' | 'v' | 'free'
+
+export interface CalibrationSnapResult {
+  point: [number, number]
+  /** 轴约束类型（仅在第二点且 axisConstrain=true 时有值） */
+  axis: CalibrationSnapAxis
+}
+
+function snapCalibrationPoint(
+  point: [number, number],
+  walls: WallNode[],
+  existingCalPoints: Array<[number, number]>,
+  guideCandidates: Array<[number, number]> = [],
+  axisConstrain = false,
+): CalibrationSnapResult {
+  const [px, py] = point
+  let best: [number, number] | null = null
+  let bestDistSq = CALIBRATION_SNAP_RADIUS * CALIBRATION_SNAP_RADIUS
+
+  // 轴约束（第二点时）：先把光标投影到水平/垂直轴，再在轴上做端点吸附
+  let axisConstrained: [number, number] | null = null
+  let snapAxis: CalibrationSnapAxis = 'free'
+  if (axisConstrain && existingCalPoints.length === 1) {
+    const p1 = existingCalPoints[0]!
+    const dx = Math.abs(px - p1[0])
+    const dy = Math.abs(py - p1[1])
+    if (dx >= dy) {
+      // 水平轴：锁 y = p1.y
+      axisConstrained = [px, p1[1]]
+      snapAxis = 'h'
+    } else {
+      // 垂直轴：锁 x = p1.x
+      axisConstrained = [p1[0], py]
+      snapAxis = 'v'
+    }
+    // 轴约束后的位置作为吸附基础
+    const [apx, apy] = axisConstrained
+
+    // 吸附墙端点（在轴上）
+    for (const wall of walls) {
+      for (const endpoint of [wall.start, wall.end]) {
+        const ddx = endpoint[0] - apx
+        const ddy = endpoint[1] - apy
+        const d2 = ddx * ddx + ddy * ddy
+        if (d2 < bestDistSq) {
+          best = [endpoint[0], endpoint[1]]
+          bestDistSq = d2
+        }
+      }
+    }
+    for (const candidate of guideCandidates) {
+      const ddx = candidate[0] - apx
+      const ddy = candidate[1] - apy
+      const d2 = ddx * ddx + ddy * ddy
+      if (d2 < bestDistSq) {
+        best = [candidate[0], candidate[1]]
+        bestDistSq = d2
+      }
+    }
+    return { point: best ?? axisConstrained, axis: snapAxis }
+  }
+
+  // 无轴约束：吸附墙端点
+  for (const wall of walls) {
+    for (const endpoint of [wall.start, wall.end]) {
+      const dx = endpoint[0] - px
+      const dy = endpoint[1] - py
+      const d2 = dx * dx + dy * dy
+      if (d2 < bestDistSq) {
+        best = [endpoint[0], endpoint[1]]
+        bestDistSq = d2
+      }
+    }
+  }
+
+  // 吸附底图特征点（角点、中心点）
+  for (const candidate of guideCandidates) {
+    const dx = candidate[0] - px
+    const dy = candidate[1] - py
+    const d2 = dx * dx + dy * dy
+    if (d2 < bestDistSq) {
+      best = [candidate[0], candidate[1]]
+      bestDistSq = d2
+    }
+  }
+
+  // 没吸附到就返回原始鼠标位置（精确）
+  return { point: best ?? [px, py], axis: 'free' }
+}
+
+/**
+ * 计算一组墙体中心线的所有两两交点（端点重合 + 真实穿越均包含）。
+ *
+ * 覆盖场景：
+ *   L 型：两墙端点重合 → t≈0/1, s≈0/1 → 交点 = 共用端点
+ *   T 型：一墙端点落在另一墙线段上 → 一侧 t∈(0,1)，另一侧 s=0/1
+ *   X 型：两墙真正穿越 → t,s ∈ (0,1)
+ *
+ * 所有情况均返回几何交点坐标，结果去重（1mm 精度）。
+ */
+function getWallIntersections(walls: WallNode[]): Array<[number, number]> {
+  const seen = new Set<string>()
+  const result: Array<[number, number]> = []
+
+  for (let i = 0; i < walls.length; i++) {
+    for (let j = i + 1; j < walls.length; j++) {
+      const a = walls[i]!
+      const b = walls[j]!
+      const x1 = a.start[0], y1 = a.start[1]
+      const x2 = a.end[0],   y2 = a.end[1]
+      const x3 = b.start[0], y3 = b.start[1]
+      const x4 = b.end[0],   y4 = b.end[1]
+
+      const denom = (x2 - x1) * (y4 - y3) - (y2 - y1) * (x4 - x3)
+      if (Math.abs(denom) < 1e-9) continue // 平行
+
+      const t = ((x3 - x1) * (y4 - y3) - (y3 - y1) * (x4 - x3)) / denom
+      const s = ((x3 - x1) * (y2 - y1) - (y3 - y1) * (x2 - x1)) / denom
+
+      // 两段均在范围内（含端点，允许 1mm 容差）
+      if (t < -0.001 || t > 1.001 || s < -0.001 || s > 1.001) continue
+
+      const ix = x1 + t * (x2 - x1)
+      const iy = y1 + t * (y2 - y1)
+
+      // 1mm 精度去重
+      const key = `${Math.round(ix * 1000)},${Math.round(iy * 1000)}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        result.push([ix, iy])
+      }
+    }
+  }
+  return result
+}
+
+/**
+ * 对齐模式专用吸附
+ *
+ * 候选集（传入前预计算）= 墙体所有交点（含端点重合交点）+ 底图特征点
+ * 吸附半径 35cm — 靠近即自动吸附，无需精确点击
+ * 返回吸附坐标 + 是否命中（驱动光标预览样式）
+ */
+// 像素级吸附半径 — 缩放时手感一致（大图精准，小图易点）
+const ALIGNMENT_SNAP_PIXELS = 28
+
+function snapAlignmentPoint(
+  point: [number, number],
+  candidates: Array<[number, number]>,
+  snapRadius: number, // 世界单位（由调用方根据 worldUnitsPerPixel 换算）
+): { snapped: [number, number]; hit: boolean } {
+  const [px, py] = point
+  let best: [number, number] | null = null
+  let bestDistSq = snapRadius * snapRadius
+
+  for (const c of candidates) {
+    const dx = c[0] - px
+    const dy = c[1] - py
+    const d2 = dx * dx + dy * dy
+    if (d2 < bestDistSq) {
+      best = c
+      bestDistSq = d2
+    }
+  }
+
+  return best ? { snapped: best, hit: true } : { snapped: [px, py], hit: false }
+}
+
+/**
+ * 多层 2 点对齐 — 计算刚体变换（平移 + 旋转）并应用到当前楼层所有节点
+ *
+ * 数学原理：
+ *   给定参考层两点 A1,A2 和当前层对应两点 B1,B2，
+ *   求旋转角 θ = angle(A1→A2) - angle(B1→B2)，
+ *   再求平移 T = A1 - R(θ)·B1，
+ *   对当前层所有节点的 XZ 坐标施加 P' = R(θ)·P + T。
+ */
+function applyLevelAlignment(
+  levelId: string,
+  refPoints: [[number, number], [number, number]],
+  curPoints: [[number, number], [number, number]],
+) {
+  const [A1, A2] = refPoints
+  const [B1, B2] = curPoints
+
+  const angleRef = Math.atan2(A2[1] - A1[1], A2[0] - A1[0])
+  const angleCur = Math.atan2(B2[1] - B1[1], B2[0] - B1[0])
+  const theta = angleRef - angleCur
+
+  const cosT = Math.cos(theta)
+  const sinT = Math.sin(theta)
+
+  // 平移量：让旋转后的 B1 与 A1 重合
+  const tx = A1[0] - (B1[0] * cosT - B1[1] * sinT)
+  const tz = A1[1] - (B1[0] * sinT + B1[1] * cosT)
+
+  const xform = (x: number, z: number): [number, number] => [
+    x * cosT - z * sinT + tx,
+    x * sinT + z * cosT + tz,
+  ]
+
+  const { nodes, updateNode } = useScene.getState()
+  const level = nodes[levelId as AnyNodeId]
+  if (!level || level.type !== 'level') return
+
+  for (const childId of (level as LevelNode).children) {
+    const node = nodes[childId as AnyNodeId]
+    if (!node) continue
+
+    switch (node.type) {
+      case 'wall': {
+        const [sx, sz] = xform(node.start[0], node.start[1])
+        const [ex, ez] = xform(node.end[0], node.end[1])
+        updateNode(childId as AnyNodeId, { start: [sx, sz], end: [ex, ez] })
+        break
+      }
+      case 'guide': {
+        const [px, pz] = xform(node.position[0], node.position[2])
+        updateNode(childId as AnyNodeId, {
+          position: [px, node.position[1], pz],
+          rotation: [node.rotation[0], node.rotation[1] + theta, node.rotation[2]],
+        })
+        break
+      }
+      case 'scan': {
+        const [px, pz] = xform(node.position[0], node.position[2])
+        updateNode(childId as AnyNodeId, {
+          position: [px, node.position[1], pz],
+          rotation: [node.rotation[0], (node.rotation[1] ?? 0) + theta, node.rotation[2]],
+        })
+        break
+      }
+      case 'slab':
+      case 'ceiling': {
+        const poly = (node as any).polygon as Array<[number, number]> | undefined
+        if (Array.isArray(poly)) {
+          const updates: Record<string, unknown> = { polygon: poly.map(([x, z]) => xform(x, z)) }
+          const holes = (node as any).holes as Array<Array<[number, number]>> | undefined
+          if (Array.isArray(holes)) {
+            updates.holes = holes.map((h) => h.map(([x, z]) => xform(x, z)))
+          }
+          updateNode(childId as AnyNodeId, updates as any)
+        }
+        break
+      }
+      case 'zone': {
+        const poly = (node as any).polygon as Array<[number, number]> | undefined
+        if (Array.isArray(poly)) {
+          updateNode(childId as AnyNodeId, { polygon: poly.map(([x, z]) => xform(x, z)) } as any)
+        }
+        break
+      }
+    }
+  }
+}
+
+/**
+ * LevelAlignmentOverlay — 2 点对齐时的 SVG 标记层
+ *
+ * 视觉语言：
+ *   - 参考层的点：橙色（#f59e0b），带序号 ①②
+ *   - 当前层的点：品牌蓝（#2D7FF9），带序号 ①②
+ *   - 同层两点之间连线（虚线）
+ *   - 对应点连线（ref①—cur①，ref②—cur②）：灰色点线，表示对应关系
+ *   - 光标吸附预览：移动时实时显示将落在哪个位置
+ */
+function LevelAlignmentOverlay({
+  worldUnitsPerPixel,
+  cursorPoint,
+  refSnapCandidates,
+  curSnapCandidates,
+}: {
+  worldUnitsPerPixel: number
+  cursorPoint: WallPlanPoint | null
+  refSnapCandidates: Array<[number, number]>
+  curSnapCandidates: Array<[number, number]>
+}) {
+  const la = useEditor((s) => (s as any).levelAlignment)
+  if (!la?.active) return null
+
+  const px = worldUnitsPerPixel
+  const armLen = 10 * px
+  const strokeW = 1.5 * px
+  const pinR = 3.5 * px
+  const labelOff = 14 * px
+
+  // 当前层用品牌蓝，参考层用琥珀橙（与蓝色叠加墙对比清晰）
+  const CUR_COLOR = '#2D7FF9'
+  const REF_COLOR = '#f59e0b'
+
+  const LABELS = ['①', '②']
+
+  // 计算光标吸附预览位置（候选集已包含所有交点，直接匹配）
+  const phase: 'ref' | 'cur' = la.phase
+  const snapCandidates = phase === 'ref' ? refSnapCandidates : curSnapCandidates
+  const snapRadius = ALIGNMENT_SNAP_PIXELS * px
+  const cursorSnap = cursorPoint
+    ? snapAlignmentPoint([cursorPoint[0], cursorPoint[1]], snapCandidates, snapRadius)
+    : null
+  const previewColor = phase === 'cur' ? CUR_COLOR : REF_COLOR
+
+  // 已确认的点：根据阶段和数量决定下一个序号
+  const refPoints: Array<[number, number]> = la.refPoints
+  const curPoints: Array<[number, number]> = la.curPoints
+
+  // 固定图钉：已确认的点
+  const Pin = ({ p, color, label }: { p: [number, number]; color: string; label: string }) => {
+    const sx = toSvgX(p[0])
+    const sy = toSvgY(p[1])
+    return (
+      <g pointerEvents="none">
+        {/* 光晕 */}
+        <circle cx={sx} cy={sy} r={pinR * 3} fill={color} fillOpacity={0.12} />
+        {/* 十字 */}
+        <line stroke={color} strokeWidth={strokeW} x1={sx - armLen} x2={sx + armLen} y1={sy} y2={sy} />
+        <line stroke={color} strokeWidth={strokeW} x1={sx} x2={sx} y1={sy - armLen} y2={sy + armLen} />
+        {/* 中心实心圆 */}
+        <circle cx={sx} cy={sy} r={pinR} fill={color} stroke="#fff" strokeWidth={strokeW * 0.8} />
+        {/* 序号标签 */}
+        <text
+          dominantBaseline="auto"
+          fill={color}
+          fontSize={11 * px}
+          fontWeight="600"
+          pointerEvents="none"
+          textAnchor="middle"
+          x={sx}
+          y={sy - labelOff}
+        >
+          {label}
+        </text>
+      </g>
+    )
+  }
+
+  // 虚线连线（同层两点间）
+  const DashLine = ({ pts, color }: { pts: Array<[number, number]>; color: string }) => {
+    if (pts.length < 2) return null
+    return (
+      <line
+        pointerEvents="none"
+        stroke={color}
+        strokeDasharray={`${7 * px} ${4 * px}`}
+        strokeOpacity={0.65}
+        strokeWidth={strokeW}
+        x1={toSvgX(pts[0]![0])}
+        x2={toSvgX(pts[1]![0])}
+        y1={toSvgY(pts[0]![1])}
+        y2={toSvgY(pts[1]![1])}
+      />
+    )
+  }
+
+  // 对应关系连线（ref[i] ↔ cur[i]）
+  const CorrespondLine = ({ i }: { i: number }) => {
+    const r = refPoints[i]
+    const c = curPoints[i]
+    if (!r || !c) return null
+    return (
+      <line
+        pointerEvents="none"
+        stroke="#94a3b8"
+        strokeDasharray={`${3 * px} ${5 * px}`}
+        strokeOpacity={0.5}
+        strokeWidth={strokeW * 0.8}
+        x1={toSvgX(r[0])}
+        x2={toSvgX(c[0])}
+        y1={toSvgY(r[1])}
+        y2={toSvgY(c[1])}
+      />
+    )
+  }
+
+  // 光标预览
+  const CursorPreview = () => {
+    if (!cursorSnap) return null
+    const { snapped, hit } = cursorSnap
+    const sx = toSvgX(snapped[0])
+    const sy = toSvgY(snapped[1])
+    if (hit) {
+      // 吸附命中：大光环 + 实心圆，非常明显
+      return (
+        <g pointerEvents="none">
+          <circle cx={sx} cy={sy} r={pinR * 5} fill={previewColor} fillOpacity={0.08} />
+          <circle
+            cx={sx}
+            cy={sy}
+            r={pinR * 3}
+            fill="none"
+            stroke={previewColor}
+            strokeOpacity={0.7}
+            strokeWidth={strokeW * 1.2}
+          />
+          <circle cx={sx} cy={sy} r={pinR * 1.2} fill={previewColor} fillOpacity={0.9} />
+          <line stroke={previewColor} strokeOpacity={0.6} strokeWidth={strokeW} x1={sx - armLen * 1.4} x2={sx + armLen * 1.4} y1={sy} y2={sy} />
+          <line stroke={previewColor} strokeOpacity={0.6} strokeWidth={strokeW} x1={sx} x2={sx} y1={sy - armLen * 1.4} y2={sy + armLen * 1.4} />
+        </g>
+      )
+    }
+    // 自由位置：小十字，告知位置但不强调
+    return (
+      <g pointerEvents="none" opacity={0.4}>
+        <line stroke={previewColor} strokeWidth={strokeW} x1={sx - armLen * 0.7} x2={sx + armLen * 0.7} y1={sy} y2={sy} />
+        <line stroke={previewColor} strokeWidth={strokeW} x1={sx} x2={sx} y1={sy - armLen * 0.7} y2={sy + armLen * 0.7} />
+      </g>
+    )
+  }
+
+  return (
+    <>
+      {/* 对应关系连线（灰色点线） */}
+      <CorrespondLine i={0} />
+      <CorrespondLine i={1} />
+      {/* 同层两点连线 */}
+      <DashLine pts={refPoints} color={REF_COLOR} />
+      <DashLine pts={curPoints} color={CUR_COLOR} />
+      {/* 已确认图钉 */}
+      {refPoints.map((p, i) => <Pin key={`ref-${i}`} p={p} color={REF_COLOR} label={LABELS[i]!} />)}
+      {curPoints.map((p, i) => <Pin key={`cur-${i}`} p={p} color={CUR_COLOR} label={LABELS[i]!} />)}
+      {/* 光标吸附预览 */}
+      <CursorPreview />
+    </>
+  )
+}
+
+// 步骤进度配置 — 先点当前层（本楼层），再自动跳转到参考层点对应点
+const ALIGN_STEPS = [
+  { phase: 'cur', index: 0, color: '#2D7FF9', label: '当前层', hint: '点第 1 个特征点（墙角 / 交点）' },
+  { phase: 'cur', index: 1, color: '#2D7FF9', label: '当前层', hint: '点第 2 个特征点（另一个墙角）' },
+  { phase: 'ref', index: 0, color: '#f59e0b', label: '参考层', hint: '已切换到参考层，点对应的第 1 个特征点' },
+  { phase: 'ref', index: 1, color: '#f59e0b', label: '参考层', hint: '继续点对应的第 2 个特征点，完成对齐' },
+]
+
+/**
+ * LevelAlignmentHUD — 对齐模式的顶部步骤条
+ */
+function LevelAlignmentHUD() {
+  const la = useEditor((s) => (s as any).levelAlignment)
+  if (!la?.active) return null
+
+  const refPoints: Array<[number, number]> = la.refPoints
+  const curPoints: Array<[number, number]> = la.curPoints
+  const doneCount = refPoints.length + curPoints.length
+  const currentStep = ALIGN_STEPS[doneCount]
+  if (!currentStep) return null
+
+  return (
+    <div className="pointer-events-none absolute inset-x-0 top-3 z-50 flex justify-center">
+      <div
+        className="flex items-center gap-3 rounded-xl border bg-background/95 px-4 py-2.5 shadow-xl backdrop-blur-sm"
+        style={{ borderColor: `${currentStep.color}40` }}
+      >
+        {/* 步骤点 */}
+        <div className="flex items-center gap-1">
+          {ALIGN_STEPS.map((s, i) => (
+            <div
+              key={i}
+              className="size-1.5 rounded-full transition-all"
+              style={{
+                backgroundColor: i < doneCount ? s.color : i === doneCount ? s.color : '#334155',
+                opacity: i < doneCount ? 0.4 : i === doneCount ? 1 : 0.3,
+                transform: i === doneCount ? 'scale(1.4)' : 'scale(1)',
+              }}
+            />
+          ))}
+        </div>
+        {/* 层标签 */}
+        <span
+          className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+          style={{ backgroundColor: `${currentStep.color}20`, color: currentStep.color }}
+        >
+          {currentStep.label}
+        </span>
+        {/* 提示文字 */}
+        <span className="text-[13px] text-foreground">{currentStep.hint}</span>
+        {/* 取消 */}
+        <button
+          className="pointer-events-auto ml-2 text-[11px] text-muted-foreground/60 hover:text-muted-foreground"
+          onClick={() => {
+            const la = useEditor.getState().levelAlignment
+            const aligningId = la.aligningLevelId
+            useEditor.getState().cancelLevelAlignment()
+            // 取消时跳回被对齐的原始层（如果已经自动切到参考层，则跳回去）
+            if (aligningId) {
+              const viewerState = useViewer.getState()
+              const { selection } = viewerState
+              viewerState.setSelection(
+                selection.buildingId
+                  ? { buildingId: selection.buildingId, levelId: aligningId }
+                  : { levelId: aligningId },
+              )
+            }
+          }}
+          type="button"
+        >
+          ESC 取消
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function getGuideHeight(width: number, aspectRatio: number) {
   return width / aspectRatio
 }
@@ -468,6 +993,43 @@ function getGuideCornerLocalOffset(
 ): WallPlanPoint {
   const signs = guideCornerSigns[corner]
   return [(width / 2) * signs.x, (height / 2) * signs.y]
+}
+
+/**
+ * 为一个 guide 收集标定用的候选吸附点：中心 + 4 个角点。
+ * 中心不依赖图片尺寸；角点在尺寸已加载时可用。
+ * 返回的是 plan 坐标（非 SVG）。
+ */
+function getGuideCalibrationAnchors(
+  guide: GuideNode,
+  dimensions: GuideImageDimensions | null,
+): Array<[number, number]> {
+  const cx = guide.position[0]
+  const cz = guide.position[2]
+  const anchors: Array<[number, number]> = [[cx, cz]] // 中心
+  if (!dimensions || dimensions.width <= 0 || dimensions.height <= 0) return anchors
+
+  const aspectRatio = dimensions.width / dimensions.height
+  const planWidth = getGuideWidth(guide.scale)
+  const planHeight = getGuideHeight(planWidth, aspectRatio)
+  const rotation = guide.rotation[1]
+  const cosA = Math.cos(rotation)
+  const sinA = Math.sin(rotation)
+  const halfW = planWidth / 2
+  const halfH = planHeight / 2
+  // 4 个角的未旋转局部偏移
+  const localCorners: Array<[number, number]> = [
+    [-halfW, -halfH],
+    [halfW, -halfH],
+    [halfW, halfH],
+    [-halfW, halfH],
+  ]
+  for (const [lx, lz] of localCorners) {
+    const rx = lx * cosA - lz * sinA
+    const rz = lx * sinA + lz * cosA
+    anchors.push([cx + rx, cz + rz])
+  }
+  return anchors
 }
 
 function getGuideCornerSvgPoint(
@@ -1167,7 +1729,7 @@ function getWallHoverSidePaths(polygon: Point2D[], wall: WallNode): [string, str
   ]
 }
 
-function buildDraftWall(levelId: string, start: WallPlanPoint, end: WallPlanPoint): WallNode {
+function buildDraftWall(levelId: string, start: WallPlanPoint, end: WallPlanPoint, thickness?: number): WallNode {
   return {
     object: 'node',
     id: 'wall_draft' as WallNode['id'],
@@ -1179,6 +1741,7 @@ function buildDraftWall(levelId: string, start: WallPlanPoint, end: WallPlanPoin
     children: [],
     start,
     end,
+    thickness,
     frontSide: 'unknown',
     backSide: 'unknown',
   }
@@ -1645,7 +2208,6 @@ function findClosestWallPoint(
     const distSq = (point[0] - px) ** 2 + (point[1] - pz) ** 2
     if (distSq < bestDistSq) {
       bestDistSq = distSq
-      // Provide an arbitrary front-facing normal so the tool knows it's a valid wall side
       best = { wall, point: [px, pz], t, normal: [0, 0, 1] }
     }
   }
@@ -1682,6 +2244,62 @@ function useResolvedAssetUrl(url: string) {
   }, [url])
 
   return resolvedUrl
+}
+
+/**
+ * 批量为多个 guide 解析 asset URL + 加载图片尺寸。
+ * 返回一个 Map<guideId, GuideImageDimensions | null>。
+ * 用于标定模式下计算多个 guide 的角点候选。
+ */
+function useGuidesDimensionsMap(
+  guides: Array<{ id: string; url: string }>,
+): Map<string, GuideImageDimensions | null> {
+  const [map, setMap] = useState<Map<string, GuideImageDimensions | null>>(new Map())
+
+  // Use stable deps to avoid infinite effect loops
+  const idsKey = guides.map((g) => g.id).join('\u0001')
+  const urlsKey = guides.map((g) => g.url).join('\u0001')
+
+  useEffect(() => {
+    if (guides.length === 0) {
+      setMap(new Map())
+      return
+    }
+    let cancelled = false
+    const next = new Map<string, GuideImageDimensions | null>()
+    for (const g of guides) next.set(g.id, null)
+    setMap(next)
+
+    for (const guide of guides) {
+      if (!guide.url) continue
+      loadAssetUrl(guide.url).then((resolvedUrl) => {
+        if (cancelled || !resolvedUrl) return
+        const img = new globalThis.Image()
+        img.onload = () => {
+          if (cancelled) return
+          const w = img.naturalWidth || img.width
+          const h = img.naturalHeight || img.height
+          if (!(w > 0 && h > 0)) return
+          setMap((prev) => {
+            const copy = new Map(prev)
+            copy.set(guide.id, { width: w, height: h })
+            return copy
+          })
+        }
+        img.onerror = () => {
+          /* keep null */
+        }
+        img.src = resolvedUrl
+      })
+    }
+
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idsKey, urlsKey])
+
+  return map
 }
 
 function useGuideImageDimensions(url: string | null) {
@@ -1842,6 +2460,39 @@ const FloorplanGridLayer = memo(function FloorplanGridLayer({
         vectorEffect="non-scaling-stroke"
       />
     </>
+  )
+})
+
+/**
+ * 参考层底图渲染 —— 把其它楼层的 guide 以半透明 + 去饱和方式叠在当前层下面。
+ * 用于多层底图对齐，用户切到 Level 1 时能看见 Level 0 底图作为对齐参考。
+ * 完全不可交互（pointerEvents: none），避免误操作改到其它层的底图。
+ */
+const FloorplanReferenceGuideLayer = memo(function FloorplanReferenceGuideLayer({
+  guides,
+}: {
+  guides: GuideNode[]
+}) {
+  if (!guides.length) return null
+  return (
+    // 用 <g> 包一层实现全局变暗 + 灰度滤镜，不改 FloorplanGuideImage 本身
+    <g
+      opacity={0.45}
+      pointerEvents="none"
+      style={{ filter: 'grayscale(60%) contrast(0.85)' }}
+    >
+      {guides.map((guide) => (
+        <FloorplanGuideImage
+          activeInteractionMode={null}
+          guide={guide}
+          isInteractive={false}
+          isSelected={false}
+          key={`ref-${guide.id}`}
+          onGuideSelect={() => {}}
+          onGuideTranslateStart={() => {}}
+        />
+      ))}
+    </g>
   )
 })
 
@@ -2069,6 +2720,7 @@ const FloorplanGeometryLayer = memo(function FloorplanGeometryLayer({
   canSelectGeometry,
   hoveredOpeningId,
   hoveredWallId,
+  junctionCapPolygons,
   onSlabDoubleClick,
   onSlabSelect,
   onOpeningDoubleClick,
@@ -2088,6 +2740,7 @@ const FloorplanGeometryLayer = memo(function FloorplanGeometryLayer({
   canSelectSlabs: boolean
   canSelectGeometry: boolean
   hoveredOpeningId: OpeningNode['id'] | null
+  junctionCapPolygons: Array<{ key: string; points: string }>
   onSlabDoubleClick: (slab: SlabNode) => void
   onSlabSelect: (slabId: SlabNode['id'], event: ReactMouseEvent<SVGElement>) => void
   onOpeningDoubleClick: (opening: OpeningNode) => void
@@ -2193,17 +2846,30 @@ const FloorplanGeometryLayer = memo(function FloorplanGeometryLayer({
         )
       })}
 
+      {junctionCapPolygons.map(({ key, points }) => (
+        <polygon
+          fill={palette.wallFill}
+          key={`jcap-${key}`}
+          points={points}
+          stroke="none"
+          pointerEvents="none"
+        />
+      ))}
+
       {wallPolygons.map(({ wall, polygon, points }) => {
         const isSelected = selectedIdSet.has(wall.id)
         const isHovered = canSelectGeometry && hoveredWallId === wall.id
         const hoverStroke = isSelected ? palette.selectedStroke : palette.wallHoverStroke
         const hoverSidePaths = getWallHoverSidePaths(polygon, wall)
 
+        // 根据墙种类取颜色（metadata.wallType）
+        const wallTypeId = (wall.metadata as any)?.wallType as string | undefined
+        const wallTypeColor = wallTypeId ? WALL_TYPE_BY_ID[wallTypeId as keyof typeof WALL_TYPE_BY_ID]?.color : undefined
+        const fillColor = isSelected ? palette.selectedFill : (wallTypeColor ?? palette.wallFill)
+
         return (
           <g
             key={wall.id}
-            onPointerEnter={canSelectGeometry ? () => onWallHoverChange(wall.id) : undefined}
-            onPointerLeave={canSelectGeometry ? () => onWallHoverChange(null) : undefined}
           >
             {hoverSidePaths?.map((pathData, index) => (
               <path
@@ -2264,7 +2930,7 @@ const FloorplanGeometryLayer = memo(function FloorplanGeometryLayer({
               />
             )}
             <polygon
-              fill={isSelected ? palette.selectedFill : palette.wallFill}
+              fill={fillColor}
               onClick={
                 canSelectGeometry
                   ? (event) => {
@@ -2995,6 +3661,214 @@ const FloorplanPolygonHandleLayer = memo(function FloorplanPolygonHandleLayer({
   )
 })
 
+/**
+ * CalibrationInputInline — 标定距离输入框（DOM 浮层，固定像素尺寸）
+ * 定义在 FloorplanPanel 之前避免 HMR 引用失败
+ */
+function CalibrationInputInline() {
+  const cal = useEditor((s: any) => s.calibration)
+  const finishCalibration = useEditor((s: any) => s.finishCalibration)
+  const cancelCalibration = useEditor((s: any) => s.cancelCalibration)
+  const [inputValue, setInputValue] = useState('')
+
+  if (!cal?.active) return null
+  if (cal.points.length < 2 || cal.measuredDistance == null) return null
+
+  const handleApply = () => {
+    const v = parseFloat(inputValue)
+    if (v > 0) {
+      finishCalibration(v)
+      setInputValue('')
+    }
+  }
+
+  return (
+    <div
+      className="pointer-events-auto absolute left-1/2 top-4 z-40 -translate-x-1/2"
+      onPointerDown={(e) => e.stopPropagation()}
+      onPointerDownCapture={(e) => e.stopPropagation()}
+    >
+      <div
+        className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/85 px-3 py-2 shadow-lg backdrop-blur-sm"
+        style={{ minWidth: 260 }}
+      >
+        <span className="whitespace-nowrap text-[11px] text-white/70">
+          图上 <span className="font-mono font-medium text-white">{cal.measuredDistance.toFixed(2)}</span>m 实际是
+        </span>
+        <input
+          autoFocus
+          className="h-7 w-20 rounded border border-white/20 bg-white/10 px-2 text-[12px] text-white outline-none focus:border-[#2D7FF9]"
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleApply()
+            if (e.key === 'Escape') { cancelCalibration(); setInputValue('') }
+          }}
+          placeholder="米数"
+          type="number"
+          value={inputValue}
+        />
+        <span className="text-[11px] text-white/60">m</span>
+        <button
+          className="rounded bg-[#2D7FF9] px-2.5 py-1 text-[11px] font-medium text-white transition-colors hover:bg-[#2D7FF9]/90 disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={!inputValue || parseFloat(inputValue) <= 0}
+          onClick={handleApply}
+          type="button"
+        >
+          确定
+        </button>
+        <button
+          className="rounded px-2 py-1 text-[11px] text-white/50 transition-colors hover:bg-white/10 hover:text-white"
+          onClick={() => { cancelCalibration(); setInputValue('') }}
+          type="button"
+        >
+          取消
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── 罗盘组件 ─────────────────────────────────────────────────────────────────
+
+function CompassSvg({ angle, size, labels }: { angle: number; size: number; labels?: boolean }) {
+  const c = size / 2
+  const tip = size * 0.1
+  const mid = c
+  const base = size * 0.9
+  const hw = size * 0.13
+  return (
+    <svg height={size} viewBox={`0 0 ${size} ${size}`} width={size}>
+      <circle cx={c} cy={c} fill="none" r={c - 1.5} stroke="currentColor" strokeOpacity="0.2" strokeWidth="1" />
+      {labels && (
+        <>
+          <line stroke="currentColor" strokeOpacity="0.12" strokeWidth="1" x1={c} x2={c} y1={3} y2={size - 3} />
+          <line stroke="currentColor" strokeOpacity="0.12" strokeWidth="1" x1={3} x2={size - 3} y1={c} y2={c} />
+          {['E', 'S', 'W'].map((lbl, i) => {
+            const a = (i + 1) * 90
+            const rad = (a * Math.PI) / 180
+            return (
+              <text
+                dominantBaseline="middle"
+                fill="currentColor"
+                fontSize={size * 0.14}
+                fontWeight="600"
+                key={lbl}
+                opacity="0.4"
+                textAnchor="middle"
+                x={c + Math.sin(rad) * (c * 0.68)}
+                y={c - Math.cos(rad) * (c * 0.68)}
+              >
+                {lbl}
+              </text>
+            )
+          })}
+        </>
+      )}
+      <g transform={`rotate(${angle}, ${c}, ${c})`}>
+        <polygon fill="#f87171" opacity="0.92" points={`${c},${tip} ${c - hw},${mid} ${c + hw},${mid}`} />
+        <polygon fill="currentColor" opacity="0.28" points={`${c},${base} ${c - hw},${mid} ${c + hw},${mid}`} />
+        {labels && (
+          <text
+            dominantBaseline="middle"
+            fill="#fca5a5"
+            fontSize={size * 0.17}
+            fontWeight="700"
+            textAnchor="middle"
+            x={c}
+            y={tip + size * 0.12}
+          >
+            N
+          </text>
+        )}
+      </g>
+    </svg>
+  )
+}
+
+/** 建筑朝向设置：显示在 2D 平面图右下角的罗盘按钮 */
+function FloorplanCompass({
+  levelNode,
+  updateNode,
+}: {
+  levelNode: LevelNode | undefined
+  updateNode: (id: AnyNodeId, data: Record<string, unknown>) => void
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [draft, setDraft] = useState('')
+
+  if (!levelNode || levelNode.type !== 'level') return null
+  const northAngle: number = (levelNode as any).northAngle ?? 0
+
+  const commit = (deg: number) => {
+    const norm = ((Math.round(deg) % 360) + 360) % 360
+    updateNode(levelNode.id as AnyNodeId, { northAngle: norm } as Record<string, unknown>)
+  }
+
+  const PRESETS = [
+    { label: '↑', deg: 0,   title: '北朝上 (0°)' },
+    { label: '→', deg: 90,  title: '北朝右 (90°)' },
+    { label: '↓', deg: 180, title: '北朝下 (180°)' },
+    { label: '←', deg: 270, title: '北朝左 (270°)' },
+  ]
+
+  return (
+    <Popover
+      onOpenChange={(o) => { setIsOpen(o); if (o) setDraft(String(northAngle)) }}
+      open={isOpen}
+    >
+      <PopoverTrigger asChild>
+        <button
+          className="pointer-events-auto absolute right-3 bottom-3 z-30 flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-black/45 text-white shadow backdrop-blur-sm transition-colors hover:bg-black/65"
+          title={`建筑朝向 ${northAngle}°`}
+          type="button"
+        >
+          <CompassSvg angle={northAngle} size={22} />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-52 p-3" side="top">
+        <div className="mb-2.5 font-semibold text-[13px] text-foreground">建筑朝向</div>
+        <div className="mb-3 flex justify-center">
+          <CompassSvg angle={northAngle} labels size={64} />
+        </div>
+        <div className="mb-2.5 flex gap-1">
+          {PRESETS.map(({ label, deg, title }) => (
+            <button
+              className={cn(
+                'flex-1 rounded-lg py-1.5 text-sm font-medium transition-colors',
+                northAngle === deg
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80',
+              )}
+              key={deg}
+              onClick={() => commit(deg)}
+              title={title}
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <input
+            className="h-7 w-full rounded-md border border-input bg-background px-2 text-right text-[13px] focus:outline-none focus:ring-1 focus:ring-ring"
+            max={359}
+            min={0}
+            onBlur={() => { const n = parseInt(draft); if (!isNaN(n)) commit(n) }}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { const n = parseInt(draft); if (!isNaN(n)) commit(n) } }}
+            type="number"
+            value={draft}
+          />
+          <span className="shrink-0 text-muted-foreground text-[13px]">°</span>
+        </div>
+        <p className="mt-2 text-muted-foreground text-[11px] leading-relaxed">
+          正北方向距平面图"上方"顺时针角度
+        </p>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 export function FloorplanPanel() {
   const viewportHostRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -3038,6 +3912,10 @@ export function FloorplanPanel() {
   const setStructureLayer = useEditor((state) => state.setStructureLayer)
   const setTool = useEditor((state) => state.setTool)
   const tool = useEditor((state) => state.tool)
+  const calibrationActive = useEditor((state) => (state as any).calibration?.active ?? false)
+  const levelAlignment = useEditor((state) => (state as any).levelAlignment)
+  const activeWallTypeId = useEditor((state) => (state as any).wallType as string ?? 'interior')
+  const levelAlignmentActive: boolean = levelAlignment?.active ?? false
   const deleteNode = useScene((state) => state.deleteNode)
   const updateNode = useScene((state) => state.updateNode)
   const levelNode = useScene((state) =>
@@ -3144,6 +4022,33 @@ export function FloorplanPanel() {
         .filter((node): node is GuideNode => node?.type === 'guide')
     }),
   )
+  // 参考层底图（只读、半透明）—— 用于多层底图对齐
+  const referenceLevelId = useViewer((s) => s.referenceLevelId)
+  const referenceGuides = useScene(
+    useShallow((state) => {
+      if (!referenceLevelId || referenceLevelId === levelId) {
+        return [] as GuideNode[]
+      }
+      const refLevel = state.nodes[referenceLevelId]
+      if (!refLevel || refLevel.type !== 'level') {
+        return [] as GuideNode[]
+      }
+      return refLevel.children
+        .map((childId) => state.nodes[childId])
+        .filter((node): node is GuideNode => node?.type === 'guide' && node.visible !== false)
+    }),
+  )
+  // 参考层的墙体端点，供对齐模式吸附
+  const referenceWalls = useScene(
+    useShallow((state) => {
+      if (!referenceLevelId || referenceLevelId === levelId) return [] as WallNode[]
+      const refLevel = state.nodes[referenceLevelId as AnyNodeId]
+      if (!refLevel || refLevel.type !== 'level') return [] as WallNode[]
+      return refLevel.children
+        .map((childId) => state.nodes[childId as AnyNodeId])
+        .filter((node): node is WallNode => node?.type === 'wall')
+    }),
+  )
   const zones = useScene(
     useShallow((state) => {
       if (!levelId) {
@@ -3163,6 +4068,14 @@ export function FloorplanPanel() {
 
   const [draftStart, setDraftStart] = useState<WallPlanPoint | null>(null)
   const [draftEnd, setDraftEnd] = useState<WallPlanPoint | null>(null)
+  // 最近一次 hover 吸附到的端点坐标 —— 用于 click 时的"preview 优先"确认
+  const lastHoverEndpointRef = useRef<WallPlanPoint | null>(null)
+  // 正交追踪命中状态 —— 画墙时光标跟某个端点水平/垂直对齐时填充，否则 null
+  const [trackingHit, setTrackingHit] = useState<OrthogonalTrackingHit | null>(null)
+  // 延长线追踪命中状态 —— 光标在某条已有墙的无限延长线上时填充
+  const [extensionHit, setExtensionHit] = useState<ExtensionTrackingHit | null>(null)
+  // 垂直追踪命中状态 —— 光标在某条墙端点的垂直方向时填充（拐角直角辅助线）
+  const [perpendicularHit, setPerpendicularHit] = useState<WallPerpendicularHit | null>(null)
   const [slabDraftPoints, setSlabDraftPoints] = useState<WallPlanPoint[]>([])
   const [zoneDraftPoints, setZoneDraftPoints] = useState<WallPlanPoint[]>([])
   const [siteBoundaryDraft, setSiteBoundaryDraft] = useState<SiteBoundaryDraft | null>(null)
@@ -3203,6 +4116,8 @@ export function FloorplanPanel() {
   const [isPanelReady, setIsPanelReady] = useState(false)
   const [surfaceSize, setSurfaceSize] = useState({ width: 1, height: 1 })
   const [viewport, setViewport] = useState<FloorplanViewport | null>(null)
+  const [alignSuccess, setAlignSuccess] = useState(false)
+  const alignSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (structureLayer === 'zones' && floorplanSelectionTool === 'marquee') {
@@ -3311,6 +4226,54 @@ export function FloorplanPanel() {
         : guide,
     )
   }, [guideTransformDraft, visibleGuides])
+
+  // 始终预加载当前层所有 guide 的图片尺寸，不等待标定模式激活。
+  // 原因：若只在 calibrationActive=true 时才开始加载，
+  // 第二张底图在标定激活瞬间尺寸仍为 null，角点吸附候选集不完整。
+  // 图片尺寸仅加载 naturalWidth/Height，代价极低，浏览器缓存命中后几乎无延迟。
+  const calibrationGuideSpecs = useMemo(
+    () => displayGuides.map((g) => ({ id: g.id, url: g.url })),
+    [displayGuides],
+  )
+  const calibrationGuideDimensions = useGuidesDimensionsMap(calibrationGuideSpecs)
+
+  // 计算所有 guide 的候选吸附点（中心 + 4 角），只在标定激活时构建
+  const calibrationGuideAnchors = useMemo<Array<[number, number]>>(() => {
+    if (!calibrationActive) return []
+    const all: Array<[number, number]> = []
+    for (const g of displayGuides) {
+      const dims = calibrationGuideDimensions.get(g.id) ?? null
+      all.push(...getGuideCalibrationAnchors(g, dims))
+    }
+    return all
+  }, [calibrationActive, displayGuides, calibrationGuideDimensions])
+  // 参考层底图尺寸——同样预加载，保证对齐模式下参考层角点可吸附
+  const referenceGuideSpecs = useMemo(
+    () => referenceGuides.map((g) => ({ id: g.id, url: g.url })),
+    [referenceGuides],
+  )
+  const referenceGuideDimensions = useGuidesDimensionsMap(referenceGuideSpecs)
+
+  // 对齐模式吸附候选集（预计算，mousemove 时直接遍历）
+  // 参考层：墙体所有交点（L/T/X）+ 底图特征点（中心 + 4 角）
+  const referenceAlignmentAnchors = useMemo<Array<[number, number]>>(() => {
+    if (!levelAlignmentActive) return []
+    return [
+      ...getWallIntersections(referenceWalls),
+      ...referenceGuides.flatMap((g) =>
+        getGuideCalibrationAnchors(g, referenceGuideDimensions.get(g.id) ?? null),
+      ),
+    ]
+  }, [levelAlignmentActive, referenceWalls, referenceGuides, referenceGuideDimensions])
+  // 当前层：墙体所有交点 + 底图特征点
+  const currentAlignmentAnchors = useMemo<Array<[number, number]>>(() => {
+    if (!levelAlignmentActive) return []
+    const guideAnchors: Array<[number, number]> = []
+    for (const g of displayGuides) {
+      guideAnchors.push(...getGuideCalibrationAnchors(g, calibrationGuideDimensions.get(g.id) ?? null))
+    }
+    return [...getWallIntersections(walls), ...guideAnchors]
+  }, [levelAlignmentActive, walls, displayGuides, calibrationGuideDimensions])
   const selectedGuideId =
     selectedReferenceId && guideById.has(selectedReferenceId as GuideNode['id'])
       ? (selectedReferenceId as GuideNode['id'])
@@ -3366,6 +4329,12 @@ export function FloorplanPanel() {
     nextFloorplanWallById.set(previewWall.id, getFloorplanWall(previewWall))
     return nextFloorplanWallById
   }, [displayWallById, floorplanWallById, wallEndpointDraft])
+  // 拖动端点时，用包含 draft 位置的墙体重新计算所有墙角 miter
+  const displayWallMiterData = useMemo(() => {
+    if (!wallEndpointDraft) return wallMiterData
+    const displayFloorplanWalls = Array.from(displayFloorplanWallById.values())
+    return calculateLevelMiters(displayFloorplanWalls)
+  }, [wallEndpointDraft, displayFloorplanWallById, wallMiterData])
   const wallPolygons = useMemo(
     () =>
       walls.map((wall) => {
@@ -3379,31 +4348,35 @@ export function FloorplanPanel() {
       }),
     [floorplanWallById, wallMiterData, walls],
   )
+  // Junction cap 多边形：填充不同厚度墙体拼接时的缝隙（随拖动实时更新）
+  const junctionCapPolygons = useMemo(() => {
+    const caps = displayWallMiterData.junctionCaps
+    const result: Array<{ key: string; points: string }> = []
+    for (const [key, cap] of caps.entries()) {
+      if (cap.length >= 3) {
+        result.push({ key, points: formatPolygonPoints(cap) })
+      }
+    }
+    return result
+  }, [displayWallMiterData.junctionCaps])
   const displayWallPolygons = useMemo(() => {
     if (!wallEndpointDraft) {
       return wallPolygons
     }
 
-    const previewWall = displayWallById.get(wallEndpointDraft.wallId)
-    if (!previewWall) {
-      return wallPolygons
-    }
-
-    const previewPolygon = getWallPlanFootprint(
-      getFloorplanWall(previewWall),
-      EMPTY_WALL_MITER_DATA,
-    )
-
-    return wallPolygons.map((entry) =>
-      entry.wall.id === previewWall.id
-        ? {
-            wall: previewWall,
-            polygon: previewPolygon,
-            points: formatPolygonPoints(previewPolygon),
-          }
-        : entry,
-    )
-  }, [displayWallById, wallEndpointDraft, wallPolygons])
+    // 拖动端点时，用更新后的 miter 数据重新计算所有受影响墙体的多边形
+    // 这样拖动的墙和相邻墙的墙角都能实时正确对接
+    return walls.map((wall) => {
+      const floorplanWall = displayFloorplanWallById.get(wall.id) ?? getFloorplanWall(wall)
+      const polygon = getWallPlanFootprint(floorplanWall, displayWallMiterData)
+      const displayWall = displayWallById.get(wall.id) ?? wall
+      return {
+        wall: displayWall,
+        polygon,
+        points: formatPolygonPoints(polygon),
+      }
+    })
+  }, [displayWallById, displayFloorplanWallById, displayWallMiterData, wallEndpointDraft, wallPolygons, walls])
 
   const openingsPolygons = useMemo(
     () =>
@@ -3728,14 +4701,54 @@ export function FloorplanPanel() {
       return null
     }
 
-    const draftWall = getFloorplanWall(buildDraftWall(levelId, draftStart, draftEnd))
+    // 用当前选中墙种类的厚度，让 draft 预览和实际创建的墙保持一致
+    const activeWallDef = WALL_TYPE_BY_ID[activeWallTypeId as keyof typeof WALL_TYPE_BY_ID]
+    const draftWall = getFloorplanWall(buildDraftWall(levelId, draftStart, draftEnd, activeWallDef?.thickness))
     // Keep the live draft preview cheap; full level-wide mitering here runs on every mouse move.
     return getWallPlanFootprint(draftWall, EMPTY_WALL_MITER_DATA)
-  }, [draftEnd, draftStart, levelId])
+  }, [activeWallTypeId, draftEnd, draftStart, levelId])
   const draftPolygonPoints = useMemo(
     () => (draftPolygon ? formatPolygonPoints(draftPolygon) : null),
     [draftPolygon],
   )
+  // 画墙实时长度 / 角度 —— 纯渲染层，不影响任何既有逻辑
+  const draftMeasurement = useMemo(() => {
+    if (!(draftStart && draftEnd)) return null
+    const dx = draftEnd[0] - draftStart[0]
+    const dz = draftEnd[1] - draftStart[1]
+    const length = Math.sqrt(dx * dx + dz * dz)
+    if (length < 1e-4) return null
+    // 角度：0° = 正右方向（+x），顺时针为正，显示到 0°/45°/90° 对齐时为整数
+    let angleDeg = (Math.atan2(dz, dx) * 180) / Math.PI
+    if (angleDeg < 0) angleDeg += 360
+    // 中点（世界坐标）
+    const midX = (draftStart[0] + draftEnd[0]) / 2
+    const midZ = (draftStart[1] + draftEnd[1]) / 2
+    // 法向量（垂直于线），用于把文字"推"到线外侧
+    const nx = length > 0 ? -dz / length : 0
+    const nz = length > 0 ? dx / length : 0
+    // 是否贴近 45° 的倍数（吸附激活状态）
+    // 由于 snapPointTo45Degrees 在 !shiftPressed 时会把 end 吸到 45° 倍数上，
+    // 这里检查实际角度是否在容差内，命中则认为追踪线激活
+    const nearest45 = Math.round(angleDeg / 45) * 45
+    const angleDiff = Math.abs(((angleDeg - nearest45 + 540) % 360) - 180)
+    // 90° 轴外，180° 内：abs diff < 0.5° 视为命中
+    const snapDirectionDeg = angleDiff < 0.5 ? ((nearest45 + 360) % 360) : null
+    // 轴类别：0/90/180/270 = 正交（蓝），45/135/225/315 = 对角（琥珀）
+    const isOrthogonal = snapDirectionDeg !== null && snapDirectionDeg % 90 === 0
+    return {
+      length,
+      angleDeg,
+      midX,
+      midZ,
+      nx,
+      nz,
+      startX: draftStart[0],
+      startZ: draftStart[1],
+      snapDirectionDeg,
+      isOrthogonal,
+    }
+  }, [draftStart, draftEnd])
   const activePolygonDraftPoints = useMemo(() => {
     if (isZoneBuildActive) {
       return zoneDraftPoints
@@ -4571,6 +5584,7 @@ export function FloorplanPanel() {
         start: dragState.fixedPoint,
         angleSnap: !shiftPressed,
         ignoreWallIds: [dragState.wallId],
+        worldUnitsPerPixel: floorplanWorldUnitsPerPixel,
       })
 
       if (pointsEqual(dragState.currentPoint, snappedPoint)) {
@@ -5193,19 +6207,129 @@ export function FloorplanPanel() {
         return
       }
 
-      if (!isWallBuildActive) {
-        setCursorPoint(null)
+      // 标定模式下也要更新 cursorPoint，让 CalibrationOverlay 能渲染悬停预览
+      const calForHover = useEditor.getState().calibration
+      if (calForHover?.active && calForHover.points.length < 2) {
+        const calResult = snapCalibrationPoint(
+          [planPoint[0], planPoint[1]],
+          walls,
+          calForHover.points,
+          calibrationGuideAnchors,
+          !shiftPressed && calForHover.points.length === 1,
+        )
+        setCursorPoint(calResult.point)
         return
       }
 
-      const snappedPoint = snapWallDraftPoint({
-        point: planPoint,
-        walls,
-        start: draftStart ?? undefined,
-        angleSnap: Boolean(draftStart) && !shiftPressed,
-      })
+      // 对齐模式下也要更新 cursorPoint，让 LevelAlignmentOverlay 渲染实时吸附预览
+      // 传入原始鼠标位置即可，Overlay 内部会做 snapAlignmentPoint 计算
+      if (useEditor.getState().levelAlignment?.active) {
+        setCursorPoint(planPoint)
+        return
+      }
+
+      if (!isWallBuildActive) {
+        setCursorPoint(null)
+        setTrackingHit(null)
+        setExtensionHit(null)
+        setPerpendicularHit(null)
+        // 剥离选择：按垂直距离确定悬停墙体，解决 T/X 交叉点选择歧义
+        // 只在 select+click 模式下运行（不影响画墙/删除/框选等其他模式）
+        // tolerance = 命中线宽（保证与 SVG 点击区一致）+ 墙半厚（覆盖填充区域边缘，避免厚墙外侧无法选中）
+        if (canSelectElementFloorplanGeometry) {
+          const hoverPt = toPoint2D(planPoint)
+          let bestId: string | null = null
+          let bestDist = Infinity
+          for (const { wall } of displayWallPolygons) {
+            const d = getDistanceToWallSegment(hoverPt, wall.start, wall.end)
+            const wallTolerance = floorplanWallHitTolerance + (wall.thickness ?? 0) / 2
+            if (d < wallTolerance && d < bestDist) {
+              bestDist = d
+              bestId = wall.id
+            }
+          }
+          setHoveredWallId(bestId as `wall_${string}` | null)
+        }
+        return
+      }
+
+      // 自动参考线追踪 —— 只在已经有 draftStart（chain 画墙激活）时启用
+      // 优先级：正交追踪 > 垂直追踪 > 延长线追踪 > 角度/网格吸附
+      let trackedPoint: WallPlanPoint | null = null
+      let nextTrackingHit: OrthogonalTrackingHit | null = null
+      let nextExtensionHit: ExtensionTrackingHit | null = null
+      let nextPerpendicularHit: WallPerpendicularHit | null = null
+      if (draftStart && !shiftPressed) {
+        // 像素级容差转换到世界单位，保证缩放时手感稳定
+        const tolerance = floorplanWorldUnitsPerPixel * 8
+        // (1) 正交追踪（世界坐标轴对齐，适合轴对齐的墙）
+        const candidates = collectTrackingCandidates({
+          walls,
+          draftStart,
+          cursor: planPoint,
+          distanceLimit: 4, // 4 米内的端点参与追踪
+        })
+        const orthoHit = computeOrthogonalTracking({
+          cursor: planPoint,
+          candidates,
+          tolerance,
+        })
+        if (orthoHit) {
+          nextTrackingHit = orthoHit
+          trackedPoint = orthoHit.snappedPoint
+        } else {
+          // (2) 垂直追踪：光标在某条已有墙端点的垂直方向上（拐角直角辅助）
+          const perpHit = computeWallPerpendicularTracking({
+            cursor: planPoint,
+            walls,
+            tolerance,
+          })
+          if (perpHit) {
+            nextPerpendicularHit = perpHit
+            trackedPoint = perpHit.snappedPoint
+          } else {
+            // (3) 延长线追踪：光标在某条已有墙的无限延长线上（断墙续接辅助）
+            const extHit = computeExtensionTracking({
+              cursor: planPoint,
+              walls,
+              tolerance: floorplanWorldUnitsPerPixel * 10, // 延长线用稍宽容差
+            })
+            if (extHit) {
+              nextExtensionHit = extHit
+              trackedPoint = extHit.snappedPoint
+            }
+          }
+        }
+      }
+
+      const snappedPoint = trackedPoint
+        ? snapWallDraftPoint({
+            point: trackedPoint,
+            walls,
+            start: draftStart ?? undefined,
+            angleSnap: false,  // 追踪命中时不再做 45° 吸附
+            noGridSnap: true,  // 追踪命中时不再做网格吸附
+            worldUnitsPerPixel: floorplanWorldUnitsPerPixel,
+          })
+        : snapWallDraftPoint({
+            point: planPoint,
+            walls,
+            start: draftStart ?? undefined,
+            angleSnap: Boolean(draftStart) && !shiftPressed,
+            worldUnitsPerPixel: floorplanWorldUnitsPerPixel,
+          })
+
+      // 记录端点吸附结果：检查 snappedPoint 是否精确落在某个已有端点上（1mm 以内）
+      // click 时若光标在 60px 内则直接用它，消除 hover→click 的坐标漂移问题
+      {
+        const epHit = findWallSnapTarget(snappedPoint, walls, { radius: 0.001 })
+        lastHoverEndpointRef.current = epHit?.kind === 'endpoint' ? snappedPoint : null
+      }
 
       setCursorPoint(snappedPoint)
+      setTrackingHit(nextTrackingHit)
+      setExtensionHit(nextExtensionHit)
+      setPerpendicularHit(nextPerpendicularHit)
 
       if (!draftStart) {
         return
@@ -5224,9 +6348,14 @@ export function FloorplanPanel() {
       })
     },
     [
+      calibrationGuideAnchors,
+      canSelectElementFloorplanGeometry,
+      displayWallPolygons,
       draftStart,
       emitFloorplanWallLeave,
       floorplanOpeningLocalY,
+      floorplanWallHitTolerance,
+      floorplanWorldUnitsPerPixel,
       fittedViewport,
       getPlanPointFromClientPoint,
       activePolygonDraftPoints,
@@ -5352,13 +6481,22 @@ export function FloorplanPanel() {
       }
 
       createWallOnCurrentLevel(draftStart, point)
-      clearDraft()
+
+      // Chain 画墙：新墙的起点 = 刚画完的墙的终点
+      // 按 Escape 键断开 chain
+      setDraftStart(point)
+      setDraftEnd(point)
+      setCursorPoint(point)
     },
-    [clearDraft, draftStart],
+    [draftStart],
   )
 
   const handleBackgroundClick = useCallback(
     (event: ReactMouseEvent<SVGSVGElement>) => {
+      // 标定模式：已在 onPointerDownCapture 中处理，click 阶段直接跳过
+      const cal = useEditor.getState().calibration
+      if (cal?.active) return
+
       if (isPolygonBuildActive && event.detail >= 2) {
         return
       }
@@ -5424,18 +6562,71 @@ export function FloorplanPanel() {
         return
       }
 
+      // 点击时与 handlePointerMove 保持一致：先做追踪约束，再做吸附
+      // 若跳过追踪，tracking 把光标拉到端点附近后用户点击，但 raw 光标可能超出吸附半径，导致连接失败
+      let clickBasePoint: WallPlanPoint = planPoint
+      let trackingHit = false
+      if (draftStart && !shiftPressed) {
+        const tolerance = floorplanWorldUnitsPerPixel * 8
+        const candidates = collectTrackingCandidates({
+          walls,
+          draftStart,
+          cursor: planPoint,
+          distanceLimit: 4,
+        })
+        const orthoHit = computeOrthogonalTracking({ cursor: planPoint, candidates, tolerance })
+        if (orthoHit) {
+          clickBasePoint = orthoHit.snappedPoint
+          trackingHit = true
+        } else {
+          const perpHit = computeWallPerpendicularTracking({ cursor: planPoint, walls, tolerance })
+          if (perpHit) {
+            clickBasePoint = perpHit.snappedPoint
+            trackingHit = true
+          } else {
+            const extHit = computeExtensionTracking({
+              cursor: planPoint,
+              walls,
+              tolerance: floorplanWorldUnitsPerPixel * 10,
+            })
+            if (extHit) {
+              clickBasePoint = extHit.snappedPoint
+              trackingHit = true
+            }
+          }
+        }
+      }
+
       const snappedPoint = snapWallDraftPoint({
-        point: planPoint,
+        point: clickBasePoint,
         walls,
         start: draftStart ?? undefined,
-        angleSnap: Boolean(draftStart) && !shiftPressed,
+        angleSnap: Boolean(draftStart) && !shiftPressed && !trackingHit,
+        noGridSnap: trackingHit,
+        worldUnitsPerPixel: floorplanWorldUnitsPerPixel,
       })
 
-      handleWallPlacementPoint(snappedPoint)
+      // Preview 优先：如果 hover 最后一帧已经把端点吸附好了，click 就用那个端点
+      // 这样可以消除"preview 看到连接、click 却落偏"的问题
+      // 条件：1) hover 记录了端点吸附  2) click 落点与该端点在 60px 内（容许手抖/拖拽释放偏移）
+      let finalPoint = snappedPoint
+      const lastEp = lastHoverEndpointRef.current
+      if (lastEp && floorplanWorldUnitsPerPixel) {
+        const CONFIRM_PIXELS = 60
+        const confirmRadius = CONFIRM_PIXELS * floorplanWorldUnitsPerPixel
+        const dx = planPoint[0] - lastEp[0]
+        const dz = planPoint[1] - lastEp[1]
+        if (dx * dx + dz * dz <= confirmRadius * confirmRadius) {
+          finalPoint = lastEp
+        }
+      }
+
+      handleWallPlacementPoint(finalPoint)
     },
     [
       draftStart,
       floorplanOpeningLocalY,
+      floorplanWorldUnitsPerPixel,
       getPlanPointFromClientPoint,
       activePolygonDraftPoints,
       canSelectFloorplanZones,
@@ -5634,21 +6825,29 @@ export function FloorplanPanel() {
 
   const handleWallClick = useCallback(
     (wall: WallNode, event: ReactMouseEvent<SVGElement>) => {
-      const centerX = (wall.start[0] + wall.end[0]) / 2
-      const centerZ = (wall.start[1] + wall.end[1]) / 2
-      const halfLength = Math.hypot(wall.end[0] - wall.start[0], wall.end[1] - wall.start[1]) / 2
+      // 剥离选择：距离追踪锁定的墙优先于 SVG z 序命中的墙
+      // 解决 T/X 型交叉点处"点到哪面墙就选哪面"的歧义
+      const targetWall =
+        hoveredWallId && hoveredWallId !== wall.id
+          ? (displayWallPolygons.find(({ wall: w }) => w.id === hoveredWallId)?.wall ?? wall)
+          : wall
+
+      const centerX = (targetWall.start[0] + targetWall.end[0]) / 2
+      const centerZ = (targetWall.start[1] + targetWall.end[1]) / 2
+      const halfLength =
+        Math.hypot(targetWall.end[0] - targetWall.start[0], targetWall.end[1] - targetWall.start[1]) / 2
       const localY = isOpeningPlacementActive ? floorplanOpeningLocalY : 0
 
       setSelectedReferenceId(null)
       emitter.emit('wall:click', {
-        node: wall,
+        node: targetWall,
         position: [centerX, 0, centerZ],
         localPosition: [halfLength, localY, 0],
         stopPropagation: () => event.stopPropagation(),
         nativeEvent: event.nativeEvent as any,
       } as any)
     },
-    [floorplanOpeningLocalY, isOpeningPlacementActive, setSelectedReferenceId],
+    [displayWallPolygons, floorplanOpeningLocalY, hoveredWallId, isOpeningPlacementActive, setSelectedReferenceId],
   )
 
   const handleWallDoubleClick = useCallback(
@@ -6765,6 +7964,91 @@ export function FloorplanPanel() {
           <svg
             className="h-full w-full touch-none"
             onClick={isMarqueeSelectionToolActive ? undefined : handleBackgroundClick}
+            onPointerDownCapture={(event) => {
+              // 标定模式：捕获阶段拦截并直接记录点位
+              const cal = useEditor.getState().calibration
+              if (cal?.active && cal.points.length < 2 && event.button === 0) {
+                event.stopPropagation()
+                const raw = getPlanPointFromClientPoint(event.clientX, event.clientY)
+                if (raw) {
+                  const calResult = snapCalibrationPoint(
+                    [raw[0], raw[1]],
+                    walls,
+                    cal.points,
+                    calibrationGuideAnchors,
+                    !shiftPressed && cal.points.length === 1,
+                  )
+                  useEditor.getState().addCalibrationPoint(calResult.point)
+                  // 音效反馈
+                  sfxEmitter.emit('sfx:grid-snap')
+                }
+              }
+
+              // 多层对齐模式：按阶段收集参考层 / 当前层各 2 个点
+              const la = useEditor.getState().levelAlignment
+              if (la?.active && event.button === 0) {
+                const phasePoints = la.phase === 'ref' ? la.refPoints : la.curPoints
+                if (phasePoints.length < 2) {
+                  event.stopPropagation()
+                  const raw = getPlanPointFromClientPoint(event.clientX, event.clientY)
+                  if (raw) {
+                    // 吸附候选集：始终用当前画布的锚点（包含当前显示层的墙体交点+底图角点）
+                    // phase='cur' 时用户在被对齐层 → currentAlignmentAnchors = 被对齐层的锚点 ✓
+                    // phase='ref' 时已自动切到参考层 → currentAlignmentAnchors = 参考层的锚点 ✓
+                    // 不能用 referenceAlignmentAnchors，切层后 levelId===referenceLevelId 导致其为空
+                    const snapCandidates = currentAlignmentAnchors
+                    const snapRadius = ALIGNMENT_SNAP_PIXELS * floorplanWorldUnitsPerPixel
+                    const { snapped } = snapAlignmentPoint([raw[0], raw[1]], snapCandidates, snapRadius)
+                    useEditor.getState().addLevelAlignmentPoint(snapped)
+                    sfxEmitter.emit('sfx:grid-snap')
+
+                    const updated = useEditor.getState().levelAlignment
+
+                    // cur → ref 阶段切换：自动跳转到参考层，让用户在参考层画布上点对应特征点
+                    // 切层后 currentAlignmentAnchors 会重算为参考层的锚点，吸附自然生效
+                    if (la.phase === 'cur' && updated.phase === 'ref') {
+                      const refLevelId = useViewer.getState().referenceLevelId
+                      if (refLevelId) {
+                        const { selection } = useViewer.getState()
+                        useViewer.getState().setSelection(
+                          selection.buildingId
+                            ? { buildingId: selection.buildingId, levelId: refLevelId }
+                            : { levelId: refLevelId },
+                        )
+                      }
+                    }
+
+                    // 检查是否 4 个点全部收集完毕 → 立即应用对齐，并跳回原层
+                    if (
+                      updated.refPoints.length === 2 &&
+                      updated.curPoints.length === 2
+                    ) {
+                      // aligningLevelId 是对齐开始时记录的"当前层"，不受自动切层影响
+                      const targetLevelId = updated.aligningLevelId ?? levelId
+                      if (targetLevelId) {
+                        applyLevelAlignment(
+                          targetLevelId,
+                          [updated.refPoints[0]!, updated.refPoints[1]!],
+                          [updated.curPoints[0]!, updated.curPoints[1]!],
+                        )
+                        useEditor.getState().cancelLevelAlignment()
+                        // 对齐完成后跳回被对齐的那一层
+                        const { selection } = useViewer.getState()
+                        useViewer.getState().setSelection(
+                          selection.buildingId
+                            ? { buildingId: selection.buildingId, levelId: targetLevelId }
+                            : { levelId: targetLevelId },
+                        )
+                        // 成功提示 — 2.5 秒后自动消失
+                        setAlignSuccess(true)
+                        if (alignSuccessTimerRef.current) clearTimeout(alignSuccessTimerRef.current)
+                        alignSuccessTimerRef.current = setTimeout(() => setAlignSuccess(false), 2500)
+                      }
+                    }
+                  }
+                }
+              }
+            }}
             onContextMenu={(event) => event.preventDefault()}
             onDoubleClick={isMarqueeSelectionToolActive ? undefined : handleBackgroundDoubleClick}
             onPointerCancel={endPanning}
@@ -6773,7 +8057,7 @@ export function FloorplanPanel() {
             onPointerMove={handleSvgPointerMove}
             onPointerUp={endPanning}
             ref={svgRef}
-            style={{ cursor: EDITOR_CURSOR }}
+            style={{ cursor: calibrationActive || levelAlignmentActive ? 'crosshair' : EDITOR_CURSOR }}
             viewBox={`${viewBox.minX} ${viewBox.minY} ${viewBox.width} ${viewBox.height}`}
           >
             <rect
@@ -6790,6 +8074,9 @@ export function FloorplanPanel() {
               palette={palette}
               showGrid={showGrid}
             />
+
+            {/* 参考层底图（半透明、不可交互）—— 多层底图对齐 */}
+            <FloorplanReferenceGuideLayer guides={referenceGuides} />
 
             <FloorplanGuideLayer
               activeGuideInteractionGuideId={activeGuideInteractionGuideId}
@@ -6808,6 +8095,7 @@ export function FloorplanPanel() {
               canSelectSlabs={canSelectElementFloorplanGeometry && structureLayer !== 'zones'}
               hoveredOpeningId={hoveredOpeningId}
               hoveredWallId={hoveredWallId}
+              junctionCapPolygons={junctionCapPolygons}
               onOpeningDoubleClick={handleOpeningDoubleClick}
               onOpeningHoverChange={setHoveredOpeningId}
               onOpeningPointerDown={handleOpeningPointerDown}
@@ -6889,17 +8177,493 @@ export function FloorplanPanel() {
               />
             )}
 
-            {draftPolygon && (
-              <polygon
-                fill={palette.draftFill}
-                fillOpacity={0.35}
-                points={draftPolygonPoints ?? undefined}
-                stroke={palette.draftStroke}
-                strokeDasharray="0.24 0.12"
-                strokeWidth="0.07"
-                vectorEffect="non-scaling-stroke"
-              />
-            )}
+            {/* Step A：端点正交追踪辅助线 —— 光标跟已有端点水平/垂直对齐时显示
+                + 距离数值标签让用户能精确对齐 */}
+            {trackingHit && cursorPoint && (() => {
+              const px = floorplanWorldUnitsPerPixel
+              const extent = Math.max(viewBox.width, viewBox.height) * 2
+              const color = '#2D7FF9'
+              const fontSizeWorld = 11 * px
+              const padX = 5 * px
+              const padY = 2.5 * px
+              const labelHeight = fontSizeWorld + padY * 2
+              const elements: React.ReactNode[] = []
+
+              // 格式化距离：< 1m 用 mm，否则用 m
+              const fmtDist = (d: number) =>
+                d >= 1 ? `${d.toFixed(2)} m` : `${(d * 1000).toFixed(0)} mm`
+
+              // 渲染一个距离标签（锚点 + 光标间中点附近）
+              const renderDistanceLabel = (
+                key: string,
+                anchor: WallPlanPoint,
+                midSvgX: number,
+                midSvgY: number,
+                direction: '←' | '→' | '↑' | '↓',
+                distance: number,
+              ) => {
+                const text = `${direction} ${fmtDist(distance)}`
+                const charWidth = fontSizeWorld * 0.6
+                const labelWidth = text.length * charWidth + padX * 2
+                return (
+                  <g key={key} pointerEvents="none">
+                    <rect
+                      x={midSvgX - labelWidth / 2}
+                      y={midSvgY - labelHeight / 2}
+                      width={labelWidth}
+                      height={labelHeight}
+                      rx={2 * px}
+                      ry={2 * px}
+                      fill="rgba(15,23,42,0.9)"
+                      stroke="rgba(45,127,249,0.7)"
+                      strokeWidth={1 * px}
+                    />
+                    <text
+                      x={midSvgX}
+                      y={midSvgY}
+                      fill="#ffffff"
+                      fontSize={fontSizeWorld}
+                      fontFamily="ui-monospace, SFMono-Regular, monospace"
+                      fontWeight={600}
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                    >
+                      {text}
+                    </text>
+                  </g>
+                )
+              }
+
+              // 水平追踪线（跨屏 + 从锚点到光标）
+              if (trackingHit.horizontalAnchor) {
+                const a = trackingHit.horizontalAnchor
+                elements.push(
+                  <line
+                    key="h-ray"
+                    x1={toSvgX(a[0] - extent)}
+                    y1={toSvgY(a[1])}
+                    x2={toSvgX(a[0] + extent)}
+                    y2={toSvgY(a[1])}
+                    stroke={color}
+                    strokeWidth="0.06"
+                    strokeOpacity={0.45}
+                    strokeDasharray="0.3 0.2"
+                    vectorEffect="non-scaling-stroke"
+                    pointerEvents="none"
+                  />,
+                )
+                // 锚点标记（小十字）
+                elements.push(
+                  <g key="h-anchor" pointerEvents="none">
+                    <line
+                      x1={toSvgX(a[0] - 6 * px)}
+                      y1={toSvgY(a[1])}
+                      x2={toSvgX(a[0] + 6 * px)}
+                      y2={toSvgY(a[1])}
+                      stroke={color}
+                      strokeWidth="0.1"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                    <line
+                      x1={toSvgX(a[0])}
+                      y1={toSvgY(a[1] - 6 * px)}
+                      x2={toSvgX(a[0])}
+                      y2={toSvgY(a[1] + 6 * px)}
+                      stroke={color}
+                      strokeWidth="0.1"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  </g>,
+                )
+                // 距离标签：水平追踪 = 光标在锚点水平线上，距离 = |cursorX - anchorX|
+                const horizontalDist = Math.abs(cursorPoint[0] - a[0])
+                if (horizontalDist > 0.05) {
+                  // 方向：cursorX > anchorX 时光标在锚点右边（→），反之（←）
+                  // 但标签应指向锚点，所以方向相反
+                  const direction = cursorPoint[0] > a[0] ? '←' : '→'
+                  // 标签位置：锚点和光标在水平线上的中点
+                  const midX = (a[0] + cursorPoint[0]) / 2
+                  // 略微上移避开追踪线本身
+                  const labelSvgY = toSvgY(a[1]) - 10 * px
+                  elements.push(
+                    renderDistanceLabel(
+                      'h-dist',
+                      a,
+                      toSvgX(midX),
+                      labelSvgY,
+                      direction,
+                      horizontalDist,
+                    ),
+                  )
+                }
+              }
+              // 垂直追踪线
+              if (trackingHit.verticalAnchor) {
+                const a = trackingHit.verticalAnchor
+                elements.push(
+                  <line
+                    key="v-ray"
+                    x1={toSvgX(a[0])}
+                    y1={toSvgY(a[1] - extent)}
+                    x2={toSvgX(a[0])}
+                    y2={toSvgY(a[1] + extent)}
+                    stroke={color}
+                    strokeWidth="0.06"
+                    strokeOpacity={0.45}
+                    strokeDasharray="0.3 0.2"
+                    vectorEffect="non-scaling-stroke"
+                    pointerEvents="none"
+                  />,
+                )
+                // 锚点标记（避免重复：如果水平和垂直是同一个点，跳过）
+                if (
+                  !trackingHit.horizontalAnchor ||
+                  trackingHit.horizontalAnchor[0] !== a[0] ||
+                  trackingHit.horizontalAnchor[1] !== a[1]
+                ) {
+                  elements.push(
+                    <g key="v-anchor" pointerEvents="none">
+                      <line
+                        x1={toSvgX(a[0] - 6 * px)}
+                        y1={toSvgY(a[1])}
+                        x2={toSvgX(a[0] + 6 * px)}
+                        y2={toSvgY(a[1])}
+                        stroke={color}
+                        strokeWidth="0.1"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                      <line
+                        x1={toSvgX(a[0])}
+                        y1={toSvgY(a[1] - 6 * px)}
+                        x2={toSvgX(a[0])}
+                        y2={toSvgY(a[1] + 6 * px)}
+                        stroke={color}
+                        strokeWidth="0.1"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                    </g>,
+                  )
+                }
+                // 距离标签：垂直追踪 = 光标在锚点垂直线上，距离 = |cursorZ - anchorZ|
+                const verticalDist = Math.abs(cursorPoint[1] - a[1])
+                if (verticalDist > 0.05) {
+                  // plan z 轴：z > anchorZ 表示光标在锚点下方（planZ 向下为正）
+                  // 标签指向锚点方向
+                  const direction = cursorPoint[1] > a[1] ? '↑' : '↓'
+                  const midZ = (a[1] + cursorPoint[1]) / 2
+                  // 略微右移避开追踪线本身
+                  const labelSvgX = toSvgX(a[0]) + 14 * px
+                  elements.push(
+                    renderDistanceLabel(
+                      'v-dist',
+                      a,
+                      labelSvgX,
+                      toSvgY(midZ),
+                      direction,
+                      verticalDist,
+                    ),
+                  )
+                }
+              }
+              return <>{elements}</>
+            })()}
+
+            {/* Step B：延长线追踪 —— 光标在某条墙的无限延长线上时显示 */}
+            {extensionHit && cursorPoint && (() => {
+              const px = floorplanWorldUnitsPerPixel
+              const wall = extensionHit.wall
+              const color = '#2D7FF9'
+              // 延长线：从墙的参考端点沿墙方向延伸到光标投影位置（+ 继续延伸一点点）
+              const refPoint = extensionHit.referencePoint
+              const snappedPoint = extensionHit.snappedPoint
+              // 方向向量：从参考端点指向投影点
+              const dx = snappedPoint[0] - refPoint[0]
+              const dz = snappedPoint[1] - refPoint[1]
+              const len = Math.sqrt(dx * dx + dz * dz)
+              if (len < 1e-4) return null
+              // 延长到更远的地方（参考端点 → 投影点 + 1m 继续延伸），让用户看清方向
+              const tailExtend = 1.0
+              const tailX = snappedPoint[0] + (dx / len) * tailExtend
+              const tailZ = snappedPoint[1] + (dz / len) * tailExtend
+              // 格式化距离
+              const distLabel = len >= 1
+                ? `${len.toFixed(2)} m`
+                : `${(len * 1000).toFixed(0)} mm`
+              const fontSizeWorld = 11 * px
+              const padX = 5 * px
+              const padY = 2.5 * px
+              const labelHeight = fontSizeWorld + padY * 2
+              // 距离标签放在延长线中点（参考端点和投影点之间）
+              const midX = (refPoint[0] + snappedPoint[0]) / 2
+              const midZ = (refPoint[1] + snappedPoint[1]) / 2
+              // 往法线方向略微偏移，避免盖住延长线
+              const nx = -dz / len
+              const nz = dx / len
+              const labelWorldX = midX + nx * 10 * px
+              const labelWorldZ = midZ + nz * 10 * px
+              const text = `延长 ${distLabel}`
+              const charWidth = fontSizeWorld * 0.6
+              const labelWidth = text.length * charWidth + padX * 2
+              return (
+                <g pointerEvents="none">
+                  {/* 延长虚线：从参考端点到投影点再继续延伸 */}
+                  <line
+                    x1={toSvgX(refPoint[0])}
+                    y1={toSvgY(refPoint[1])}
+                    x2={toSvgX(tailX)}
+                    y2={toSvgY(tailZ)}
+                    stroke={color}
+                    strokeWidth="0.08"
+                    strokeOpacity={0.55}
+                    strokeDasharray="0.28 0.18"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  {/* 参考端点标记（小十字） */}
+                  <line
+                    x1={toSvgX(refPoint[0] - 6 * px)}
+                    y1={toSvgY(refPoint[1])}
+                    x2={toSvgX(refPoint[0] + 6 * px)}
+                    y2={toSvgY(refPoint[1])}
+                    stroke={color}
+                    strokeWidth="0.1"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  <line
+                    x1={toSvgX(refPoint[0])}
+                    y1={toSvgY(refPoint[1] - 6 * px)}
+                    x2={toSvgX(refPoint[0])}
+                    y2={toSvgY(refPoint[1] + 6 * px)}
+                    stroke={color}
+                    strokeWidth="0.1"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  {/* 距离标签 */}
+                  <rect
+                    x={toSvgX(labelWorldX) - labelWidth / 2}
+                    y={toSvgY(labelWorldZ) - labelHeight / 2}
+                    width={labelWidth}
+                    height={labelHeight}
+                    rx={2 * px}
+                    ry={2 * px}
+                    fill="rgba(15,23,42,0.9)"
+                    stroke="rgba(45,127,249,0.7)"
+                    strokeWidth={1 * px}
+                  />
+                  <text
+                    x={toSvgX(labelWorldX)}
+                    y={toSvgY(labelWorldZ)}
+                    fill="#ffffff"
+                    fontSize={fontSizeWorld}
+                    fontFamily="ui-monospace, SFMono-Regular, monospace"
+                    fontWeight={600}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                  >
+                    {text}
+                  </text>
+                </g>
+              )
+            })()}
+
+            {/* Step C：垂直追踪辅助线 —— 光标在某条已有墙端点的垂直方向时显示
+                直角标记（L形）＋ 距离标签，帮助在斜墙拐角处画精确直角 */}
+            {perpendicularHit && cursorPoint && (() => {
+              const px = floorplanWorldUnitsPerPixel
+              const { anchorPoint, snappedPoint, wallUnitVector } = perpendicularHit
+              const color = '#2D7FF9'
+              const [ux, uz] = wallUnitVector
+              // 垂直单位向量（沿墙 90° CCW）
+              const vx = -uz
+              const vz = ux
+              // 距离
+              const ddx = snappedPoint[0] - anchorPoint[0]
+              const ddz = snappedPoint[1] - anchorPoint[1]
+              const dist = Math.sqrt(ddx * ddx + ddz * ddz)
+              if (dist < 0.005) return null
+              const distLabel = dist >= 1 ? `⊥ ${dist.toFixed(2)} m` : `⊥ ${(dist * 1000).toFixed(0)} mm`
+              const fontSizeWorld = 11 * px
+              const padX = 5 * px
+              const padY = 2.5 * px
+              const labelHeight = fontSizeWorld + padY * 2
+              const charWidth = fontSizeWorld * 0.6
+              const labelWidth = distLabel.length * charWidth + padX * 2
+              // 标签放在垂直线中点，沿墙方向偏移避开线本身
+              const midX = (anchorPoint[0] + snappedPoint[0]) / 2
+              const midZ = (anchorPoint[1] + snappedPoint[1]) / 2
+              const labelX = midX + ux * 12 * px
+              const labelZ = midZ + uz * 12 * px
+              // 直角标记（小 L 形）：5px 沿墙 + 5px 沿垂直
+              const cs = 5 * px
+              const cAx = anchorPoint[0] + ux * cs
+              const cAz = anchorPoint[1] + uz * cs
+              const cBx = cAx + vx * cs
+              const cBz = cAz + vz * cs
+              const cCx = anchorPoint[0] + vx * cs
+              const cCz = anchorPoint[1] + vz * cs
+              return (
+                <g pointerEvents="none">
+                  {/* 垂直追踪虚线 */}
+                  <line
+                    x1={toSvgX(anchorPoint[0])}
+                    y1={toSvgY(anchorPoint[1])}
+                    x2={toSvgX(snappedPoint[0])}
+                    y2={toSvgY(snappedPoint[1])}
+                    stroke={color}
+                    strokeWidth="0.08"
+                    strokeOpacity={0.55}
+                    strokeDasharray="0.28 0.18"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  {/* 直角标记（L 形） */}
+                  <polyline
+                    points={`${toSvgX(cAx)},${toSvgY(cAz)} ${toSvgX(cBx)},${toSvgY(cBz)} ${toSvgX(cCx)},${toSvgY(cCz)}`}
+                    stroke={color}
+                    strokeWidth="0.07"
+                    strokeOpacity={0.8}
+                    fill="none"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  {/* 锚点标记（小十字） */}
+                  <line
+                    x1={toSvgX(anchorPoint[0] - 6 * px)}
+                    y1={toSvgY(anchorPoint[1])}
+                    x2={toSvgX(anchorPoint[0] + 6 * px)}
+                    y2={toSvgY(anchorPoint[1])}
+                    stroke={color}
+                    strokeWidth="0.1"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  <line
+                    x1={toSvgX(anchorPoint[0])}
+                    y1={toSvgY(anchorPoint[1] - 6 * px)}
+                    x2={toSvgX(anchorPoint[0])}
+                    y2={toSvgY(anchorPoint[1] + 6 * px)}
+                    stroke={color}
+                    strokeWidth="0.1"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  {/* 距离标签 */}
+                  <rect
+                    x={toSvgX(labelX) - labelWidth / 2}
+                    y={toSvgY(labelZ) - labelHeight / 2}
+                    width={labelWidth}
+                    height={labelHeight}
+                    rx={2 * px}
+                    ry={2 * px}
+                    fill="rgba(15,23,42,0.9)"
+                    stroke="rgba(45,127,249,0.7)"
+                    strokeWidth={1 * px}
+                  />
+                  <text
+                    x={toSvgX(labelX)}
+                    y={toSvgY(labelZ)}
+                    fill="#ffffff"
+                    fontSize={fontSizeWorld}
+                    fontFamily="ui-monospace, SFMono-Regular, monospace"
+                    fontWeight={600}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                  >
+                    {distLabel}
+                  </text>
+                </g>
+              )
+            })()}
+
+            {/* Step D：角度追踪辅助线 —— 贴近 0/45/90/... 时从 draftStart 画贯穿虚线 */}
+            {draftMeasurement?.snapDirectionDeg !== null && draftMeasurement && (() => {
+              const angleRad = (draftMeasurement.snapDirectionDeg! * Math.PI) / 180
+              const cosA = Math.cos(angleRad)
+              const sinA = Math.sin(angleRad)
+              // 贯穿 viewBox：从 draftStart 沿角度正反各延伸一个大值
+              const extent = Math.max(viewBox.width, viewBox.height) * 2
+              const p1x = draftMeasurement.startX - cosA * extent
+              const p1z = draftMeasurement.startZ - sinA * extent
+              const p2x = draftMeasurement.startX + cosA * extent
+              const p2z = draftMeasurement.startZ + sinA * extent
+              const color = draftMeasurement.isOrthogonal ? '#2D7FF9' : '#f59e0b'
+              return (
+                <line
+                  x1={toSvgX(p1x)}
+                  y1={toSvgY(p1z)}
+                  x2={toSvgX(p2x)}
+                  y2={toSvgY(p2z)}
+                  stroke={color}
+                  strokeWidth="0.08"
+                  strokeOpacity={0.55}
+                  strokeDasharray="0.3 0.2"
+                  vectorEffect="non-scaling-stroke"
+                  pointerEvents="none"
+                />
+              )
+            })()}
+
+            {draftPolygon && (() => {
+              const draftWallDef = WALL_TYPE_BY_ID[activeWallTypeId as keyof typeof WALL_TYPE_BY_ID]
+              const draftWallColor = draftWallDef?.color ?? palette.draftFill
+              return (
+                <polygon
+                  fill={draftWallColor}
+                  fillOpacity={0.45}
+                  points={draftPolygonPoints ?? undefined}
+                  stroke={draftWallColor}
+                  strokeDasharray="0.24 0.12"
+                  strokeOpacity={0.7}
+                  strokeWidth="0.07"
+                  vectorEffect="non-scaling-stroke"
+                />
+              )
+            })()}
+
+            {draftMeasurement && (() => {
+              // 像素级字号 → 世界单位，保证缩放时字体不变形
+              const px = floorplanWorldUnitsPerPixel
+              const fontSizeWorld = 13 * px
+              const padX = 6 * px
+              const padY = 3 * px
+              // 法向偏移 18px，把标签推到线外侧（避免盖住墙）
+              const offset = 18 * px
+              const labelX = draftMeasurement.midX + draftMeasurement.nx * offset
+              const labelZ = draftMeasurement.midZ + draftMeasurement.nz * offset
+              const lengthText = draftMeasurement.length >= 1
+                ? `${draftMeasurement.length.toFixed(2)} m`
+                : `${(draftMeasurement.length * 1000).toFixed(0)} mm`
+              // 角度归一到 0-180°，便于对齐判断
+              const halfAngle = draftMeasurement.angleDeg % 180
+              const angleText = `${halfAngle.toFixed(0)}°`
+              // 估算标签宽高（粗略，够用）
+              const charWidth = fontSizeWorld * 0.55
+              const labelWidth = (lengthText.length + angleText.length + 2) * charWidth + padX * 2
+              const labelHeight = fontSizeWorld + padY * 2
+              return (
+                <g pointerEvents="none">
+                  <rect
+                    x={toSvgX(labelX) - labelWidth / 2}
+                    y={toSvgY(labelZ) - labelHeight / 2}
+                    width={labelWidth}
+                    height={labelHeight}
+                    rx={3 * px}
+                    ry={3 * px}
+                    fill="rgba(15,23,42,0.85)"
+                    stroke="rgba(45,127,249,0.6)"
+                    strokeWidth={1 * px}
+                  />
+                  <text
+                    x={toSvgX(labelX)}
+                    y={toSvgY(labelZ)}
+                    fill="#ffffff"
+                    fontSize={fontSizeWorld}
+                    fontFamily="ui-monospace, SFMono-Regular, monospace"
+                    fontWeight={600}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                  >
+                    {lengthText}
+                    <tspan fill="#94a3b8" fontWeight={400}>{'  '}{angleText}</tspan>
+                  </text>
+                </g>
+              )
+            })()}
 
             {polygonDraftPolygonPoints && (
               <polygon
@@ -7003,24 +8767,31 @@ export function FloorplanPanel() {
               />
             )}
 
-            {cursorPoint && (
+            {/* 普通光标点（非标定模式）—— 标定模式下隐藏此圆点，避免挡住精确标定十字
+                圆点大小跟随缩放（像素恒定），避免放大后圆点过大遮挡精确操作 */}
+            {cursorPoint && !calibrationActive && (() => {
+              const px = floorplanWorldUnitsPerPixel
+              const coreR = Math.min(FLOORPLAN_CURSOR_MARKER_CORE_RADIUS, 3 * px)
+              const glowR = Math.min(FLOORPLAN_CURSOR_MARKER_GLOW_RADIUS, 8 * px)
+              return (
               <g>
                 <circle
                   cx={toSvgX(cursorPoint[0])}
                   cy={toSvgY(cursorPoint[1])}
                   fill={floorplanCursorColor}
                   fillOpacity={0.25}
-                  r={FLOORPLAN_CURSOR_MARKER_GLOW_RADIUS}
+                  r={glowR}
                 />
                 <circle
                   cx={toSvgX(cursorPoint[0])}
                   cy={toSvgY(cursorPoint[1])}
                   fill={floorplanCursorColor}
                   fillOpacity={0.9}
-                  r={FLOORPLAN_CURSOR_MARKER_CORE_RADIUS}
+                  r={coreR}
                 />
               </g>
-            )}
+              )
+            })()}
 
             {activeDraftAnchorPoint && (
               <circle
@@ -7032,9 +8803,317 @@ export function FloorplanPanel() {
                 vectorEffect="non-scaling-stroke"
               />
             )}
+
+            {/* ── 标定线覆盖层 ── */}
+            <CalibrationOverlay
+              cursorPoint={cursorPoint}
+              walls={walls}
+              worldUnitsPerPixel={floorplanWorldUnitsPerPixel}
+              guideAnchors={calibrationGuideAnchors}
+            />
+
+            {/* ── 多层 2 点对齐覆盖层 ── */}
+            {/* 两阶段都用 currentAlignmentAnchors：自动切层后当前层即为参考层，锚点正确 */}
+            <LevelAlignmentOverlay
+              cursorPoint={cursorPoint}
+              curSnapCandidates={currentAlignmentAnchors}
+              refSnapCandidates={currentAlignmentAnchors}
+              worldUnitsPerPixel={floorplanWorldUnitsPerPixel}
+            />
           </svg>
         )}
+
+        {/* ── 标定输入弹窗（内联 JSX，固定像素尺寸） ── */}
+        <CalibrationInputInline />
+
+        {/* ── 多层 2 点对齐提示条 ── */}
+        <LevelAlignmentHUD />
+
+        {/* ── 对齐成功提示 ── */}
+        <div
+          className={cn(
+            'pointer-events-none absolute inset-x-0 top-3 z-50 flex justify-center transition-all duration-500',
+            alignSuccess ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-1',
+          )}
+        >
+          <div className="flex items-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-4 py-2.5 shadow-xl backdrop-blur-sm">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+            <span className="font-medium text-[13px] text-emerald-300">底图已对齐</span>
+          </div>
+        </div>
+
+        {/* ── 建筑朝向罗盘 ── */}
+        <FloorplanCompass levelNode={levelNode} updateNode={updateNode as (id: AnyNodeId, data: Record<string, unknown>) => void} />
+
       </div>
     </div>
+  )
+}
+
+/**
+ * CalibrationOverlay — 在 2D floorplan SVG 内渲染标定标记和距离提示
+ *
+ * 全部坐标通过 toSvgX/toSvgY 转换到 SVG 空间（之前的 bug: 直接用 plan 坐标导致
+ * 所有元素渲染在镜像位置，用户看不到连线）。
+ *
+ * 视觉层次：
+ *   - 已确定的点：图钉样式 —— 十字骨架 + 顶部发光圆点（更容易识别起点）
+ *   - 光标吸附预览：半透明十字 + 细光晕
+ *   - 两点之间的拖尾 / 标定线：品牌蓝虚线
+ */
+function CalibrationOverlay({
+  cursorPoint,
+  walls,
+  worldUnitsPerPixel,
+  guideAnchors,
+}: {
+  cursorPoint: WallPlanPoint | null
+  walls: WallNode[]
+  worldUnitsPerPixel: number
+  guideAnchors: Array<[number, number]>
+}) {
+  const cal = useEditor((s) => s.calibration)
+
+  if (!cal?.active) return null
+
+  const points = cal.points
+
+  // 只过滤出有效数字的点位
+  const isValidPt = (p: any): p is [number, number] =>
+    Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1])
+
+  const validPoints = points.filter(isValidPt) as Array<[number, number]>
+
+  // 十字大小固定为 14 像素（世界单位换算），随缩放保持视觉稳定
+  const px = worldUnitsPerPixel
+  const armLen = 8 * px
+  const strokeW = 1.5 * px
+  const pinHeadR = 3 * px
+
+  // 图钉头（小发光圆点） —— 让已确定的点更容易识别，但体积很小不挡光标
+  const PinHead = ({ p, opacity = 1 }: { p: [number, number]; opacity?: number }) => (
+    <g pointerEvents="none" opacity={opacity}>
+      <circle
+        cx={toSvgX(p[0])}
+        cy={toSvgY(p[1])}
+        r={pinHeadR * 2}
+        fill="#2D7FF9"
+        fillOpacity={0.18}
+      />
+      <circle
+        cx={toSvgX(p[0])}
+        cy={toSvgY(p[1])}
+        r={pinHeadR}
+        fill="#2D7FF9"
+        stroke="#ffffff"
+        strokeWidth={strokeW}
+      />
+    </g>
+  )
+
+  // 十字骨架 — 两条交叉直线
+  const Cross = ({
+    p,
+    opacity = 1,
+    color = '#2D7FF9',
+  }: {
+    p: [number, number]
+    opacity?: number
+    color?: string
+  }) => {
+    const sx = toSvgX(p[0])
+    const sy = toSvgY(p[1])
+    return (
+      <g pointerEvents="none" opacity={opacity}>
+        <line
+          stroke={color}
+          strokeWidth={strokeW}
+          x1={sx - armLen}
+          x2={sx + armLen}
+          y1={sy}
+          y2={sy}
+        />
+        <line
+          stroke={color}
+          strokeWidth={strokeW}
+          x1={sx}
+          x2={sx}
+          y1={sy - armLen}
+          y2={sy + armLen}
+        />
+      </g>
+    )
+  }
+
+  // 已固定的点 —— 十字 + 图钉头（第一个点更明显）
+  const pointMarkers = validPoints.map((p, i) => (
+    <g key={`cal-pin-${i}`}>
+      <Cross p={p} />
+      <PinHead p={p} />
+    </g>
+  ))
+
+  // ── 第二点：计算吸附结果（含轴约束） ──────────────────────────────────────
+  const p1 = validPoints[0] ?? null
+  const hasSecondPoint = validPoints.length >= 2
+
+  // cursorPoint 是鼠标位置，做一次吸附得到最终落点及轴信息
+  let livePt: [number, number] | null = null
+  let liveAxis: CalibrationSnapAxis = 'free'
+  if (!hasSecondPoint && cursorPoint && isValidPt(cursorPoint) && p1) {
+    const r = snapCalibrationPoint(
+      [cursorPoint[0], cursorPoint[1]],
+      walls,
+      validPoints,
+      guideAnchors,
+      true, // overlay 里始终计算轴信息（供显示），实际约束由 shiftPressed 控制）
+    )
+    livePt = r.point
+    liveAxis = r.axis
+  } else if (!hasSecondPoint && cursorPoint && isValidPt(cursorPoint)) {
+    livePt = [cursorPoint[0], cursorPoint[1]]
+  }
+
+  // 光标吸附预览 —— 吸附到墙端点时显示琥珀色十字 + 高亮圈
+  let cursorPreview: React.ReactNode = null
+  if (livePt && p1) {
+    const didSnap =
+      Math.abs(livePt[0] - (cursorPoint?.[0] ?? livePt[0])) > 1e-6 ||
+      Math.abs(livePt[1] - (cursorPoint?.[1] ?? livePt[1])) > 1e-6
+    if (didSnap) {
+      cursorPreview = (
+        <g>
+          <Cross p={livePt} opacity={0.55} color="#f59e0b" />
+          <circle
+            cx={toSvgX(livePt[0])}
+            cy={toSvgY(livePt[1])}
+            r={5 * px}
+            fill="none"
+            stroke="#f59e0b"
+            strokeWidth={strokeW * 0.8}
+            pointerEvents="none"
+          />
+        </g>
+      )
+    }
+  }
+
+  // ── 轴参考线（过 p1 的水平或垂直穿越线） ────────────────────────────────
+  // 只在画第二点时显示，用来帮助用户对齐
+  const AXIS_EXTENT = 50 // 50m 够长
+  let axisGuideLine: React.ReactNode = null
+  if (p1 && livePt && liveAxis !== 'free') {
+    if (liveAxis === 'h') {
+      // 水平轴：y 锁在 p1[1]，x 延伸
+      axisGuideLine = (
+        <line
+          pointerEvents="none"
+          stroke="#60a5fa"
+          strokeDasharray={`${5 * px} ${3 * px}`}
+          strokeOpacity={0.5}
+          strokeWidth={px}
+          x1={toSvgX(p1[0] - AXIS_EXTENT)}
+          x2={toSvgX(p1[0] + AXIS_EXTENT)}
+          y1={toSvgY(p1[1])}
+          y2={toSvgY(p1[1])}
+        />
+      )
+    } else {
+      // 垂直轴：x 锁在 p1[0]，y 延伸
+      axisGuideLine = (
+        <line
+          pointerEvents="none"
+          stroke="#60a5fa"
+          strokeDasharray={`${5 * px} ${3 * px}`}
+          strokeOpacity={0.5}
+          strokeWidth={px}
+          x1={toSvgX(p1[0])}
+          x2={toSvgX(p1[0])}
+          y1={toSvgY(p1[1] - AXIS_EXTENT)}
+          y2={toSvgY(p1[1] + AXIS_EXTENT)}
+        />
+      )
+    }
+  }
+
+  // 拖尾实线：p1 → livePt（画第二点时）
+  const trailingLine =
+    p1 && livePt ? (
+      <line
+        pointerEvents="none"
+        stroke="#2D7FF9"
+        strokeDasharray={`${6 * px} ${4 * px}`}
+        strokeOpacity={0.8}
+        strokeWidth={1.5 * px}
+        x1={toSvgX(p1[0])}
+        x2={toSvgX(livePt[0])}
+        y1={toSvgY(p1[1])}
+        y2={toSvgY(livePt[1])}
+      />
+    ) : null
+
+  // 实时距离标签（中点上方）
+  let distanceLabel: React.ReactNode = null
+  if (p1 && livePt) {
+    const dx = livePt[0] - p1[0]
+    const dy = livePt[1] - p1[1]
+    const dist = Math.sqrt(dx * dx + dy * dy)
+    if (dist > 0.01) {
+      const mx = toSvgX((p1[0] + livePt[0]) / 2)
+      const my = toSvgY((p1[1] + livePt[1]) / 2)
+      const axisLabel = liveAxis === 'h' ? ' — 水平' : liveAxis === 'v' ? ' | 垂直' : ''
+      distanceLabel = (
+        <g pointerEvents="none">
+          <rect
+            x={mx - 34}
+            y={my - 22}
+            width={68}
+            height={18}
+            rx={4}
+            fill="rgba(24,24,27,0.88)"
+            stroke="rgba(45,127,249,0.35)"
+            strokeWidth={0.8}
+          />
+          <text
+            x={mx}
+            y={my - 8}
+            textAnchor="middle"
+            fill="#ffffff"
+            fontSize={10}
+            fontFamily="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace"
+            fontWeight={600}
+          >
+            {dist.toFixed(2)} m{axisLabel}
+          </text>
+        </g>
+      )
+    }
+  }
+
+  // 已完成的标定线（两个点都确定后）
+  const hasValidLine =
+    validPoints.length === 2 && isValidPt(validPoints[0]) && isValidPt(validPoints[1])
+  const line = hasValidLine ? (
+    <line
+      pointerEvents="none"
+      stroke="#2D7FF9"
+      strokeDasharray={`${8 * px} ${4 * px}`}
+      strokeWidth={1.5 * px}
+      x1={toSvgX(validPoints[0]![0])}
+      x2={toSvgX(validPoints[1]![0])}
+      y1={toSvgY(validPoints[0]![1])}
+      y2={toSvgY(validPoints[1]![1])}
+    />
+  ) : null
+
+  return (
+    <>
+      {axisGuideLine}
+      {trailingLine}
+      {line}
+      {pointMarkers}
+      {cursorPreview}
+      {distanceLabel}
+    </>
   )
 }

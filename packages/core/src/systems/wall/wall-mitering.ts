@@ -136,13 +136,15 @@ interface ProcessedWall {
   angle: number
   edgeA: LineEquation // Left edge
   edgeB: LineEquation // Right edge
+  pA: Point2D // Left offset point at junction (on edgeA)
+  pB: Point2D // Right offset point at junction (on edgeB)
   isPassthrough: boolean // True if wall passes through junction (T-junction)
 }
 
 function calculateJunctionIntersections(
   junction: Junction,
   getThickness: (wall: WallNode) => number,
-): WallIntersections {
+): { wallIntersections: WallIntersections; junctionCap: Point2D[] } {
   const { meetingPoint, connectedWalls } = junction
   const processedWalls: ProcessedWall[] = []
 
@@ -167,7 +169,7 @@ function calculateJunctionIntersections(
         const edgeB = createLineFromPointAndVector(pB, v)
         const angle = Math.atan2(v.y, v.x)
 
-        processedWalls.push({ wallId: wall.id, angle, edgeA, edgeB, isPassthrough: true })
+        processedWalls.push({ wallId: wall.id, angle, edgeA, edgeB, pA, pB, isPassthrough: true })
       }
     } else {
       // Normal wall endpoint (start or end)
@@ -187,7 +189,7 @@ function calculateJunctionIntersections(
       const edgeB = createLineFromPointAndVector(pB, v)
       const angle = Math.atan2(v.y, v.x)
 
-      processedWalls.push({ wallId: wall.id, angle, edgeA, edgeB, isPassthrough: false })
+      processedWalls.push({ wallId: wall.id, angle, edgeA, edgeB, pA, pB, isPassthrough: false })
     }
   }
 
@@ -197,7 +199,7 @@ function calculateJunctionIntersections(
   const wallIntersections = new Map<string, { left?: Point2D; right?: Point2D }>()
   const n = processedWalls.length
 
-  if (n < 2) return wallIntersections
+  if (n < 2) return { wallIntersections, junctionCap: [] }
 
   // Calculate intersections between adjacent walls (exactly like demo)
   for (let i = 0; i < n; i++) {
@@ -207,7 +209,8 @@ function calculateJunctionIntersections(
     // Intersect left edge of wall1 with right edge of wall2
     const det = wall1.edgeA.a * wall2.edgeB.b - wall2.edgeB.a * wall1.edgeA.b
 
-    // If lines are parallel (det ≈ 0), skip this intersection - walls will use defaults
+    // det = v1 × v2（叉积）为零时（平行/反向平行），直接 skip。
+    // 缝隙由 junctionCap 凸包覆盖，不修改墙体角点（避免渐变边）。
     if (Math.abs(det) < 1e-9) {
       continue
     }
@@ -215,6 +218,19 @@ function calculateJunctionIntersections(
     const p = {
       x: (wall1.edgeA.b * wall2.edgeB.c - wall2.edgeB.b * wall1.edgeA.c) / det,
       y: (wall2.edgeB.a * wall1.edgeA.c - wall1.edgeA.a * wall2.edgeB.c) / det,
+    }
+
+    // Miter limit（参考 SVG stroke-linejoin:miter / Sweet Home 3D 的距离上限）：
+    // 当两段墙近似共线（夹角接近 180°）但 det 不恰好为零时，
+    // 交点会被算到极远处，导致墙体角点被"拉飞"出屏幕。
+    // 以两墙最大半厚度的 10 倍为上限，超过则视为平行跳过。
+    // 10x 允许约 12° 以上的合法夹角（覆盖所有实用平面图场景）。
+    const halfT1 = Math.hypot(wall1.pA.x - meetingPoint.x, wall1.pA.y - meetingPoint.y)
+    const halfT2 = Math.hypot(wall2.pA.x - meetingPoint.x, wall2.pA.y - meetingPoint.y)
+    const MITER_LIMIT = 10
+    const maxDist = Math.max(halfT1, halfT2) * MITER_LIMIT
+    if ((p.x - meetingPoint.x) ** 2 + (p.y - meetingPoint.y) ** 2 > maxDist * maxDist) {
+      continue
     }
 
     // Only assign intersection to non-passthrough walls
@@ -234,7 +250,56 @@ function calculateJunctionIntersections(
     }
   }
 
-  return wallIntersections
+  // Junction cap：收集所有非 passthrough 墙在此节点处的两个偏移点（pA/pB），
+  // 计算凸包，形成一个覆盖节点区域的填充多边形。
+  // 当不同厚度的墙在同轴（反向平行）相接时，此凸包会填补较厚墙超出较薄墙的缝隙。
+  const capPoints: Point2D[] = []
+  for (const pw of processedWalls) {
+    if (!pw.isPassthrough) {
+      capPoints.push(pw.pA, pw.pB)
+    }
+  }
+  const junctionCap = computeConvexHull(capPoints)
+
+  return { wallIntersections, junctionCap }
+}
+
+// ============================================================================
+// CONVEX HULL (Andrew's monotone chain)
+// ============================================================================
+
+function cross(O: Point2D, A: Point2D, B: Point2D): number {
+  return (A.x - O.x) * (B.y - O.y) - (A.y - O.y) * (B.x - O.x)
+}
+
+function computeConvexHull(points: Point2D[]): Point2D[] {
+  const n = points.length
+  if (n < 3) return points.slice()
+
+  // Sort by x, then y
+  const sorted = points.slice().sort((a, b) => a.x !== b.x ? a.x - b.x : a.y - b.y)
+
+  const lower: Point2D[] = []
+  for (const p of sorted) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2]!, lower[lower.length - 1]!, p) <= 0) {
+      lower.pop()
+    }
+    lower.push(p)
+  }
+
+  const upper: Point2D[] = []
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const p = sorted[i]!
+    while (upper.length >= 2 && cross(upper[upper.length - 2]!, upper[upper.length - 1]!, p) <= 0) {
+      upper.pop()
+    }
+    upper.push(p)
+  }
+
+  // Remove last point of each half (it's the same as the first of the other)
+  lower.pop()
+  upper.pop()
+  return [...lower, ...upper]
 }
 
 // ============================================================================
@@ -246,6 +311,9 @@ export interface WallMiterData {
   junctionData: JunctionData
   // All junctions for quick lookup
   junctions: Map<string, Junction>
+  // Junction cap polygons (convex hulls) to fill gaps between walls of different thickness
+  // Key = junction position key, Value = convex hull of all pA/pB points at junction
+  junctionCaps: Map<string, Point2D[]>
 }
 
 /**
@@ -255,13 +323,17 @@ export function calculateLevelMiters(walls: WallNode[]): WallMiterData {
   const getThickness = (wall: WallNode) => wall.thickness ?? 0.1
   const junctions = findJunctions(walls)
   const junctionData: JunctionData = new Map()
+  const junctionCaps: Map<string, Point2D[]> = new Map()
 
   for (const [key, junction] of junctions.entries()) {
-    const wallIntersections = calculateJunctionIntersections(junction, getThickness)
+    const { wallIntersections, junctionCap } = calculateJunctionIntersections(junction, getThickness)
     junctionData.set(key, wallIntersections)
+    if (junctionCap.length >= 3) {
+      junctionCaps.set(key, junctionCap)
+    }
   }
 
-  return { junctionData, junctions }
+  return { junctionData, junctions, junctionCaps }
 }
 
 /**

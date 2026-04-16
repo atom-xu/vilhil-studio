@@ -16,9 +16,22 @@ export function TreeNodeActions({ node }: TreeNodeActionsProps) {
   const [open, setOpen] = useState(false)
   const updateNode = useScene((state) => state.updateNode)
   const updateNodes = useScene((state) => state.updateNodes)
+  const deleteNode = useScene((state) => state.deleteNode)
   const selectedIds = useViewer((state) => state.selection.selectedIds)
+  const setSelection = useViewer((state) => state.setSelection)
   const hasCamera = !!node.camera
   const isVisible = node.visible !== false
+  const canDelete = [
+    'device', 'item', 'scene', 'scan', 'guide',
+    'wall', 'door', 'window', 'slab', 'ceiling', 'roof', 'stair', 'zone',
+  ].includes(node.type)
+
+  const handleDelete = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const ids = selectedIds?.includes(node.id) ? selectedIds : [node.id]
+    for (const id of ids) deleteNode(id as AnyNodeId)
+    setSelection({ selectedIds: [] })
+  }
 
   const toggleVisibility = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -54,6 +67,15 @@ export function TreeNodeActions({ node }: TreeNodeActionsProps) {
 
   return (
     <div className="flex items-center gap-0.5">
+      {canDelete && (
+        <button
+          className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-red-500/15 hover:text-red-400"
+          onClick={handleDelete}
+          title="删除"
+        >
+          <Trash2 className="h-3 w-3" />
+        </button>
+      )}
       <button
         className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10"
         onClick={toggleVisibility}

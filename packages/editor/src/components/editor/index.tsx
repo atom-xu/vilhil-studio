@@ -9,6 +9,7 @@ import {
 } from '@pascal-app/core'
 import { InteractiveSystem, useViewer, Viewer } from '@pascal-app/viewer'
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { ProposalLayout } from '../../components/proposal/proposal-layout'
 import { ViewerOverlay } from '../../components/viewer-overlay'
 import { ViewerZoneSystem } from '../../components/viewer-zone-system'
 import { type PresetsAdapter, PresetsProvider } from '../../contexts/presets-context'
@@ -42,6 +43,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/primitives/toolti
 import { SceneLoader } from '../ui/scene-loader'
 import { AppSidebar } from '../ui/sidebar/app-sidebar'
 import type { ExtraPanel } from '../ui/sidebar/icon-rail'
+import { ScenePanel } from '../ui/sidebar/panels/scene-panel'
 import { SettingsPanel, type SettingsPanelProps } from '../ui/sidebar/panels/settings-panel'
 import { SitePanel, type SitePanelProps } from '../ui/sidebar/panels/site-panel'
 import type { SidebarTab } from '../ui/sidebar/tab-bar'
@@ -717,7 +719,10 @@ export default function Editor({
     const renderTabContent = (tabId: string) => {
       // Built-in panels
       if (tabId === 'site') {
-        return <SitePanel {...sitePanelProps} />
+        return <SitePanel projectId={projectId ?? undefined} {...sitePanelProps} />
+      }
+      if (tabId === 'scenes') {
+        return <ScenePanel />
       }
       if (tabId === 'settings') {
         return <SettingsPanel {...settingsPanelProps} />
@@ -740,9 +745,13 @@ export default function Editor({
         )}
 
         {!isLoading && isPreviewMode ? (
-          <div className="dark flex h-full w-full flex-col bg-neutral-100 text-foreground">
-            <ViewerOverlay onBack={() => useEditor.getState().setPreviewMode(false)} />
-            <div className="h-full w-full">{previewViewerContent}</div>
+          <div className="dark h-full w-full bg-neutral-950 text-foreground">
+            <ProposalLayout
+              onBack={() => useEditor.getState().setPreviewMode(false)}
+              projectName="智能家居方案"
+            >
+              {previewViewerContent}
+            </ProposalLayout>
           </div>
         ) : (
           <>

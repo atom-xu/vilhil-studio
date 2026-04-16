@@ -178,7 +178,7 @@ export function ItemPanel() {
       <PanelSection title="缩放">
         <div className="flex items-center justify-between px-2 pb-2">
           <span className="font-medium text-[10px] text-muted-foreground/80 uppercase tracking-wider">
-            Uniform Scale
+            等比缩放
           </span>
           <button
             className={cn(
@@ -262,7 +262,7 @@ export function ItemPanel() {
 
       <PanelSection title="信息">
         <div className="flex items-center justify-between px-2 py-1 text-muted-foreground text-sm">
-          <span>Dimensions</span>
+          <span>尺寸</span>
           {(() => {
             const [w, h, d] = getScaledDimensions(node)
             return (
@@ -280,7 +280,7 @@ export function ItemPanel() {
             collectionIds={node.collectionIds}
             nodeId={selectedId as AnyNode['id']}
           >
-            <ActionButton label="管理收藏…" />
+            <ActionButton label="管理集合…" />
           </CollectionsPopover>
         </ActionGroup>
       </PanelSection>

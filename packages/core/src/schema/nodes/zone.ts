@@ -1,13 +1,14 @@
 import dedent from 'ts-dedent'
 import { z } from 'zod'
 import { BaseNode, nodeType, objectId } from '../base'
+import { quantizePolygon } from '../precision'
 
 export const ZoneNode = BaseNode.extend({
   id: objectId('zone'),
   type: nodeType('zone'),
   name: z.string(),
-  // Polygon boundary - array of [x, z] coordinates defining the zone
-  polygon: z.array(z.tuple([z.number(), z.number()])),
+  // Polygon boundary - array of [x, z] coordinates defining the zone, 1cm 量化
+  polygon: z.array(z.tuple([z.number(), z.number()])).transform(quantizePolygon),
   // Visual styling
   color: z.string().default('#3b82f6'), // Default blue
   metadata: z.json().optional().default({}),

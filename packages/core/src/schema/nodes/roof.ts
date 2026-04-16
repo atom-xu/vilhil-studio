@@ -2,13 +2,17 @@ import dedent from 'ts-dedent'
 import { z } from 'zod'
 import { BaseNode, nodeType, objectId } from '../base'
 import { MaterialSchema } from '../material'
+import { quantizePoint3 } from '../precision'
 import { RoofSegmentNode } from './roof-segment'
 
 export const RoofNode = BaseNode.extend({
   id: objectId('roof'),
   type: nodeType('roof'),
   material: MaterialSchema.optional(),
-  position: z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0]),
+  position: z
+    .tuple([z.number(), z.number(), z.number()])
+    .default([0, 0, 0])
+    .transform(quantizePoint3),
   // Rotation around Y axis in radians
   rotation: z.number().default(0),
   // Child roof segment IDs

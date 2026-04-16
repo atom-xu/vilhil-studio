@@ -1,22 +1,23 @@
 import { isObject } from '@pascal-app/core'
 
+/** 地板家具吸附网格：5 cm */
+export const FLOOR_SNAP_GRID = 0.05
+
 /**
- * Snaps a position to 0.5 grid, with an offset to align item edges to grid lines.
- * For items with dimensions like 2.5, the center would be at 1.25 from the edge,
- * which doesn't align with 0.5 grid. This adds an offset so edges align instead.
+ * Snaps a position to the 5 cm grid.
+ * The `dimension` parameter is kept for API compatibility but no longer used —
+ * with proximity wall/item snapping handling edge alignment, pure 5 cm center
+ * snap is sufficient and more predictable.
  */
-export function snapToGrid(position: number, dimension: number): number {
-  const halfDim = dimension / 2
-  const needsOffset = Math.abs(((halfDim * 2) % 1) - 0.5) < 0.01
-  const offset = needsOffset ? 0.25 : 0
-  return Math.round((position - offset) * 2) / 2 + offset
+export function snapToGrid(position: number, _dimension?: number): number {
+  return Math.round(position / FLOOR_SNAP_GRID) * FLOOR_SNAP_GRID
 }
 
 /**
- * Snap a value to 0.5 increments (used for wall-local positions).
+ * Snap a value to the 5 cm grid (used for wall/ceiling item local positions).
  */
 export function snapToHalf(value: number): number {
-  return Math.round(value * 2) / 2
+  return Math.round(value / FLOOR_SNAP_GRID) * FLOOR_SNAP_GRID
 }
 
 /**

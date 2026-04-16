@@ -46,8 +46,26 @@ export function createDefaultMaterial(
   })
 }
 
-export const DEFAULT_WALL_MATERIAL = createDefaultMaterial('#ffffff', 0.9)
-export const DEFAULT_SLAB_MATERIAL = createDefaultMaterial('#e5e5e5', 0.8)
+// 墙体：半透明，能透视内部窗/门/家具位置
+export const DEFAULT_WALL_MATERIAL = new THREE.MeshStandardMaterial({
+  color: '#ffffff',
+  roughness: 0.9,
+  metalness: 0,
+  transparent: true,
+  opacity: 0.55,
+  side: THREE.FrontSide,
+})
+
+// 楼板：半透明，方便查看底图和家具布局
+export const DEFAULT_SLAB_MATERIAL = new THREE.MeshStandardMaterial({
+  color: '#e0ddd8',
+  roughness: 0.8,
+  metalness: 0,
+  transparent: true,
+  opacity: 0.45,
+  side: THREE.FrontSide,
+})
+
 export const DEFAULT_DOOR_MATERIAL = createDefaultMaterial('#8b4513', 0.7)
 export const DEFAULT_WINDOW_MATERIAL = new THREE.MeshStandardMaterial({
   color: '#87ceeb',
@@ -57,7 +75,17 @@ export const DEFAULT_WINDOW_MATERIAL = new THREE.MeshStandardMaterial({
   transparent: true,
   side: THREE.DoubleSide,
 })
-export const DEFAULT_CEILING_MATERIAL = createDefaultMaterial('#f5f5dc', 0.95)
+
+// 天花板：半透明，方便俯视查看室内
+export const DEFAULT_CEILING_MATERIAL = new THREE.MeshStandardMaterial({
+  color: '#f5f5dc',
+  roughness: 0.95,
+  metalness: 0,
+  transparent: true,
+  opacity: 0.45,
+  side: THREE.FrontSide,
+})
+
 export const DEFAULT_ROOF_MATERIAL = createDefaultMaterial('#808080', 0.85)
 export const DEFAULT_STAIR_MATERIAL = createDefaultMaterial('#ffffff', 0.9)
 

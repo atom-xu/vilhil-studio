@@ -4,7 +4,7 @@ import type { Group } from 'three'
 import { getDeviceDefinition, useSubsystemVisibility } from '@vilhil/smarthome'
 import { useNodeEvents } from '../../../hooks/use-node-events'
 import { ErrorBoundary } from '../../error-boundary'
-import { APCoverage, CurtainPanel, LightCone, PIRCoverage } from './animations'
+import { APCoverage, CameraFOV, CurtainPanel, HvacAirflow, LightCone, PIRCoverage } from './animations'
 import { DeviceGeometry } from './device-geometry'
 import { DeviceIndicator } from './device-indicator'
 import { DeviceLight } from './device-light'
@@ -121,6 +121,24 @@ export const DeviceRenderer = ({ node }: { node: DeviceNode }) => {
             position={[0, 0, 0]}
             brightness={isOn ? ((deviceState?.brightness as number) ?? 100) / 100 : 0}
             beamAngle={(deviceParams?.beamAngle as number) ?? 30}
+            height={node.position[1]}
+          />
+        )}
+
+        {/* Security camera FOV */}
+        {node.subsystem === 'security' && (node.renderType === 'dome-camera' || node.renderType === 'bullet-camera') && (
+          <CameraFOV
+            position={[0, 0, 0]}
+            fov={(deviceParams?.coverageAngle as number) ?? 90}
+            range={(deviceParams?.coverageRadius as number) ?? 5}
+          />
+        )}
+
+        {/* HVAC airflow */}
+        {node.subsystem === 'hvac' && (
+          <HvacAirflow
+            position={[0, 0, 0]}
+            intensity={isOn ? 1 : 0}
             height={node.position[1]}
           />
         )}

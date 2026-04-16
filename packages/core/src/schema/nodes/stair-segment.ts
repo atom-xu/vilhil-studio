@@ -2,6 +2,7 @@ import dedent from 'ts-dedent'
 import { z } from 'zod'
 import { BaseNode, nodeType, objectId } from '../base'
 import { MaterialSchema } from '../material'
+import { quantizePoint3 } from '../precision'
 
 export const StairSegmentType = z.enum(['stair', 'landing'])
 
@@ -15,7 +16,10 @@ export const StairSegmentNode = BaseNode.extend({
   id: objectId('sseg'),
   type: nodeType('stair-segment'),
   material: MaterialSchema.optional(),
-  position: z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0]),
+  position: z
+    .tuple([z.number(), z.number(), z.number()])
+    .default([0, 0, 0])
+    .transform(quantizePoint3),
   // Rotation around Y axis in radians
   rotation: z.number().default(0),
   // Stair or landing

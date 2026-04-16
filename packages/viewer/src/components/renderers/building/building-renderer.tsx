@@ -11,7 +11,7 @@ export const BuildingRenderer = ({ node }: { node: BuildingNode }) => {
   const handlers = useNodeEvents(node, 'building')
   return (
     <group ref={ref} {...handlers}>
-      {node.children.map((childId) => (
+      {(node.children ?? []).map((childId) => (
         <NodeRenderer key={childId} nodeId={childId} />
       ))}
     </group>

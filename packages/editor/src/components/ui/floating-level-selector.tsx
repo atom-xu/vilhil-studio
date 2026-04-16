@@ -29,7 +29,7 @@ export function FloatingLevelSelector() {
       if (!resolvedBuildingId) return [] as LevelNode[]
       const building = state.nodes[resolvedBuildingId]
       if (!building || building.type !== 'building') return [] as LevelNode[]
-      return (building as BuildingNode).children
+      return ((building as BuildingNode).children ?? [])
         .map((id) => state.nodes[id])
         .filter((node): node is LevelNode => node?.type === 'level')
         .sort((a, b) => a.level - b.level)
@@ -43,7 +43,6 @@ export function FloatingLevelSelector() {
 
   return (
     <div className="pointer-events-auto absolute top-14 left-3 z-20">
-      {/* Outer: rounded-xl (12px) with p-1 (4px) → inner: rounded-lg (8px) for concentric radii */}
       <div className="flex flex-col gap-0.5 rounded-xl border border-border bg-background/90 p-1 shadow-2xl backdrop-blur-md">
         {reversedLevels.map((level) => {
           const isSelected = level.id === levelId

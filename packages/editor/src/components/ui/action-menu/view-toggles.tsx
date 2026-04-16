@@ -32,6 +32,20 @@ function useLevelGuides(): GuideNode[] {
   )
 }
 
+// ── Helper: get sibling levels (exclude current level) ─────────────────────
+function useSiblingLevels(): LevelNode[] {
+  const currentLevelId = useViewer((s) => s.selection.levelId)
+  return useScene(
+    useShallow((state) => {
+      const levels = Object.values(state.nodes).filter(
+        (n): n is LevelNode => n?.type === 'level' && n.id !== currentLevelId,
+      )
+      // 按 floor index 排序，方便阅读
+      return levels.sort((a, b) => (a.level ?? 0) - (b.level ?? 0))
+    }),
+  )
+}
+
 // ── Helper: get scans for the current level ─────────────────────────────────
 
 function useLevelScans(): ScanNode[] {
@@ -53,11 +67,14 @@ function useLevelScans(): ScanNode[] {
 function GuidesControl() {
   const showGuides = useViewer((state) => state.showGuides)
   const setShowGuides = useViewer((state) => state.setShowGuides)
+  const referenceLevelId = useViewer((state) => state.referenceLevelId)
+  const setReferenceLevelId = useViewer((state) => state.setReferenceLevelId)
   const updateNode = useScene((state) => state.updateNode)
   const [isOpen, setIsOpen] = useState(false)
 
   const guides = useLevelGuides()
   const hasGuides = guides.length > 0
+  const siblingLevels = useSiblingLevels()
 
   const handleOpacityChange = useCallback(
     (guideId: GuideNode['id'], opacity: number) => {
@@ -127,7 +144,7 @@ function GuidesControl() {
           </div>
 
           {hasGuides ? (
-            <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
+            <div className={cn('max-h-56 space-y-2 overflow-y-auto pr-1', !showGuides && 'pointer-events-none opacity-40')}>
               {guides.map((guide, index) => (
                 <div
                   className="space-y-2 rounded-xl border border-border/45 bg-background/75 p-2.5"
@@ -161,6 +178,61 @@ function GuidesControl() {
               本层暂无参考图
             </div>
           )}
+
+          {/* 多层底图对齐 —— 选择一个其它楼层的底图作为半透明参考 */}
+          {siblingLevels.length > 0 && (
+            <div className="space-y-2 border-border/40 border-t pt-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-medium text-foreground text-sm">对齐参考层</p>
+                {referenceLevelId && (
+                  <button
+                    className="text-[10px] text-muted-foreground hover:text-foreground"
+                    onClick={() => setReferenceLevelId(null)}
+                    type="button"
+                  >
+                    清除
+                  </button>
+                )}
+              </div>
+              <p className="text-[10px] text-muted-foreground leading-relaxed">
+                在本层下方半透明显示所选楼层的底图，便于对齐墙体位置
+              </p>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  className={cn(
+                    'rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors',
+                    !referenceLevelId
+                      ? 'bg-accent ring-1 ring-primary/60'
+                      : 'bg-background/60 hover:bg-accent/60 text-muted-foreground',
+                  )}
+                  onClick={() => setReferenceLevelId(null)}
+                  type="button"
+                >
+                  无
+                </button>
+                {siblingLevels.map((lvl) => {
+                  const isActive = referenceLevelId === lvl.id
+                  return (
+                    <button
+                      className={cn(
+                        'truncate rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors',
+                        isActive
+                          ? 'bg-accent ring-1 ring-primary/60'
+                          : 'bg-background/60 hover:bg-accent/60 text-muted-foreground',
+                      )}
+                      key={lvl.id}
+                      onClick={() => setReferenceLevelId(lvl.id)}
+                      type="button"
+                    >
+                      {lvl.name || `Level ${lvl.level}`}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+
         </div>
       </PopoverContent>
     </Popover>

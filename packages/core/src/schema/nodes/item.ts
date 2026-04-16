@@ -2,6 +2,7 @@ import dedent from 'ts-dedent'
 import { z } from 'zod'
 import { BaseNode, nodeType, objectId } from '../base'
 import type { CollectionId } from '../collections'
+import { quantizePoint3 } from '../precision'
 
 // --- Control descriptors ---
 
@@ -101,7 +102,11 @@ export type Asset = z.infer<typeof assetSchema>
 export const ItemNode = BaseNode.extend({
   id: objectId('item'),
   type: nodeType('item'),
-  position: z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0]),
+  // 家具世界坐标：1cm 量化（常见家具尺寸全部对齐）
+  position: z
+    .tuple([z.number(), z.number(), z.number()])
+    .default([0, 0, 0])
+    .transform(quantizePoint3),
   rotation: z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0]),
   scale: z.tuple([z.number(), z.number(), z.number()]).default([1, 1, 1]),
   side: z.enum(['front', 'back']).optional(),

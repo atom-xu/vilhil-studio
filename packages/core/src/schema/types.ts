@@ -12,6 +12,7 @@ import { SiteNode } from './nodes/site'
 import { SlabNode } from './nodes/slab'
 import { StairNode } from './nodes/stair'
 import { StairSegmentNode } from './nodes/stair-segment'
+import { VertexNode } from './nodes/vertex'
 import { WallNode } from './nodes/wall'
 import { WindowNode } from './nodes/window'
 import { ZoneNode } from './nodes/zone'
@@ -22,6 +23,7 @@ export const AnyNode = z.discriminatedUnion('type', [
   BuildingNode,
   LevelNode,
   WallNode,
+  VertexNode,
   ItemNode,
   ZoneNode,
   SlabNode,

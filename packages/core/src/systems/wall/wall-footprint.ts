@@ -9,7 +9,7 @@ export function getWallThickness(wallNode: WallNode): number {
 }
 
 export function getWallPlanFootprint(wallNode: WallNode, miterData: WallMiterData): Point2D[] {
-  const { junctionData } = miterData
+  const { junctionData, junctions } = miterData
 
   const wallStart: Point2D = { x: wallNode.start[0], y: wallNode.start[1] }
   const wallEnd: Point2D = { x: wallNode.end[0], y: wallNode.end[1] }
@@ -48,12 +48,21 @@ export function getWallPlanFootprint(wallNode: WallNode, miterData: WallMiterDat
     y: wallEnd.y - nUnit.y * halfT,
   }
 
+  // T 形节点（直通墙）检测：
+  //   T 形：插入中心点会在直通墙内部产生 V 形描边缺口 → 排除 wallStart/wallEnd
+  //   L 形：wallStart 与 pStartLeft/pStartRight 三点共线 → 插入无几何影响
+  //   四通（十字）：wallStart 填充节点中心缺口，避免 3D 挤出产生三角形空洞 → 插入
+  const hasPassthroughAtStart =
+    junctions.get(keyStart)?.connectedWalls.some((cw) => cw.endType === 'passthrough') ?? false
+  const hasPassthroughAtEnd =
+    junctions.get(keyEnd)?.connectedWalls.some((cw) => cw.endType === 'passthrough') ?? false
+
   const polygon: Point2D[] = [pStartRight, pEndRight]
-  if (endJunction) {
+  if (endJunction && !hasPassthroughAtEnd) {
     polygon.push(wallEnd)
   }
   polygon.push(pEndLeft, pStartLeft)
-  if (startJunction) {
+  if (startJunction && !hasPassthroughAtStart) {
     polygon.push(wallStart)
   }
 

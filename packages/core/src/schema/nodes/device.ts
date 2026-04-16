@@ -1,6 +1,7 @@
 import dedent from 'ts-dedent'
 import { z } from 'zod'
 import { BaseNode, nodeType, objectId } from '../base'
+import { quantizePoint3 } from '../precision'
 
 // ═══════════════════════════════════════════════════════════════
 // 子系统枚举 - 9大子系统
@@ -96,7 +97,14 @@ export const DeviceNode = BaseNode.extend({
   parentId: z.string().nullable(),
   subsystem: SubsystemEnum,
   renderType: z.string(),
-  position: z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0]),
+  // 设备世界坐标 (x, y, z)。挂 1cm 量化。
+  // 说明：国内设备安装高度（筒灯 2.7m / 面板 1.3m / 开关 1.1m / 插座 0.3m）
+  // 全部天然对齐 1cm。若未来有特定设备需要 mm 精度（极少数情况），
+  // 可以在 params.custom 里额外存一个精确字段。
+  position: z
+    .tuple([z.number(), z.number(), z.number()])
+    .default([0, 0, 0])
+    .transform(quantizePoint3),
   rotation: z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0]),
   mountType: MountTypeEnum.default('ceiling'),
   productId: z.string().optional(),

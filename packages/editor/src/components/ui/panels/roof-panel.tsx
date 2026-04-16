@@ -167,7 +167,7 @@ export function RoofPanel() {
         </div>
         <ActionButton
           icon={<Plus className="h-3.5 w-3.5" />}
-          label="添加段"
+          label="添加分段"
           onClick={handleAddSegment}
         />
       </PanelSection>

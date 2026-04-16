@@ -287,7 +287,7 @@ function PanelKeyEditor({
                         onClick={() => handleSelectScene(scene.id, scene.name)}
                         type="button"
                       >
-                        <span className="shrink-0 text-sm">{scene.icon ?? '✨'}</span>
+                        <span className="shrink-0 rounded bg-accent/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{scene.icon || scene.name?.slice(0, 2) || '场景'}</span>
                         <span className="min-w-0 flex-1 truncate text-[11px] font-medium">
                           {scene.name}
                         </span>

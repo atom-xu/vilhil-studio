@@ -24,6 +24,7 @@ import {
 import type { SceneNodeType } from '@pascal-app/core'
 import {
   ChevronDown,
+  GitBranch,
   Pencil,
   Plus,
   Sparkles,
@@ -32,12 +33,14 @@ import {
 } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { SceneFlowEditor } from './scene-flow-editor'
 import { useShallow } from 'zustand/shallow'
 import { cn } from '../../../../../lib/utils'
 
 // ─── 图标选择器（常用 emoji） ─────────────────────────────────────────────────
 
-const SCENE_ICONS = ['✨', '🏠', '🌅', '🎬', '🛌', '🎵', '🌙', '☀️', '🎉', '🕯️', '🌿', '❄️']
+// 场景图标 — 纯文字标签，不用 emoji
+const SCENE_ICONS = ['回家', '离家', '影院', '晨间', '睡眠', '会客', '阅读', '派对', '节能', '自定义']
 
 // ─── 新建场景内联表单 ──────────────────────────────────────────────────────────
 
@@ -48,7 +51,7 @@ interface NewSceneFormProps {
 
 function NewSceneForm({ levelId, onDone }: NewSceneFormProps) {
   const [name, setName] = useState('')
-  const [icon, setIcon] = useState('✨')
+  const [icon, setIcon] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
   const handleCreate = useCallback(() => {
@@ -75,19 +78,21 @@ function NewSceneForm({ levelId, onDone }: NewSceneFormProps) {
       transition={{ type: 'spring', bounce: 0, duration: 0.3 }}
     >
       <div className="flex flex-col gap-2 p-3">
-        {/* 图标选择 */}
+        {/* 场景类型标签 */}
         <div className="flex flex-wrap gap-1">
-          {SCENE_ICONS.map((emoji) => (
+          {SCENE_ICONS.map((label) => (
             <button
               className={cn(
-                'h-7 w-7 rounded-md text-base transition-all',
-                icon === emoji ? 'bg-primary/30 ring-1 ring-primary' : 'hover:bg-accent',
+                'rounded-md px-2 py-1 text-[11px] font-medium transition-all',
+                icon === label
+                  ? 'bg-primary/20 text-primary ring-1 ring-primary/40'
+                  : 'bg-accent/30 text-muted-foreground hover:bg-accent/60 hover:text-foreground',
               )}
-              key={emoji}
-              onClick={() => setIcon(emoji)}
+              key={label}
+              onClick={() => setIcon(label)}
               type="button"
             >
-              {emoji}
+              {label}
             </button>
           ))}
         </div>
@@ -292,7 +297,8 @@ function SceneCard({ scene, devices }: SceneCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editName, setEditName] = useState(scene.name)
-  const [editIcon, setEditIcon] = useState(scene.icon ?? '✨')
+  const [editIcon, setEditIcon] = useState(scene.icon ?? '')
+  const [isFlowEditorOpen, setIsFlowEditorOpen] = useState(false)
 
   const effects = scene.effects ?? []
 
@@ -324,25 +330,31 @@ function SceneCard({ scene, devices }: SceneCardProps) {
     >
       {/* 卡片头 */}
       <div className="flex items-center gap-2 px-3 py-2.5">
-        {/* 图标 */}
-        <span className="shrink-0 text-base">{scene.icon ?? '✨'}</span>
+        {/* 场景标签 */}
+        {scene.icon ? (
+          <span className="shrink-0 rounded bg-accent/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+            {scene.icon}
+          </span>
+        ) : null}
 
         {/* 名称 / 编辑 */}
         {isEditing ? (
           <div className="flex min-w-0 flex-1 flex-col gap-1">
-            {/* 图标选择 */}
+            {/* 场景类型标签 */}
             <div className="flex flex-wrap gap-1">
-              {SCENE_ICONS.map((emoji) => (
+              {SCENE_ICONS.map((label) => (
                 <button
                   className={cn(
-                    'h-6 w-6 rounded text-sm transition-all',
-                    editIcon === emoji ? 'bg-primary/30 ring-1 ring-primary' : 'hover:bg-accent',
+                    'rounded px-1.5 py-0.5 text-[10px] font-medium transition-all',
+                    editIcon === label
+                      ? 'bg-primary/20 text-primary ring-1 ring-primary/40'
+                      : 'bg-accent/30 text-muted-foreground hover:bg-accent/60',
                   )}
-                  key={emoji}
-                  onClick={() => setEditIcon(emoji)}
+                  key={label}
+                  onClick={() => setEditIcon(label)}
                   type="button"
                 >
-                  {emoji}
+                  {label}
                 </button>
               ))}
             </div>
@@ -355,7 +367,7 @@ function SceneCard({ scene, devices }: SceneCardProps) {
                 if (e.key === 'Enter') handleSaveName()
                 if (e.key === 'Escape') {
                   setEditName(scene.name)
-                  setEditIcon(scene.icon ?? '✨')
+                  setEditIcon(scene.icon ?? '')
                   setIsEditing(false)
                 }
               }}
@@ -379,6 +391,14 @@ function SceneCard({ scene, devices }: SceneCardProps) {
         {/* 操作按钮 */}
         {!isEditing && (
           <div className="flex shrink-0 items-center gap-0.5">
+            <button
+              className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              onClick={() => setIsFlowEditorOpen(true)}
+              title="流程编辑"
+              type="button"
+            >
+              <GitBranch className="h-3 w-3" />
+            </button>
             <button
               className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               onClick={() => setIsEditing(true)}
@@ -406,6 +426,15 @@ function SceneCard({ scene, devices }: SceneCardProps) {
               />
             </button>
           </div>
+        )}
+
+        {/* 流程编辑器遮罩 */}
+        {isFlowEditorOpen && (
+          <SceneFlowEditor
+            devices={devices}
+            onClose={() => setIsFlowEditorOpen(false)}
+            scene={scene}
+          />
         )}
       </div>
 
