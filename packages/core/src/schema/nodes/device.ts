@@ -88,6 +88,56 @@ export const DeviceParamsSchema = z.object({
 export type DeviceParams = z.infer<typeof DeviceParamsSchema>
 
 // ═══════════════════════════════════════════════════════════════
+// 实例业务配置（Instance Layer）
+// ═══════════════════════════════════════════════════════════════
+
+const DeviceControlSchema = z.object({
+  target_id: z.string(),
+  function: z.enum([
+    'on_off',
+    'dimming',
+    'open_close',
+    'temp_mode',
+    'fan_speed',
+    'scene_trigger',
+    'lock_unlock',
+    'unknown',
+  ]),
+  label: z.string().optional(),
+})
+
+export type DeviceControl = z.infer<typeof DeviceControlSchema>
+
+const DeviceConfigurationSchema = z.object({
+  custom_label: z.string().optional(),
+  controls: z.array(DeviceControlSchema).optional(),
+  scenes: z.array(z.string()).optional(),
+  bus_address: z.string().optional(),
+  gateway_id: z.string().optional(),
+  custom: z.record(z.string(), z.unknown()).optional(),
+})
+
+export type DeviceConfiguration = z.infer<typeof DeviceConfigurationSchema>
+
+const DeviceDeliverySchema = z.object({
+  quoted: z.boolean().default(false),
+  quoted_price_rmb: z.number().optional(),
+  purchased: z.boolean().default(false),
+  installed: z.boolean().default(false),
+  commissioned: z.boolean().default(false),
+})
+
+export type DeviceDelivery = z.infer<typeof DeviceDeliverySchema>
+
+const DeviceInstanceMetadataSchema = z.object({
+  created_at: z.string().optional(),
+  updated_at: z.string().optional(),
+  notes: z.string().optional(),
+})
+
+export type DeviceInstanceMetadata = z.infer<typeof DeviceInstanceMetadataSchema>
+
+// ═══════════════════════════════════════════════════════════════
 // 设备节点 Schema
 // ═══════════════════════════════════════════════════════════════
 
@@ -114,6 +164,12 @@ export const DeviceNode = BaseNode.extend({
   state: z.any().default({}),
   showAnimation: z.boolean().default(true),
   linkedScenes: z.array(z.string()).default([]),
+  // 实例业务配置（控制绑定、场景关联、总线地址等）
+  instanceConfig: DeviceConfigurationSchema.optional(),
+  // 交付追踪（报价→采购→安装→调试）
+  delivery: DeviceDeliverySchema.optional(),
+  // 实例元数据（备注、创建时间等）
+  instanceMeta: DeviceInstanceMetadataSchema.optional(),
 }).describe(dedent`Device node - 智能家居设备`)
 
 export type DeviceNode = z.infer<typeof DeviceNode>

@@ -40,6 +40,10 @@ export {
   type SceneEffect,
   type SceneNode as SceneNodeType,
   type Subsystem,
+  type DeviceControl,
+  type DeviceConfiguration,
+  type DeviceDelivery,
+  type DeviceInstanceMetadata,
 } from './nodes/device'
 export { DoorNode, DoorSegment } from './nodes/door'
 export { GuideNode } from './nodes/guide'
@@ -51,7 +55,9 @@ export type {
   Effect,
   Interactive,
   LightEffect,
+  RotationEffect,
   SliderControl,
+  WallArm,
   TemperatureControl,
   ToggleControl,
 } from './nodes/item'

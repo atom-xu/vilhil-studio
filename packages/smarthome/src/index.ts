@@ -5,6 +5,7 @@
  * - 设备目录 (device-catalog.ts)
  * - 设备状态管理 (device-state.ts)
  * - 3D 模型库 (models/) - 设计师维护的程序化模型系统
+ * - 元数据框架 (meta/) - Product / Instance 分层定义
  */
 
 // 设备目录
@@ -21,8 +22,42 @@ export {
   getSensors,
   SUBSYSTEM_META,
   SUBSYSTEM_ORDER,
+  deriveProductMeta,
+  getProductMeta,
   type DeviceDefinition,
 } from './device-catalog'
+
+// 元数据框架（Product / Instance 分层）
+export {
+  // Product 层
+  productHasScreen,
+  productSupportsScenes,
+  getProductDisplayName,
+  getFallbackGeometry,
+  type DeviceCategory,
+  type DeviceSubcategory,
+  type ProductIdentity,
+  type ProductPhysical,
+  type ProductElectrical,
+  type ProductProtocol,
+  type ProductCapabilities,
+  type ProductCommercial,
+  type FallbackGeometry,
+  type ProductAssets,
+  type ProductMetadata,
+  type SmartProduct,
+  // Instance 层
+  getInstanceLabel,
+  getDeliveryStatusText,
+  isDeliveryComplete,
+  createDefaultDelivery,
+  type ControlFunction,
+  type DeviceControl,
+  type DeviceConfiguration,
+  type DeviceDelivery,
+  type DeviceInstanceMetadata,
+  type DeviceInstanceMeta,
+} from './meta'
 
 // 子系统工具
 export {
@@ -35,6 +70,7 @@ export {
   executeScene,
   useDevice,
   useDeviceState,
+  useSelectedSubsystem,
   useSubsystemVisibility,
   useToggleSubsystem,
   type DeviceStateEntry,
@@ -57,12 +93,23 @@ export {
   addSceneEffect,
   removeSceneEffect,
   applyScene,
+  subscribeSceneRunStatus,
+  getSceneRunStatus,
   getSceneNodes,
+  type SceneRunStatus,
   exportDeviceList,
   exportDeviceListCSV,
   type DeviceListExport,
   type DeviceListItem,
   type SubsystemGroup,
+  buildTopology,
+  type TopologyAssignment,
+  type TopologyBuildResult,
+  type TopologyControllerSpec,
+  type TopologyControllerState,
+  type TopologyDeviceInput,
+  type TopologyProtocol,
+  type TopologyStrategy,
 } from './tools'
 
 // 3D 模型库（设计师维护）
