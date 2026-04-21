@@ -2041,4 +2041,18 @@ export const CATALOG_ITEMS: AssetInput[] = [
     dimensions: [1.2, 1.2, 0.1],
     attachTo: 'wall',
   },
+
+  {
+    id: 'modern-kitchen-set',
+    category: 'kitchen',
+    tags: ['floor', 'large'],
+    name: '厨房套件',
+    thumbnail: '/items/modern-kitchen-set/thumbnail.webp',
+    src: '/items/modern-kitchen-set/model.glb',
+    // 原始包围盒约 13.6×16.1×8.4，× 0.1 得约 1.36×1.6×0.84m
+    scale: [0.1, 0.1, 0.1],
+    offset: [0, 0, 0],
+    rotation: [0, 0, 0],
+    dimensions: [1.36, 1.61, 0.84],
+  },
 ]

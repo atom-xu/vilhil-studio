@@ -57,7 +57,19 @@ const lightEffectSchema = z.object({
   offset: z.tuple([z.number(), z.number(), z.number()]).default([0, 0, 0]),
 })
 
-const effectSchema = z.discriminatedUnion('kind', [animationEffectSchema, lightEffectSchema])
+const rotationEffectSchema = z.object({
+  kind: z.literal('rotation'),
+  nodeName: z.string(),
+  controlIndex: z.number().int(),
+  axis: z.enum(['x', 'y', 'z']),
+  range: z.tuple([z.number(), z.number()]),
+})
+
+const effectSchema = z.discriminatedUnion('kind', [
+  animationEffectSchema,
+  lightEffectSchema,
+  rotationEffectSchema,
+])
 
 // --- Interactive descriptor ---
 
@@ -72,7 +84,9 @@ export type TemperatureControl = z.infer<typeof temperatureControlSchema>
 export type Control = z.infer<typeof controlSchema>
 export type AnimationEffect = z.infer<typeof animationEffectSchema>
 export type LightEffect = z.infer<typeof lightEffectSchema>
+export type RotationEffect = z.infer<typeof rotationEffectSchema>
 export type Effect = z.infer<typeof effectSchema>
+export type WallArm = z.infer<typeof assetSchema>['wallArm']
 export type Interactive = z.infer<typeof interactiveSchema>
 
 const assetSchema = z.object({
@@ -93,6 +107,13 @@ const assetSchema = z.object({
       height: z.number(), // where things rest
     })
     .optional(), // undefined = can't place things on it
+  // Auto-generates a procedural wall arm + mount plate when attachTo === 'wall-side'
+  wallArm: z
+    .object({
+      length: z.number(),
+      thickness: z.number().default(0.015),
+    })
+    .optional(),
   interactive: interactiveSchema.optional(),
 })
 
@@ -111,6 +132,15 @@ export const ItemNode = BaseNode.extend({
   scale: z.tuple([z.number(), z.number(), z.number()]).default([1, 1, 1]),
   side: z.enum(['front', 'back']).optional(),
   children: z.array(objectId('item')).default([]),
+
+  // Per-instance camera parameters (shown in item panel when tags include 'security')
+  cameraParams: z
+    .object({
+      fov: z.number().default(60),     // 照射角度 (°)
+      range: z.number().default(8),    // 覆盖距离 (m)
+      yaw: z.number().default(0),      // FOV 锥体朝向偏转 (°)，独立于模型旋转
+    })
+    .optional(),
 
   // Wall attachment properties (only used when asset.attachTo is "wall" or "wall-side")
   wallId: z.string().optional(),

@@ -88,6 +88,11 @@ type CameraControlEvents = {
   'camera-controls:orbit-cw': undefined
   'camera-controls:orbit-ccw': undefined
   'camera-controls:generate-thumbnail': ThumbnailGenerateEvent
+  /** 飞行到指定位置+目标，平滑动画，适用于子系统聚焦推荐视角 */
+  'camera-controls:fly-to': {
+    position: [number, number, number]
+    target: [number, number, number]
+  }
 }
 
 type ToolEvents = {

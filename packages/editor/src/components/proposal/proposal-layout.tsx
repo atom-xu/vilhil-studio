@@ -3,11 +3,14 @@
 import type { AnyNodeId, BuildingNode, LevelNode } from '@pascal-app/core'
 import { emitter, useScene } from '@pascal-app/core'
 import { useViewer } from '@pascal-app/viewer'
+import { useDeviceState } from '@vilhil/smarthome'
 import { ArrowLeft, ChevronRight, FileText } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useShallow } from 'zustand/shallow'
 import { useDeviceInteraction } from '../../hooks/use-device-interaction'
 import { cn } from '../../lib/utils'
+import { Button } from '../ui/primitives/button'
+import { CameraInfoCard } from './camera-info-card'
 import { DeviceInfoCard } from './device-info-card'
 import { QuotePanel } from './quote-panel'
 import { SceneBar } from './scene-bar'
@@ -50,6 +53,52 @@ export function ProposalLayout({
     ? (nodes[effectiveDeviceId as AnyNodeId] as any | undefined)
     : null
 
+  // Camera item detection — ItemNode with security tag
+  const selectedItemId = selection.selectedIds?.[0]
+  const selectedItem = selectedItemId ? (nodes[selectedItemId as AnyNodeId] as any) : null
+  const isCameraItem =
+    selectedItem?.type === 'item' && selectedItem?.asset?.tags?.includes('security')
+
+  // 子系统聚焦 → 推荐视角
+  const selectedSubsystem = useDeviceState((s) => s.selectedSubsystem)
+  useEffect(() => {
+    if (!selectedSubsystem) return
+
+    // 收集该子系统所有节点的位置
+    const sceneNodes = useScene.getState().nodes
+    const positions: [number, number, number][] = []
+    for (const n of Object.values(sceneNodes)) {
+      const pos = (n as any).position as [number, number, number] | undefined
+      if (!pos) continue
+      if (n.type === 'device' && (n as any).subsystem === selectedSubsystem) {
+        positions.push(pos)
+      }
+      if (n.type === 'item' && (n as any).asset?.tags?.includes(selectedSubsystem)) {
+        positions.push(pos)
+      }
+    }
+    if (positions.length === 0) return
+
+    // 计算质心
+    const cx = positions.reduce((s, p) => s + p[0], 0) / positions.length
+    const cy = positions.reduce((s, p) => s + p[1], 0) / positions.length
+    const cz = positions.reduce((s, p) => s + p[2], 0) / positions.length
+
+    // 计算分布半径 → 确定观察距离
+    const spread = Math.max(
+      5,
+      ...positions.map((p) => Math.sqrt((p[0] - cx) ** 2 + (p[2] - cz) ** 2)),
+    )
+    const d = Math.min(spread * 2.8, 40)
+
+    requestAnimationFrame(() => {
+      emitter.emit('camera-controls:fly-to', {
+        position: [cx + d * 0.65, cy + d * 0.55, cz + d * 0.75],
+        target: [cx, cy, cz],
+      })
+    })
+  }, [selectedSubsystem])
+
   // L2 展示模式：点击设备 → 翻转开关
   useDeviceInteraction({ editMode: false })
 
@@ -72,15 +121,16 @@ export function ProposalLayout({
       {/* Top Bar - Project Info */}
       <div className="absolute top-4 left-4 z-20 flex items-center gap-3">
         {/* Back Button + Project Name */}
-        <div className="flex items-center gap-3 rounded-2xl border border-border/40 bg-background/95 px-4 py-2 shadow-lg backdrop-blur-xl">
+        <div className="vh-panel flex items-center gap-3 px-4 py-2">
           {onBack && (
-            <button
-              className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-accent/50"
+            <Button
               onClick={onBack}
+              size="icon-sm"
               type="button"
+              variant="ghost"
             >
               <ArrowLeft className="h-4 w-4" />
-            </button>
+            </Button>
           )}
           <div>
             <h1 className="font-semibold text-foreground">{projectName}</h1>
@@ -104,17 +154,19 @@ export function ProposalLayout({
         </div>
 
         {/* Quote Button */}
-        <button
+        <Button
           className={cn(
-            'flex h-10 w-10 items-center justify-center rounded-xl border border-border/40 bg-background/95 shadow-lg backdrop-blur-xl transition-all duration-200',
+            'vh-btn-secondary h-10 w-10 border-border/40 shadow-lg backdrop-blur-xl transition-all duration-200',
             showQuote && 'bg-accent/50',
-            'hover:bg-accent/30'
+            'hover:bg-accent/30',
           )}
           onClick={() => setShowQuote(!showQuote)}
+          size="icon"
           type="button"
+          variant="outline"
         >
           <FileText className="h-5 w-5" />
-        </button>
+        </Button>
       </div>
 
       {/* Left Side - Subsystem Bar */}
@@ -127,8 +179,15 @@ export function ProposalLayout({
         <SceneBar />
       </div>
 
-      {/* Right Side - Device Info Card */}
-      {selectedDevice?.type === 'device' && (
+      {/* Right Side - Camera Info Card (security ItemNode) */}
+      {isCameraItem && (
+        <div className="absolute top-20 right-4 z-20">
+          <CameraInfoCard node={selectedItem} />
+        </div>
+      )}
+
+      {/* Right Side - Device Info Card (DeviceNode) */}
+      {!isCameraItem && selectedDevice?.type === 'device' && (
         <div className="absolute top-20 right-4 z-20">
           <DeviceInfoCard device={selectedDevice} />
         </div>

@@ -9,6 +9,7 @@ import { cn } from '../../../lib/utils'
 import useEditor from '../../../store/use-editor'
 import { ActionButton, ActionGroup } from '../controls/action-button'
 import { PanelSection } from '../controls/panel-section'
+import { Button } from '../primitives/button'
 import { SliderControl } from '../controls/slider-control'
 import { CollectionsPopover } from './collections/collections-popover'
 import { PanelWrapper } from './panel-wrapper'
@@ -77,6 +78,8 @@ export function ItemPanel() {
 
   if (!node || node.type !== 'item' || selectedIds.length !== 1) return null
 
+  const isCamera = node.asset.tags?.includes('security')
+
   return (
     <PanelWrapper
       icon={node.asset.thumbnail || '/icons/furniture.png'}
@@ -84,6 +87,47 @@ export function ItemPanel() {
       title={node.name || node.asset.name}
       width={300}
     >
+      {isCamera && (
+        <PanelSection title="摄像头">
+          <SliderControl
+            label="朝向"
+            max={180}
+            min={-180}
+            onChange={(degrees) =>
+              handleUpdate({ cameraParams: { fov: node.cameraParams?.fov ?? 60, range: node.cameraParams?.range ?? 8, yaw: degrees } })
+            }
+            precision={0}
+            step={1}
+            unit="°"
+            value={node.cameraParams?.yaw ?? 0}
+          />
+          <SliderControl
+            label="照射角度"
+            max={160}
+            min={30}
+            onChange={(value) =>
+              handleUpdate({ cameraParams: { ...node.cameraParams, fov: value, range: node.cameraParams?.range ?? 8 } })
+            }
+            precision={0}
+            step={5}
+            unit="°"
+            value={node.cameraParams?.fov ?? 60}
+          />
+          <SliderControl
+            label="覆盖距离"
+            max={50}
+            min={1}
+            onChange={(value) =>
+              handleUpdate({ cameraParams: { fov: node.cameraParams?.fov ?? 60, range: value } })
+            }
+            precision={1}
+            step={0.5}
+            unit="m"
+            value={node.cameraParams?.range ?? 8}
+          />
+        </PanelSection>
+      )}
+
       <PanelSection title="位置">
         <SliderControl
           label={
@@ -180,16 +224,16 @@ export function ItemPanel() {
           <span className="font-medium text-[10px] text-muted-foreground/80 uppercase tracking-wider">
             等比缩放
           </span>
-          <button
+          <Button variant="ghost"
             className={cn(
               'flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground',
-              uniformScale ? 'bg-[#3e3e3e]' : 'bg-[#2C2C2E] hover:bg-[#3e3e3e]',
+              uniformScale ? 'bg-accent' : 'bg-accent/70 hover:bg-accent',
             )}
             onClick={() => setUniformScale((v) => !v)}
             type="button"
           >
             {uniformScale ? <Link className="h-3.5 w-3.5" /> : <Link2Off className="h-3.5 w-3.5" />}
-          </button>
+          </Button>
         </div>
 
         {uniformScale ? (

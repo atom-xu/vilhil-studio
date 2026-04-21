@@ -339,12 +339,32 @@ export const CustomCameraControls = () => {
       focusNode(nodeId)
     }
 
+    const handleFlyTo = ({
+      position,
+      target,
+    }: {
+      position: [number, number, number]
+      target: [number, number, number]
+    }) => {
+      if (!controls.current) return
+      controls.current.setLookAt(
+        position[0],
+        position[1],
+        position[2],
+        target[0],
+        target[1],
+        target[2],
+        true, // smooth
+      )
+    }
+
     emitter.on('camera-controls:capture', handleNodeCapture)
     emitter.on('camera-controls:focus', handleNodeFocus)
     emitter.on('camera-controls:view', handleNodeView)
     emitter.on('camera-controls:top-view', handleTopView)
     emitter.on('camera-controls:orbit-cw', handleOrbitCW)
     emitter.on('camera-controls:orbit-ccw', handleOrbitCCW)
+    emitter.on('camera-controls:fly-to', handleFlyTo)
 
     return () => {
       emitter.off('camera-controls:capture', handleNodeCapture)
@@ -353,6 +373,7 @@ export const CustomCameraControls = () => {
       emitter.off('camera-controls:top-view', handleTopView)
       emitter.off('camera-controls:orbit-cw', handleOrbitCW)
       emitter.off('camera-controls:orbit-ccw', handleOrbitCCW)
+      emitter.off('camera-controls:fly-to', handleFlyTo)
     }
   }, [focusNode, isFirstPersonMode])
 
