@@ -2,6 +2,7 @@ import { emitter, useScene, type ZoneNode } from '@pascal-app/core'
 import { useViewer } from '@pascal-app/viewer'
 import { Camera, Hexagon, Trash2 } from 'lucide-react'
 import { useState } from 'react'
+import { Button } from '../../../primitives/button'
 import { ColorDot } from './../../../../../components/ui/primitives/color-dot'
 import {
   Popover,
@@ -54,8 +55,8 @@ function ZoneItem({ zone }: { zone: ZoneNode }) {
       {/* Camera snapshot button */}
       <Popover onOpenChange={setCameraPopoverOpen} open={cameraPopoverOpen}>
         <PopoverTrigger asChild>
-          <button
-            className="relative flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 transition-colors hover:bg-black/5 hover:text-foreground group-hover/row:opacity-100 dark:hover:bg-white/10"
+          <Button variant="ghost"
+            className="relative flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 transition-colors hover:bg-sidebar-accent/85 hover:text-foreground group-hover/row:opacity-100"
             onClick={(e) => e.stopPropagation()}
             title="相机快照"
           >
@@ -63,7 +64,7 @@ function ZoneItem({ zone }: { zone: ZoneNode }) {
             {zone.camera && (
               <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-primary" />
             )}
-          </button>
+          </Button>
         </PopoverTrigger>
         <PopoverContent
           align="start"
@@ -73,7 +74,7 @@ function ZoneItem({ zone }: { zone: ZoneNode }) {
         >
           <div className="flex flex-col gap-0.5">
             {zone.camera && (
-              <button
+              <Button variant="ghost"
                 className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-popover-foreground text-sm hover:bg-accent"
                 onClick={(e) => {
                   e.stopPropagation()
@@ -83,9 +84,9 @@ function ZoneItem({ zone }: { zone: ZoneNode }) {
               >
                 <Camera className="h-3.5 w-3.5" />
                 查看快照
-              </button>
+              </Button>
             )}
-            <button
+            <Button variant="ghost"
               className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-popover-foreground text-sm hover:bg-accent"
               onClick={(e) => {
                 e.stopPropagation()
@@ -95,9 +96,9 @@ function ZoneItem({ zone }: { zone: ZoneNode }) {
             >
               <Camera className="h-3.5 w-3.5" />
               {zone.camera ? '更新快照' : '拍摄快照'}
-            </button>
+            </Button>
             {zone.camera && (
-              <button
+              <Button variant="ghost"
                 className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-popover-foreground text-sm hover:bg-destructive hover:text-destructive-foreground"
                 onClick={(e) => {
                   e.stopPropagation()
@@ -107,17 +108,17 @@ function ZoneItem({ zone }: { zone: ZoneNode }) {
               >
                 <Trash2 className="h-3.5 w-3.5" />
                 清除快照
-              </button>
+              </Button>
             )}
           </div>
         </PopoverContent>
       </Popover>
-      <button
-        className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 transition-colors hover:bg-black/5 hover:text-foreground group-hover/row:opacity-100 dark:hover:bg-white/10"
+      <Button variant="ghost"
+        className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 transition-colors hover:bg-sidebar-accent/85 hover:text-foreground group-hover/row:opacity-100"
         onClick={handleDelete}
       >
         <Trash2 className="h-3 w-3" />
-      </button>
+      </Button>
     </div>
   )
 }
@@ -155,9 +156,9 @@ export function ZonePanel() {
       {levelZones.length === 0 ? (
         <div className="px-3 py-4 text-muted-foreground text-sm">
           该楼层暂无区域。{' '}
-          <button className="cursor-pointer text-primary hover:underline" onClick={handleAddZone}>
+          <Button variant="ghost" className="cursor-pointer text-primary hover:underline" onClick={handleAddZone}>
             添加一个
-          </button>
+          </Button>
         </div>
       ) : (
         levelZones.map((zone) => <ZoneItem key={zone.id} zone={zone} />)

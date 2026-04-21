@@ -294,7 +294,7 @@ export default function ModelDemoPage() {
             borderBottom: '1px solid #374151',
           }}>
             {DEVICE_CATEGORIES.map((cat) => (
-              <button
+              <button variant="ghost"
                 key={cat.id}
                 onClick={() => setActiveCategory(cat.id)}
                 style={{
@@ -331,7 +331,7 @@ export default function ModelDemoPage() {
                 return categoryMap[activeCategory]?.includes(key)
               })
               .map(([key, m]) => (
-                <button
+                <button variant="ghost"
                   key={key}
                   onClick={() => setSelectedModel(key)}
                   style={{
@@ -453,7 +453,7 @@ export default function ModelDemoPage() {
               marginBottom: '8px',
             }}>
               <span>开关状态</span>
-              <button
+              <button variant="ghost"
                 onClick={() => setState(s => ({ ...s, on: !s.on }))}
                 style={{
                   padding: '6px 16px',
@@ -528,7 +528,7 @@ export default function ModelDemoPage() {
                 fontSize: '14px',
               }}>
                 <span>锁状态</span>
-                <button
+                <button variant="ghost"
                   onClick={() => setState(s => ({ ...s, locked: !s.locked }))}
                   style={{
                     padding: '6px 16px',

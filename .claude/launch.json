@@ -7,6 +7,12 @@
       "runtimeArgs": ["dev"],
       "port": 3002,
       "autoPort": false
+    },
+    {
+      "name": "thumbnail-gen",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "apps/editor/public", "--port", "4455", "--no-clipboard"],
+      "port": 4455
     }
   ]
 }

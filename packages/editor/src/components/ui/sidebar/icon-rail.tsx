@@ -1,17 +1,41 @@
 'use client'
 
 import { useViewer } from '@pascal-app/viewer'
-import { Moon, Sparkles, Sun } from 'lucide-react'
+import {
+  Building2,
+  ClipboardList,
+  Moon,
+  Network,
+  Package,
+  Settings,
+  Share2,
+  Sun,
+} from 'lucide-react'
 import { motion } from 'motion/react'
 import { type ReactNode, useEffect, useState } from 'react'
+import { Button } from '../primitives/button'
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from './../../../components/ui/primitives/tooltip'
 import { cn } from './../../../lib/utils'
+import useEditor from './../../../store/use-editor'
+import { ProjectSwitcher } from './project-switcher'
 
-export type PanelId = 'site' | 'settings' | 'scenes'
+// ─── 类型 ──────────────────────────────────────────────────────────────────────
+
+export type PanelId =
+  | 'device'
+  | 'building'
+  | 'topology'
+  | 'scene'
+  | 'share'
+  | 'review'
+  | 'settings'
+  // 兼容旧值
+  | 'site'
+  | 'scenes'
 
 /** 外部注入的额外面板（供 Editor 消费者扩展侧边栏使用） */
 export type ExtraPanel = {
@@ -21,28 +45,48 @@ export type ExtraPanel = {
 }
 
 interface IconRailProps {
-  activePanel: PanelId
-  onPanelChange: (panel: PanelId) => void
-  appMenuButton?: ReactNode
   className?: string
 }
 
-type PanelEntry =
-  | { id: PanelId; iconSrc: string; label: string; icon?: never }
-  | { id: PanelId; icon: ReactNode; label: string; iconSrc?: never }
+// ─── 旧 ID 规范化 ──────────────────────────────────────────────────────────────
 
-const panels: PanelEntry[] = [
-  { id: 'site', iconSrc: '/icons/level.png', label: '项目' },
-  { id: 'scenes', icon: <Sparkles className="h-5 w-5" />, label: '场景' },
-  { id: 'settings', iconSrc: '/icons/settings.png', label: '设置' },
+/** 将旧版 panel id 映射到新版 */
+export function normalizePanelId(id: string): PanelId {
+  if (id === 'site') return 'building'
+  if (id === 'scenes') return 'scene'
+  return id as PanelId
+}
+
+// ─── 面板入口定义 ───────────────────────────────────────────────────────────────
+
+interface PanelEntry {
+  id: PanelId
+  label: string
+  icon: ReactNode
+  /** true = 功能已上线；false = 占位灰色 */
+  enabled: boolean
+}
+
+const PANEL_ENTRIES: PanelEntry[] = [
+  { id: 'device',   label: '设备',   icon: <Package      size={16} strokeWidth={1.5} />, enabled: true  },
+  { id: 'building', label: '建筑',   icon: <Building2    size={16} strokeWidth={1.5} />, enabled: true  },
+  { id: 'topology', label: '拓扑',   icon: <Network      size={16} strokeWidth={1.5} />, enabled: true  },
+  { id: 'share',    label: '分享',   icon: <Share2       size={16} strokeWidth={1.5} />, enabled: false },
+  { id: 'review',   label: '查看',   icon: <ClipboardList size={16} strokeWidth={1.5} />, enabled: false },
 ]
 
-export function IconRail({ activePanel, onPanelChange, appMenuButton, className }: IconRailProps) {
+// ─── IconRail ─────────────────────────────────────────────────────────────────
+
+export function IconRail({ className }: IconRailProps) {
   const theme = useViewer((state) => state.theme)
   const setTheme = useViewer((state) => state.setTheme)
   const unit = useViewer((state) => state.unit)
   const setUnit = useViewer((state) => state.setUnit)
   const [mounted, setMounted] = useState(false)
+
+  const rawActive = useEditor((s) => s.activeSidebarPanel)
+  const setActivePanel = useEditor((s) => s.setActiveSidebarPanel)
+  const activePanel = normalizePanelId(rawActive)
 
   useEffect(() => {
     setMounted(true)
@@ -51,51 +95,56 @@ export function IconRail({ activePanel, onPanelChange, appMenuButton, className 
   return (
     <div
       className={cn(
-        'flex h-full w-11 flex-col items-center gap-1 border-border/50 border-r py-2',
+        'flex h-full w-11 flex-col items-center gap-1 border-sidebar-border/70 border-r py-2',
         className,
       )}
     >
-      {/* App menu slot */}
-      {appMenuButton}
+      {/* Home — 项目切换 */}
+      <ProjectSwitcher />
 
       {/* Divider */}
-      <div className="mb-1 h-px w-8 bg-border/50" />
+      <div className="mb-1 h-px w-8 bg-sidebar-border/70" />
 
-      {panels.map((panel) => {
-        const isActive = activePanel === panel.id
+      {/* 6 个功能入口 */}
+      {PANEL_ENTRIES.map((entry) => {
+        const isActive = activePanel === entry.id
+
+        if (!entry.enabled) {
+          return (
+            <Tooltip key={entry.id}>
+              <TooltipTrigger asChild>
+                <Button variant="ghost"
+                  className="flex h-9 w-9 cursor-not-allowed items-center justify-center rounded-lg text-sidebar-foreground/25 transition-colors"
+                  onClick={() => {}}
+                  type="button"
+                >
+                  {entry.icon}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                {entry.label} — 即将上线
+              </TooltipContent>
+            </Tooltip>
+          )
+        }
+
         return (
-          <Tooltip key={panel.id}>
+          <Tooltip key={entry.id}>
             <TooltipTrigger asChild>
-              <button
+              <Button variant="ghost"
                 className={cn(
                   'flex h-9 w-9 items-center justify-center rounded-lg transition-all',
-                  isActive ? 'bg-accent' : 'hover:bg-accent',
+                  isActive
+                    ? 'bg-sidebar-primary/12 text-sidebar-primary'
+                    : 'text-sidebar-foreground/58 hover:bg-sidebar-accent hover:text-sidebar-primary',
                 )}
-                onClick={() => onPanelChange(panel.id)}
+                onClick={() => setActivePanel(entry.id)}
                 type="button"
               >
-                {panel.icon ? (
-                  <span
-                    className={cn(
-                      'transition-all',
-                      isActive ? 'text-foreground' : 'text-muted-foreground/60',
-                    )}
-                  >
-                    {panel.icon}
-                  </span>
-                ) : (
-                  <img
-                    alt={panel.label}
-                    className={cn(
-                      'h-6 w-6 object-contain transition-all',
-                      !isActive && 'opacity-50 saturate-0',
-                    )}
-                    src={panel.iconSrc}
-                  />
-                )}
-              </button>
+                {entry.icon}
+              </Button>
             </TooltipTrigger>
-            <TooltipContent side="right">{panel.label}</TooltipContent>
+            <TooltipContent side="right">{entry.label}</TooltipContent>
           </Tooltip>
         )
       })}
@@ -103,19 +152,38 @@ export function IconRail({ activePanel, onPanelChange, appMenuButton, className 
       {/* Spacer */}
       <div className="flex-1" />
 
+      {/* 设置 */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button variant="ghost"
+            className={cn(
+              'flex h-9 w-9 items-center justify-center rounded-lg transition-all',
+              activePanel === 'settings'
+                ? 'bg-sidebar-primary/12 text-sidebar-primary'
+                : 'text-sidebar-foreground/58 hover:bg-sidebar-accent hover:text-sidebar-primary',
+            )}
+            onClick={() => setActivePanel('settings')}
+            type="button"
+          >
+            <Settings size={16} strokeWidth={1.5} />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="right">设置</TooltipContent>
+      </Tooltip>
+
       {/* Unit Toggle */}
       {mounted && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <button
-              className="mb-1 flex h-9 w-9 items-center justify-center rounded-lg border border-border/50 bg-accent/40 text-foreground transition-all hover:bg-accent"
+            <Button variant="ghost"
+              className="mb-1 flex h-9 w-9 items-center justify-center rounded-lg border border-sidebar-border/75 bg-sidebar-accent/75 text-sidebar-primary transition-all hover:bg-sidebar-accent"
               onClick={() => setUnit(unit === 'metric' ? 'imperial' : 'metric')}
               type="button"
             >
               <div className="flex h-full w-full flex-col items-center justify-center gap-0.5 font-medium text-[10px] leading-none">
                 {unit === 'metric' ? 'm' : 'ft'}
               </div>
-            </button>
+            </Button>
           </TooltipTrigger>
           <TooltipContent side="right">切换单位 (公制/英制)</TooltipContent>
         </Tooltip>
@@ -125,8 +193,8 @@ export function IconRail({ activePanel, onPanelChange, appMenuButton, className 
       {mounted && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <button
-              className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg border border-border/50 bg-accent/40 text-foreground transition-all hover:bg-accent"
+            <Button variant="ghost"
+              className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg border border-sidebar-border/75 bg-sidebar-accent/75 text-sidebar-primary transition-all hover:bg-sidebar-accent"
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
               type="button"
             >
@@ -136,9 +204,11 @@ export function IconRail({ activePanel, onPanelChange, appMenuButton, className 
                 key={theme}
                 transition={{ duration: 0.25, ease: 'easeOut' }}
               >
-                {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                {theme === 'dark'
+                  ? <Sun size={15} strokeWidth={1.5} />
+                  : <Moon size={15} strokeWidth={1.5} />}
               </motion.div>
-            </button>
+            </Button>
           </TooltipTrigger>
           <TooltipContent side="right">切换主题</TooltipContent>
         </Tooltip>
@@ -147,4 +217,4 @@ export function IconRail({ activePanel, onPanelChange, appMenuButton, className 
   )
 }
 
-export { panels }
+export { PANEL_ENTRIES }

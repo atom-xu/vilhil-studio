@@ -19,6 +19,7 @@ import type { SceneNodeType } from '@pascal-app/core'
 import { Play, Trash2 } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { PanelSection } from '../controls/panel-section'
+import { Button } from '../primitives/button'
 import { PanelWrapper } from './panel-wrapper'
 
 interface SceneNodePanelProps {
@@ -100,14 +101,14 @@ export function SceneNodePanel({ sceneId }: SceneNodePanelProps) {
 
       {/* 预览场景 */}
       <PanelSection title="预览">
-        <button
+        <Button variant="ghost"
           className="flex w-full items-center gap-2 rounded-lg bg-violet-500/15 px-3 py-2 text-violet-400 text-sm font-medium transition-colors hover:bg-violet-500/25"
           onClick={handleApply}
           type="button"
         >
           <Play className="h-4 w-4" />
           在编辑器中预览场景
-        </button>
+        </Button>
         <p className="px-1 text-[10px] text-muted-foreground">
           预览不影响 Undo 历史，可随时撤销
         </p>
@@ -135,14 +136,14 @@ export function SceneNodePanel({ sceneId }: SceneNodePanelProps) {
                         ? `${effect.state.brightness}%`
                         : '开'}
                   </span>
-                  <button
+                  <Button variant="ghost"
                     className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-red-400"
                     onClick={() => removeSceneEffect(sceneId, effect.deviceId)}
                     title="移除"
                     type="button"
                   >
                     <Trash2 className="h-2.5 w-2.5" />
-                  </button>
+                  </Button>
                 </div>
               )
             })}
@@ -152,14 +153,14 @@ export function SceneNodePanel({ sceneId }: SceneNodePanelProps) {
 
       {/* 删除 */}
       <PanelSection defaultExpanded={false} title="操作">
-        <button
+        <Button variant="ghost"
           className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-red-400 text-xs transition-colors hover:bg-red-500/10"
           onClick={handleDelete}
           type="button"
         >
           <Trash2 className="h-3.5 w-3.5 shrink-0" />
           删除场景
-        </button>
+        </Button>
       </PanelSection>
     </PanelWrapper>
   )

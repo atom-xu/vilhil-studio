@@ -28,6 +28,7 @@ import type { Connection, Edge, Node, NodeProps } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { Plus, Save, Timer, X, Zap } from 'lucide-react'
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { Button } from '../../../primitives/button'
 import { cn } from '../../../../../lib/utils'
 
 // ═══════════════════════════════════════════════════════════════
@@ -55,12 +56,23 @@ type FlowNode =
   | Node<DeviceData, 'deviceAction'>
   | Node<DelayData, 'delayControl'>
 
+const FLOW_THEME = {
+  nodeBg: 'hsl(var(--popover))',
+  panelBg: 'hsl(var(--card))',
+  canvasBg: 'hsl(var(--background))',
+  border: 'hsl(var(--border))',
+  muted: 'hsl(var(--muted-foreground))',
+  edge: 'hsl(var(--border))',
+  colorTempGradient:
+    'linear-gradient(to right, color-mix(in srgb, hsl(var(--primary)) 35%, white), hsl(var(--background)), color-mix(in srgb, hsl(var(--primary)) 65%, white))',
+} as const
+
 // ═══════════════════════════════════════════════════════════════
 // 子系统颜色辅助
 // ═══════════════════════════════════════════════════════════════
 
 function subsystemStyle(subsystem: string) {
-  const color = getSubsystemColor(subsystem as any) ?? '#94a3b8'
+  const color = getSubsystemColor(subsystem as any) ?? FLOW_THEME.muted
   return { borderColor: color, color }
 }
 
@@ -72,10 +84,10 @@ function SceneTriggerNode({ data, selected }: NodeProps<Node<TriggerData>>) {
   return (
     <div
       className={cn(
-        'w-44 rounded-lg border-2 bg-[#0f1520] px-3 py-2.5 shadow-lg transition-shadow',
-        selected ? 'shadow-[0_0_0_3px_rgba(45,127,249,0.35)]' : '',
+        'w-44 rounded-lg border-2 px-3 py-2.5 shadow-lg transition-shadow',
+        selected ? 'shadow-[0_0_0_3px_color-mix(in_srgb,var(--primary)_35%,transparent)]' : '',
       )}
-      style={{ borderColor: '#2D7FF9' }}
+      style={{ background: FLOW_THEME.nodeBg, borderColor: 'var(--primary)' }}
     >
       <Handle
         position={Position.Left}
@@ -85,7 +97,10 @@ function SceneTriggerNode({ data, selected }: NodeProps<Node<TriggerData>>) {
       <div className="flex items-center gap-2">
         <div
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[11px] font-semibold"
-          style={{ background: 'rgba(45,127,249,0.18)', color: '#2D7FF9' }}
+          style={{
+            background: 'color-mix(in srgb, var(--primary) 18%, transparent)',
+            color: 'var(--primary)',
+          }}
         >
           {data.icon ? data.icon.slice(0, 2) : <Zap size={13} />}
         </div>
@@ -93,14 +108,14 @@ function SceneTriggerNode({ data, selected }: NodeProps<Node<TriggerData>>) {
           <div className="truncate font-semibold text-white text-xs leading-tight">
             {data.name || '场景'}
           </div>
-          <div className="text-[10px]" style={{ color: '#2D7FF9' }}>
+          <div className="text-[10px]" style={{ color: 'var(--primary)' }}>
             场景触发器
           </div>
         </div>
       </div>
       <Handle
         position={Position.Right}
-        style={{ background: '#2D7FF9', width: 8, height: 8 }}
+        style={{ background: 'var(--primary)', width: 8, height: 8 }}
         type="source"
       />
     </div>
@@ -121,10 +136,13 @@ function DeviceActionNode({ data, selected }: NodeProps<Node<DeviceData>>) {
   return (
     <div
       className={cn(
-        'w-44 rounded-lg border-2 bg-[#0f1520] px-3 py-2.5 shadow-lg transition-shadow',
+        'w-44 rounded-lg border-2 px-3 py-2.5 shadow-lg transition-shadow',
         selected ? 'shadow-[0_0_0_3px_rgba(255,255,255,0.12)]' : '',
       )}
-      style={{ borderColor: selected ? borderColor : 'rgba(255,255,255,0.12)' }}
+      style={{
+        background: FLOW_THEME.nodeBg,
+        borderColor: selected ? borderColor : 'color-mix(in srgb, hsl(var(--foreground)) 12%, transparent)',
+      }}
     >
       <Handle
         position={Position.Left}
@@ -161,15 +179,16 @@ function DelayControlNode({ data, selected }: NodeProps<Node<DelayData>>) {
   return (
     <div
       className={cn(
-        'w-32 rounded-lg border-2 bg-[#0f1520] px-3 py-2 text-center shadow-lg',
+        'w-32 rounded-lg border-2 px-3 py-2 text-center shadow-lg',
         selected
           ? 'border-white/40 shadow-[0_0_0_3px_rgba(255,255,255,0.1)]'
           : 'border-white/15',
       )}
+      style={{ background: FLOW_THEME.nodeBg }}
     >
       <Handle
         position={Position.Left}
-        style={{ background: '#64748b', width: 8, height: 8 }}
+        style={{ background: FLOW_THEME.muted, width: 8, height: 8 }}
         type="target"
       />
       <div className="flex items-center justify-center gap-1.5 text-white/50">
@@ -180,7 +199,7 @@ function DelayControlNode({ data, selected }: NodeProps<Node<DelayData>>) {
       </div>
       <Handle
         position={Position.Right}
-        style={{ background: '#64748b', width: 8, height: 8 }}
+        style={{ background: FLOW_THEME.muted, width: 8, height: 8 }}
         type="source"
       />
     </div>
@@ -234,7 +253,7 @@ function effectsToFlow(
         source: prevId,
         target: delayId,
         animated: true,
-        style: { stroke: '#334155', strokeWidth: 2 },
+        style: { stroke: FLOW_THEME.edge, strokeWidth: 2 },
       })
       prevId = delayId
       xOffset += 170
@@ -259,7 +278,7 @@ function effectsToFlow(
       source: prevId,
       target: actionId,
       animated: true,
-      style: { stroke: '#334155', strokeWidth: 2 },
+      style: { stroke: FLOW_THEME.edge, strokeWidth: 2 },
     })
 
     prevId = actionId
@@ -328,7 +347,7 @@ function NodeConfigPanel({ node, devices, onChange }: NodeConfigPanelProps) {
         <div>
           <label className="mb-1.5 block text-[11px] text-white/50">场景名称</label>
           <input
-            className="w-full rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-sm text-white outline-none focus:border-[#2D7FF9]/60 focus:ring-1 focus:ring-[#2D7FF9]/30"
+            className="w-full rounded-md border border-white/10 bg-white/5 px-2.5 py-1.5 text-sm text-white outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/30"
             onChange={(e) => onChange({ name: e.target.value })}
             type="text"
             value={data.name}
@@ -339,11 +358,11 @@ function NodeConfigPanel({ node, devices, onChange }: NodeConfigPanelProps) {
           <label className="mb-1.5 block text-[11px] text-white/50">场景类型</label>
           <div className="flex flex-wrap gap-1">
             {SCENE_ICONS.map((label) => (
-              <button
+              <Button variant="ghost"
                 className={cn(
                   'rounded px-2 py-1 text-[11px] font-medium transition-all',
                   data.icon === label
-                    ? 'bg-[#2D7FF9]/20 text-[#2D7FF9] ring-1 ring-[#2D7FF9]/40'
+                    ? 'bg-primary/20 text-primary ring-1 ring-primary/40'
                     : 'bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/80',
                 )}
                 key={label}
@@ -351,7 +370,7 @@ function NodeConfigPanel({ node, devices, onChange }: NodeConfigPanelProps) {
                 type="button"
               >
                 {label}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -370,7 +389,8 @@ function NodeConfigPanel({ node, devices, onChange }: NodeConfigPanelProps) {
         <div>
           <label className="mb-1.5 block text-[11px] text-white/50">设备</label>
           <select
-            className="w-full rounded-md border border-white/10 bg-[#0f1520] px-2.5 py-1.5 text-sm text-white outline-none focus:border-[#2D7FF9]/60"
+            className="w-full rounded-md border border-white/10 px-2.5 py-1.5 text-sm text-white outline-none focus:border-primary/60"
+            style={{ background: FLOW_THEME.nodeBg }}
             onChange={(e) => {
               const device = devices.find((d) => d.id === e.target.value)
               if (!device) return
@@ -396,11 +416,11 @@ function NodeConfigPanel({ node, devices, onChange }: NodeConfigPanelProps) {
           <label className="mb-1.5 block text-[11px] text-white/50">开关</label>
           <div className="flex gap-1.5">
             {([true, false] as const).map((val) => (
-              <button
+              <Button variant="ghost"
                 className={cn(
                   'flex-1 rounded-md py-1.5 text-xs font-medium transition-all',
                   action.on === val
-                    ? 'bg-[#2D7FF9]/80 text-white'
+                    ? 'bg-primary/80 text-white'
                     : 'bg-white/5 text-white/40 hover:bg-white/10',
                 )}
                 key={String(val)}
@@ -408,7 +428,7 @@ function NodeConfigPanel({ node, devices, onChange }: NodeConfigPanelProps) {
                 type="button"
               >
                 {val ? '开' : '关'}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -421,7 +441,7 @@ function NodeConfigPanel({ node, devices, onChange }: NodeConfigPanelProps) {
               <span className="text-[11px] tabular-nums text-white/60">{action.brightness}%</span>
             </div>
             <input
-              className="h-1.5 w-full appearance-none rounded-full bg-white/10 accent-[#2D7FF9]"
+              className="h-1.5 w-full appearance-none rounded-full bg-white/10 accent-primary"
               max={100}
               min={0}
               onChange={(e) =>
@@ -449,7 +469,7 @@ function NodeConfigPanel({ node, devices, onChange }: NodeConfigPanelProps) {
                 onChange({ action: { ...action, colorTemp: Number(e.target.value) } })
               }
               step={100}
-              style={{ background: 'linear-gradient(to right, #ffb347, #fff5e0, #cceeff)' }}
+              style={{ background: FLOW_THEME.colorTempGradient }}
               type="range"
               value={action.colorTemp as number}
             />
@@ -464,7 +484,7 @@ function NodeConfigPanel({ node, devices, onChange }: NodeConfigPanelProps) {
               <span className="text-[11px] tabular-nums text-white/60">{action.position}%</span>
             </div>
             <input
-              className="h-1.5 w-full appearance-none rounded-full bg-white/10 accent-[#3dd9b6]"
+              className="h-1.5 w-full appearance-none rounded-full bg-white/10 accent-primary"
               max={100}
               min={0}
               onChange={(e) =>
@@ -493,7 +513,8 @@ function NodeConfigPanel({ node, devices, onChange }: NodeConfigPanelProps) {
             <span className="text-[11px] tabular-nums text-white/60">{seconds}s</span>
           </div>
           <input
-            className="h-1.5 w-full appearance-none rounded-full bg-white/10 accent-[#64748b]"
+            className="h-1.5 w-full appearance-none rounded-full bg-white/10"
+            style={{ accentColor: FLOW_THEME.muted }}
             max={30000}
             min={500}
             onChange={(e) => onChange({ delayMs: Number(e.target.value) })}
@@ -567,7 +588,7 @@ export function SceneFlowEditor({ scene, devices, onClose }: SceneFlowEditorProp
   const onConnect = useCallback(
     (params: Connection) =>
       setEdges((eds) =>
-        addEdge({ ...params, animated: true, style: { stroke: '#334155', strokeWidth: 2 } }, eds),
+        addEdge({ ...params, animated: true, style: { stroke: FLOW_THEME.edge, strokeWidth: 2 } }, eds),
       ),
     [setEdges],
   )
@@ -688,13 +709,19 @@ export function SceneFlowEditor({ scene, devices, onClose }: SceneFlowEditorProp
   }, [selectedNodeId, setNodes, setEdges])
 
   return (
-    <div className="dark fixed inset-0 z-[200] flex flex-col bg-[#080c12]">
+    <div className="dark fixed inset-0 z-[200] flex flex-col" style={{ background: FLOW_THEME.canvasBg }}>
       {/* 顶栏 */}
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-white/8 bg-[#0d1117] px-4">
+      <div
+        className="flex h-12 shrink-0 items-center justify-between border-b border-white/8 px-4"
+        style={{ background: FLOW_THEME.panelBg }}
+      >
         <div className="flex items-center gap-3">
           <div
             className="flex h-6 items-center rounded px-2 text-[11px] font-semibold"
-            style={{ background: 'rgba(45,127,249,0.18)', color: '#2D7FF9' }}
+            style={{
+              background: 'color-mix(in srgb, var(--primary) 18%, transparent)',
+              color: 'var(--primary)',
+            }}
           >
             {scene.icon || '场景'}
           </div>
@@ -704,29 +731,29 @@ export function SceneFlowEditor({ scene, devices, onClose }: SceneFlowEditorProp
 
         <div className="flex items-center gap-2">
           {selectedNode && (
-            <button
+            <Button variant="ghost"
               className="flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-red-400 text-xs transition-colors hover:bg-red-500/20"
               onClick={deleteSelectedNode}
               type="button"
             >
               删除节点
-            </button>
+            </Button>
           )}
-          <button
-            className="flex items-center gap-1.5 rounded-lg bg-[#2D7FF9] px-3 py-1.5 text-white text-xs font-medium transition-colors hover:bg-[#2D7FF9]/90"
+          <Button variant="ghost"
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-white text-xs font-medium transition-colors hover:bg-primary/90"
             onClick={handleSave}
             type="button"
           >
             <Save size={13} />
             保存
-          </button>
-          <button
+          </Button>
+          <Button variant="ghost"
             className="flex h-7 w-7 items-center justify-center rounded-lg text-white/40 transition-colors hover:bg-white/8 hover:text-white/80"
             onClick={onClose}
             type="button"
           >
             <X size={15} />
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -747,28 +774,32 @@ export function SceneFlowEditor({ scene, devices, onClose }: SceneFlowEditorProp
             onNodesChange={onNodesChange}
             onPaneClick={onPaneClick}
             proOptions={{ hideAttribution: true }}
-            style={{ background: '#080c12' }}
+            style={{ background: FLOW_THEME.canvasBg }}
           >
-            <Background color="#1e2633" gap={20} size={1} />
+            <Background color={FLOW_THEME.border} gap={20} size={1} />
             <Controls
-              className="!bg-[#0d1117] !border-white/10"
+              className="!border-white/10"
+              style={{ background: FLOW_THEME.panelBg }}
               showInteractive={false}
             />
             <MiniMap
               maskColor="rgba(8,12,18,0.7)"
               nodeColor={(n) => {
-                if (n.type === 'sceneTrigger') return '#2D7FF9'
-                if (n.type === 'delayControl') return '#334155'
+                if (n.type === 'sceneTrigger') return 'var(--primary)'
+                if (n.type === 'delayControl') return FLOW_THEME.edge
                 const d = n.data as DeviceData
-                return getSubsystemColor(d.subsystem as any) ?? '#94a3b8'
+                return getSubsystemColor(d.subsystem as any) ?? FLOW_THEME.muted
               }}
-              style={{ background: '#0d1117', border: '1px solid rgba(255,255,255,0.08)' }}
+              style={{ background: FLOW_THEME.panelBg, border: '1px solid rgba(255,255,255,0.08)' }}
             />
 
             {/* 空状态提示 */}
             {nodes.length <= 1 && (
               <Panel position="top-center">
-                <div className="mt-4 rounded-lg border border-white/8 bg-[#0d1117] px-4 py-3 text-center text-white/40 text-xs">
+                <div
+                  className="mt-4 rounded-lg border border-white/8 px-4 py-3 text-center text-white/40 text-xs"
+                  style={{ background: FLOW_THEME.panelBg }}
+                >
                   从底部拖入节点，或点击设备快速添加动作
                 </div>
               </Panel>
@@ -778,7 +809,10 @@ export function SceneFlowEditor({ scene, devices, onClose }: SceneFlowEditorProp
 
         {/* 右侧配置面板 */}
         {selectedNode && (
-          <div className="w-60 shrink-0 overflow-y-auto border-l border-white/8 bg-[#0d1117] p-4">
+          <div
+            className="w-60 shrink-0 overflow-y-auto border-l border-white/8 p-4"
+            style={{ background: FLOW_THEME.panelBg }}
+          >
             <NodeConfigPanel
               devices={devices}
               node={selectedNode as FlowNode}
@@ -789,7 +823,10 @@ export function SceneFlowEditor({ scene, devices, onClose }: SceneFlowEditorProp
       </div>
 
       {/* 底部工具栏 */}
-      <div className="flex h-14 shrink-0 items-center gap-2 border-t border-white/8 bg-[#0d1117] px-4">
+      <div
+        className="flex h-14 shrink-0 items-center gap-2 border-t border-white/8 px-4"
+        style={{ background: FLOW_THEME.panelBg }}
+      >
         <span className="mr-1 text-[11px] text-white/30">拖入：</span>
         <DragItem
           icon={<Zap size={12} />}
@@ -807,9 +844,9 @@ export function SceneFlowEditor({ scene, devices, onClose }: SceneFlowEditorProp
         <span className="text-[11px] text-white/30">点击添加设备：</span>
         <div className="flex gap-1.5 overflow-x-auto">
           {devices.slice(0, 10).map((device) => {
-            const color = getSubsystemColor(device.subsystem as any) ?? '#94a3b8'
+            const color = getSubsystemColor(device.subsystem as any) ?? FLOW_THEME.muted
             return (
-              <button
+              <Button variant="ghost"
                 className="flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[11px] text-white/60 transition-colors hover:bg-white/10 hover:text-white/90"
                 key={device.id}
                 onClick={() => addDeviceNode(device)}
@@ -822,7 +859,7 @@ export function SceneFlowEditor({ scene, devices, onClose }: SceneFlowEditorProp
                 {(device.productName as string | undefined) ??
                   device.productId ??
                   device.id}
-              </button>
+              </Button>
             )
           })}
           {devices.length > 10 && (

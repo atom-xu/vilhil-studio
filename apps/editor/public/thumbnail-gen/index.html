@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <title>Thumbnail Generator</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #111;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: system-ui, sans-serif;
+      color: #fff;
+    }
+    #viewport {
+      width: 400px;
+      height: 400px;
+      position: relative;
+      background: #1c1c1c;
+    }
+    #viewport canvas {
+      width: 100% !important;
+      height: 100% !important;
+    }
+    #status {
+      margin-top: 12px;
+      font-size: 13px;
+      color: #aaa;
+      min-height: 20px;
+    }
+    #model-name {
+      margin-top: 6px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #fff;
+    }
+    #controls {
+      margin-top: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      max-width: 500px;
+    }
+    button {
+      padding: 7px 14px;
+      border-radius: 6px;
+      border: 1px solid #333;
+      background: #222;
+      color: #fff;
+      cursor: pointer;
+      font-size: 13px;
+      transition: background 0.15s;
+    }
+    button:hover { background: #333; }
+    button.active { background: #2563eb; border-color: #2563eb; }
+    #save-btn {
+      margin-top: 14px;
+      padding: 10px 28px;
+      background: #16a34a;
+      border-color: #16a34a;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    #save-btn:hover { background: #15803d; }
+    #result { margin-top: 10px; font-size: 12px; color: #6ee7b7; min-height: 18px; }
+  </style>
+</head>
+<body>
+  <div id="viewport"></div>
+  <div id="model-name">—</div>
+  <div id="status">请选择模型</div>
+
+  <div id="controls">
+    <button onclick="loadModel('apple-homepod', 'HomePod 音箱', this)">HomePod 音箱</button>
+    <button onclick="loadModel('security-camera-dome', '半球摄像头', this)">半球摄像头</button>
+    <button onclick="loadModel('security-camera-bullet', '枪机摄像头', this)">枪机摄像头</button>
+    <button onclick="loadModel('smart-switch', '智能开关', this)">智能开关</button>
+    <button onclick="loadModel('modern-kitchen-set', '厨房套件', this)">厨房套件</button>
+  </div>
+
+  <button id="save-btn" onclick="saveCurrentThumbnail()">导出 thumbnail.webp</button>
+  <div id="result"></div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+    const W = 400, H = 400;
+    const viewport = document.getElementById('viewport');
+
+    // Renderer
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, preserveDrawingBuffer: true });
+    renderer.setPixelRatio(2); // 2x for crisp 800px output
+    renderer.setSize(W, H);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
+    viewport.appendChild(renderer.domElement);
+
+    // Scene
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xf0f0f0);
+
+    // Environment (IBL)
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    const env = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+    scene.environment = env;
+
+    // Ground shadow plane
+    const groundGeo = new THREE.PlaneGeometry(20, 20);
+    const groundMat = new THREE.ShadowMaterial({ opacity: 0.25 });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // Lights
+    const ambient = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambient);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 2.5);
+    dirLight.position.set(5, 8, 5);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.set(1024, 1024);
+    dirLight.shadow.camera.near = 0.1;
+    dirLight.shadow.camera.far = 50;
+    dirLight.shadow.camera.top = dirLight.shadow.camera.right = 5;
+    dirLight.shadow.camera.bottom = dirLight.shadow.camera.left = -5;
+    scene.add(dirLight);
+    const fillLight = new THREE.DirectionalLight(0xc8d8ff, 0.8);
+    fillLight.position.set(-3, 2, -3);
+    scene.add(fillLight);
+
+    // Camera
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.001, 500);
+    camera.position.set(1, 1, 2);
+
+    // Controls
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.autoRotate = false;
+
+    // Animation loop
+    let frameId;
+    function animate() {
+      frameId = requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // Loader
+    const loader = new GLTFLoader();
+    let currentId = null;
+    let currentGroup = null;
+
+    window.loadModel = function(id, name, btn) {
+      // Reset buttons
+      document.querySelectorAll('#controls button').forEach(b => b.classList.remove('active'));
+      if (btn) btn.classList.add('active');
+
+      document.getElementById('model-name').textContent = name;
+      document.getElementById('status').textContent = '加载中...';
+      document.getElementById('result').textContent = '';
+      currentId = id;
+
+      // Remove previous model
+      if (currentGroup) {
+        scene.remove(currentGroup);
+        currentGroup = null;
+      }
+
+      loader.load(
+        `/items/${id}/model.glb`,
+        (gltf) => {
+          const model = gltf.scene;
+
+          // Enable shadows
+          model.traverse(child => {
+            if (child.isMesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
+            }
+          });
+
+          // Compute bounding box and center model
+          const box = new THREE.Box3().setFromObject(model);
+          const center = box.getCenter(new THREE.Vector3());
+          const size = box.getSize(new THREE.Vector3());
+          const maxDim = Math.max(size.x, size.y, size.z);
+
+          // Normalize scale so max dimension = 1.5
+          const targetSize = 1.5;
+          const scaleFactor = targetSize / maxDim;
+          model.scale.multiplyScalar(scaleFactor);
+
+          // Recompute after scale
+          const box2 = new THREE.Box3().setFromObject(model);
+          const center2 = box2.getCenter(new THREE.Vector3());
+          const size2 = box2.getSize(new THREE.Vector3());
+
+          // Center on XZ, sit on ground
+          model.position.set(
+            -center2.x,
+            -box2.min.y,
+            -center2.z
+          );
+
+          currentGroup = new THREE.Group();
+          currentGroup.add(model);
+          scene.add(currentGroup);
+
+          // Position camera
+          const dist = Math.max(size2.x, size2.z) * 1.8 + size2.y * 0.6;
+          camera.position.set(dist * 0.7, size2.y * 0.8, dist);
+          camera.lookAt(0, size2.y * 0.4, 0);
+          controls.target.set(0, size2.y * 0.4, 0);
+          controls.update();
+
+          document.getElementById('status').textContent = `已加载 — 可拖拽调整角度`;
+        },
+        (xhr) => {
+          const pct = Math.round(xhr.loaded / xhr.total * 100);
+          document.getElementById('status').textContent = `加载中 ${pct}%`;
+        },
+        (err) => {
+          document.getElementById('status').textContent = `加载失败: ${err.message}`;
+        }
+      );
+    };
+
+    window.saveCurrentThumbnail = function() {
+      if (!currentId) {
+        document.getElementById('result').textContent = '请先选择一个模型';
+        return;
+      }
+      // Force render
+      renderer.render(scene, camera);
+      const dataURL = renderer.domElement.toDataURL('image/webp', 0.92);
+      window._lastThumbnail = { id: currentId, data: dataURL };
+      document.getElementById('result').textContent = `✅ 已捕获 ${currentId} — 等待保存...`;
+      return dataURL;
+    };
+
+    // Also expose for programmatic use
+    window._renderer = renderer;
+    window._scene = scene;
+    window._camera = camera;
+    window._controls = controls;
+    window._loadModel = window.loadModel;
+  </script>
+</body>
+</html>

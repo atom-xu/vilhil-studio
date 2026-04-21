@@ -45,3 +45,8 @@ yarn-error.log*
 /.playwright-mcp
 og-test
 .env*.local
+
+# 大体积临时资产 / 工作缓存（不入库）
+下载资产/
+docs/tmp/
+files/

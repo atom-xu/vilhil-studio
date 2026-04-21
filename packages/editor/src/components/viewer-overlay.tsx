@@ -17,6 +17,7 @@ import Link from 'next/link'
 import { cn } from '../lib/utils'
 import useEditor from '../store/use-editor'
 import { ActionButton } from './ui/action-menu/action-button'
+import { Button } from './ui/primitives/button'
 import { TooltipProvider } from './ui/primitives/tooltip'
 
 type ProjectOwner = {
@@ -141,12 +142,12 @@ export const ViewerOverlay = ({
           {/* Project info + back */}
           <div className="flex items-center gap-3 px-3 py-2.5">
             {onBack ? (
-              <button
+              <Button variant="ghost"
                 className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-white/10"
                 onClick={onBack}
               >
                 <ArrowLeft className="h-4 w-4 text-muted-foreground" />
-              </button>
+              </Button>
             ) : (
               <Link
                 className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-white/10"
@@ -174,34 +175,34 @@ export const ViewerOverlay = ({
           {building && (
             <div className="border-border/40 border-t px-3 py-2">
               <div className="flex items-center gap-1.5 text-xs">
-                <button
+                <Button variant="ghost"
                   className="text-muted-foreground transition-colors hover:text-foreground"
                   onClick={() => handleBreadcrumbClick('root')}
                 >
                   场地
-                </button>
+                </Button>
 
                 {building && (
                   <>
                     <ChevronRight className="h-3 w-3 text-muted-foreground/50" />
-                    <button
+                    <Button variant="ghost"
                       className={`truncate transition-colors ${level ? 'text-muted-foreground hover:text-foreground' : 'font-medium text-foreground'}`}
                       onClick={() => handleBreadcrumbClick('building')}
                     >
                       {building.name || '建筑'}
-                    </button>
+                    </Button>
                   </>
                 )}
 
                 {level && (
                   <>
                     <ChevronRight className="h-3 w-3 text-muted-foreground/50" />
-                    <button
+                    <Button variant="ghost"
                       className={`truncate transition-colors ${zone ? 'text-muted-foreground hover:text-foreground' : 'font-medium text-foreground'}`}
                       onClick={() => handleBreadcrumbClick('level')}
                     >
                       {level.name || `楼层 ${level.level}`}
-                    </button>
+                    </Button>
                   </>
                 )}
 
@@ -239,7 +240,7 @@ export const ViewerOverlay = ({
               {levels.map((lvl) => {
                 const isSelected = lvl.id === selection.levelId
                 return (
-                  <button
+                  <Button variant="ghost"
                     className={cn(
                       'group/row relative flex h-8 w-full cursor-pointer select-none items-center border-border/50 border-r border-r-transparent border-b px-3 text-sm transition-all duration-200',
                       isSelected
@@ -262,7 +263,7 @@ export const ViewerOverlay = ({
                         {lvl.name || `楼层 ${lvl.level}`}
                       </div>
                     </div>
-                  </button>
+                  </Button>
                 )
               })}
             </div>
@@ -275,7 +276,7 @@ export const ViewerOverlay = ({
         <TooltipProvider delayDuration={0}>
           <div className="pointer-events-auto flex h-14 flex-row items-center justify-center gap-1.5 rounded-2xl border border-border/40 bg-background/95 p-1.5 shadow-lg backdrop-blur-xl transition-colors duration-200 ease-out">
             {/* Theme Toggle */}
-            <button
+            <Button variant="ghost"
               aria-label="切换主题"
               className="flex h-[36px] shrink-0 cursor-pointer items-center rounded-full border border-border/50 bg-accent/50 p-1"
               onClick={() => useViewer.getState().setTheme(theme === 'dark' ? 'light' : 'dark')}
@@ -317,7 +318,7 @@ export const ViewerOverlay = ({
                   <Sun className="h-4 w-4" />
                 </div>
               </div>
-            </button>
+            </Button>
 
             <div className="mx-1 h-5 w-px bg-border/40" />
 

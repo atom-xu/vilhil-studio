@@ -5,6 +5,7 @@ import { Disc3, Settings2, SkipBack, SkipForward, Volume2, VolumeX } from 'lucid
 import { AnimatePresence, motion } from 'motion/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Slider } from '../components/ui/slider'
+import { Button } from './ui/primitives/button'
 import { cn } from '../lib/utils'
 import useAudio from '../store/use-audio'
 
@@ -203,7 +204,7 @@ export function PascalRadio() {
               <VolumeX className="h-3.5 w-3.5" />
             )}
           </div>
-          <button
+          <Button variant="ghost"
             aria-label="收音机设置"
             className={cn(
               'cursor-pointer rounded-sm p-1 transition-all hover:bg-accent hover:text-accent-foreground',
@@ -215,7 +216,7 @@ export function PascalRadio() {
             }}
           >
             <Settings2 className="h-3.5 w-3.5" />
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -233,26 +234,26 @@ export function PascalRadio() {
               <div>
                 <p className="mb-2 text-muted-foreground text-xs">正在播放</p>
                 <div className="flex items-center justify-between gap-2">
-                  <button
+                  <Button variant="ghost"
                     aria-label="上一首"
                     className="shrink-0 rounded-full p-1.5 transition-colors hover:bg-accent"
                     onClick={handlePrevious}
                   >
                     <SkipBack className="h-4 w-4" />
-                  </button>
+                  </Button>
                   <p
                     className="flex-1 truncate text-center font-medium text-sm"
                     title={currentTrack.title}
                   >
                     {currentTrack.title}
                   </p>
-                  <button
+                  <Button variant="ghost"
                     aria-label="下一首"
                     className="shrink-0 rounded-full p-1.5 transition-colors hover:bg-accent"
                     onClick={handleNext}
                   >
                     <SkipForward className="h-4 w-4" />
-                  </button>
+                  </Button>
                 </div>
               </div>
 

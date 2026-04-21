@@ -11,6 +11,7 @@ import { ActionButton, ActionGroup } from '../controls/action-button'
 import { MaterialPicker } from '../controls/material-picker'
 import { MetricControl } from '../controls/metric-control'
 import { PanelSection } from '../controls/panel-section'
+import { Button } from '../primitives/button'
 import { SegmentedControl } from '../controls/segmented-control'
 import { SliderControl } from '../controls/slider-control'
 import { ToggleControl } from '../controls/toggle-control'
@@ -195,10 +196,10 @@ export function DoorPanel() {
           tabs={adapter.tabs}
           type="door"
         >
-          <button className="flex w-full items-center gap-2 rounded-lg border border-border/50 bg-[#2C2C2E] px-3 py-2 font-medium text-muted-foreground text-xs transition-colors hover:bg-[#3e3e3e] hover:text-foreground">
+          <Button variant="ghost" className="flex w-full items-center gap-2 rounded-lg border border-border/50 bg-accent/70 px-3 py-2 font-medium text-muted-foreground text-xs transition-colors hover:bg-accent hover:text-foreground">
             <BookMarked className="h-3.5 w-3.5 shrink-0" />
             <span>预设</span>
-          </button>
+          </Button>
         </PresetsPopover>
       </div>
 

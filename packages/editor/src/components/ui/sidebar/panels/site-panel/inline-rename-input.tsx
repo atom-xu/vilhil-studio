@@ -1,6 +1,7 @@
 import { type AnyNode, useScene } from '@pascal-app/core'
 import { Pencil } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Button } from '../../../primitives/button'
 import { cn } from './../../../../../lib/utils'
 
 interface InlineRenameInputProps {
@@ -63,7 +64,7 @@ export function InlineRenameInput({
           {node.name || defaultName}
         </span>
         {onStartEditing && (
-          <button
+          <Button variant="ghost"
             className="shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover/rename:opacity-100"
             onClick={(e) => {
               e.stopPropagation()
@@ -71,7 +72,7 @@ export function InlineRenameInput({
             }}
           >
             <Pencil className="h-3 w-3" />
-          </button>
+          </Button>
         )}
       </div>
     )

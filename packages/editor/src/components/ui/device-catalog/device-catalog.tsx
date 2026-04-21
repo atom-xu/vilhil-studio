@@ -8,6 +8,7 @@ import {
   SUBSYSTEM_ORDER,
 } from '@vilhil/smarthome'
 import { useEffect, useState } from 'react'
+import { Button } from '../primitives/button'
 import {
   Tooltip,
   TooltipContent,
@@ -39,7 +40,7 @@ export function DeviceCatalog() {
           const isActive = activeSubsystem === subsystem
           const count = CATALOG_BY_SUBSYSTEM[subsystem]?.length ?? 0
           return (
-            <button
+            <Button variant="ghost"
               className={cn(
                 'inline-flex cursor-pointer items-center gap-1 rounded-md py-0.5 pr-1.5 pl-2 font-medium text-xs transition-colors',
                 isActive
@@ -62,7 +63,7 @@ export function DeviceCatalog() {
               >
                 {count}
               </span>
-            </button>
+            </Button>
           )
         })}
       </div>
@@ -76,7 +77,7 @@ export function DeviceCatalog() {
             return (
               <Tooltip key={device.catalogId}>
                 <TooltipTrigger asChild>
-                  <button
+                  <Button variant="ghost"
                     className={cn(
                       'relative flex h-16 min-h-16 w-20 min-w-20 flex-col items-center justify-center gap-1 rounded-lg border border-border/50 bg-muted/50 transition-all duration-200 ease-out hover:scale-105 hover:cursor-pointer hover:bg-muted',
                       isSelected && 'ring-2 ring-primary',
@@ -97,7 +98,7 @@ export function DeviceCatalog() {
                     <span className="text-[8px] text-muted-foreground capitalize">
                       {device.mountType}
                     </span>
-                  </button>
+                  </Button>
                 </TooltipTrigger>
                 <TooltipContent className="text-xs" side="top">
                   <div className="flex flex-col gap-0.5">

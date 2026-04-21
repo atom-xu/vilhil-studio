@@ -10,7 +10,10 @@ export {
   addSceneEffect,
   removeSceneEffect,
   applyScene,
+  subscribeSceneRunStatus,
+  getSceneRunStatus,
   getSceneNodes,
+  type SceneRunStatus,
 } from './scene-tools'
 export {
   exportDeviceList,
@@ -19,3 +22,13 @@ export {
   type DeviceListItem,
   type SubsystemGroup,
 } from './export-device-list'
+export {
+  buildTopology,
+  type TopologyAssignment,
+  type TopologyBuildResult,
+  type TopologyControllerSpec,
+  type TopologyControllerState,
+  type TopologyDeviceInput,
+  type TopologyProtocol,
+  type TopologyStrategy,
+} from './topology-tools'

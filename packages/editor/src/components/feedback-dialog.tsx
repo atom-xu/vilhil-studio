@@ -143,13 +143,13 @@ export function FeedbackDialog({
 
   return (
     <>
-      <button
+      <Button variant="ghost"
         className="flex items-center gap-2 rounded-lg border border-border bg-background/95 px-3 py-2 font-medium text-sm shadow-lg backdrop-blur-md transition-colors hover:bg-accent/90"
         onClick={handleOpen}
       >
         <MessageSquare className="h-4 w-4" />
         反馈
-      </button>
+      </Button>
 
       <Dialog onOpenChange={handleClose} open={open}>
         <DialogContent
@@ -205,13 +205,13 @@ export function FeedbackDialog({
                       key={img.url}
                     >
                       <img alt="" className="h-full w-full object-cover" src={img.url} />
-                      <button
+                      <Button variant="ghost"
                         className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100"
                         onClick={() => removeImage(i)}
                         type="button"
                       >
                         <X className="h-4 w-4 text-white" />
-                      </button>
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -221,7 +221,7 @@ export function FeedbackDialog({
 
               <div className="flex items-center justify-between">
                 {/* Subtle attach button */}
-                <button
+                <Button variant="ghost"
                   className="flex items-center gap-1.5 text-muted-foreground text-xs transition-colors hover:text-foreground disabled:opacity-40"
                   disabled={isSubmitting || images.length >= MAX_IMAGES}
                   onClick={() => fileInputRef.current?.click()}
@@ -229,7 +229,7 @@ export function FeedbackDialog({
                 >
                   <ImageIcon className="h-3.5 w-3.5" />
                   {images.length > 0 ? `${images.length}/${MAX_IMAGES}` : '添加图片'}
-                </button>
+                </Button>
                 <input
                   accept="image/*"
                   className="hidden"

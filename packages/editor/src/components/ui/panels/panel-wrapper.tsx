@@ -3,6 +3,7 @@
 import { ChevronLeft, RotateCcw, X } from 'lucide-react'
 import Image from 'next/image'
 import { cn } from '../../../lib/utils'
+import { Button } from '../primitives/button'
 
 interface PanelWrapperProps {
   title: string
@@ -37,13 +38,13 @@ export function PanelWrapper({
       <div className="flex items-center justify-between border-border/50 border-b px-3 py-3">
         <div className="flex items-center gap-2">
           {onBack && (
-            <button
-              className="mr-1 flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-[#3e3e3e] hover:text-foreground"
+            <Button variant="ghost"
+              className="mr-1 flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               onClick={onBack}
               type="button"
             >
               <ChevronLeft className="h-4 w-4" />
-            </button>
+            </Button>
           )}
           {icon && (
             <Image alt="" className="shrink-0 object-contain" height={16} src={icon} width={16} />
@@ -53,22 +54,22 @@ export function PanelWrapper({
 
         <div className="flex items-center gap-1">
           {onReset && (
-            <button
-              className="flex h-7 w-7 items-center justify-center rounded-md bg-[#2C2C2E] text-muted-foreground transition-colors hover:bg-[#3e3e3e] hover:text-foreground"
+            <Button variant="ghost"
+              className="flex h-7 w-7 items-center justify-center rounded-md bg-accent/70 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               onClick={onReset}
               type="button"
             >
               <RotateCcw className="h-4 w-4" />
-            </button>
+            </Button>
           )}
           {onClose && (
-            <button
-              className="flex h-7 w-7 items-center justify-center rounded-md bg-[#2C2C2E] text-muted-foreground transition-colors hover:bg-[#3e3e3e] hover:text-foreground"
+            <Button variant="ghost"
+              className="flex h-7 w-7 items-center justify-center rounded-md bg-accent/70 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               onClick={onClose}
               type="button"
             >
               <X className="h-4 w-4" />
-            </button>
+            </Button>
           )}
         </div>
       </div>

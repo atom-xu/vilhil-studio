@@ -17,6 +17,7 @@ import {
 import { useCallback, useEffect, useState } from 'react'
 import type { PresetsTab } from '../../../../contexts/presets-context'
 import { cn } from '../../../../lib/utils'
+import { Button } from '../../primitives/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -166,7 +167,7 @@ export function PresetsPopover({
             </span>
           </div>
           {isAuthenticated && (
-            <button
+            <Button variant="ghost"
               className="flex items-center gap-1 rounded-md px-2 py-1 font-medium text-[11px] text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
               onClick={() => {
                 setShowSaveInput((v) => !v)
@@ -176,7 +177,7 @@ export function PresetsPopover({
             >
               <Plus className="h-3 w-3" />
               Save new
-            </button>
+            </Button>
           )}
         </div>
 
@@ -196,15 +197,15 @@ export function PresetsPopover({
               placeholder="预设名称…"
               value={saveName}
             />
-            <button
+            <Button variant="ghost"
               className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/20 text-primary transition-colors hover:bg-primary/30 disabled:opacity-40"
               disabled={!saveName.trim() || saving}
               onClick={handleSaveNew}
               type="button"
             >
               <Check className="h-3.5 w-3.5" />
-            </button>
-            <button
+            </Button>
+            <Button variant="ghost"
               className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/10"
               onClick={() => {
                 setShowSaveInput(false)
@@ -213,7 +214,7 @@ export function PresetsPopover({
               type="button"
             >
               <X className="h-3.5 w-3.5" />
-            </button>
+            </Button>
           </div>
         )}
 
@@ -297,7 +298,7 @@ function TabButton({
   children: React.ReactNode
 }) {
   return (
-    <button
+    <Button variant="ghost"
       className={cn(
         'flex flex-1 items-center justify-center gap-1.5 py-2 font-medium text-[11px] transition-colors',
         active
@@ -310,7 +311,7 @@ function TabButton({
       type="button"
     >
       {children}
-    </button>
+    </Button>
   )
 }
 
@@ -377,20 +378,20 @@ function PresetRow({
       <li className="flex items-center justify-between gap-2 bg-red-500/10 px-3 py-2.5">
         <span className="truncate text-foreground/80 text-xs">Delete "{preset.name}"?</span>
         <div className="flex shrink-0 items-center gap-1">
-          <button
+          <Button variant="ghost"
             className="rounded-md bg-red-500/20 px-2 py-0.5 font-medium text-[11px] text-red-400 transition-colors hover:bg-red-500/30"
             onClick={onDeleteConfirm}
             type="button"
           >
             Delete
-          </button>
-          <button
+          </Button>
+          <Button variant="ghost"
             className="rounded-md px-2 py-0.5 font-medium text-[11px] text-muted-foreground transition-colors hover:bg-white/10"
             onClick={onDeleteCancel}
             type="button"
           >
             Cancel
-          </button>
+          </Button>
         </div>
       </li>
     )
@@ -409,20 +410,20 @@ function PresetRow({
           }}
           value={renameValue}
         />
-        <button
+        <Button variant="ghost"
           className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/20 text-primary transition-colors hover:bg-primary/30"
           onClick={onRenameConfirm}
           type="button"
         >
           <Check className="h-3.5 w-3.5" />
-        </button>
-        <button
+        </Button>
+        <Button variant="ghost"
           className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/10"
           onClick={onRenameCancel}
           type="button"
         >
           <X className="h-3.5 w-3.5" />
-        </button>
+        </Button>
       </li>
     )
   }
@@ -443,7 +444,7 @@ function PresetRow({
           </div>
         )}
       </div>
-      <button className="min-w-0 flex-1 text-left" onClick={onApply} type="button">
+      <Button variant="ghost" className="min-w-0 flex-1 text-left" onClick={onApply} type="button">
         <span className="flex items-center gap-1.5">
           <span className="block truncate font-medium text-foreground text-xs group-hover:text-foreground/90">
             {preset.name}
@@ -455,11 +456,11 @@ function PresetRow({
         <span className="block text-[10px] text-muted-foreground/60">
           {new Date(preset.created_at).toLocaleDateString()}
         </span>
-      </button>
+      </Button>
       {isMine && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button
+            <Button variant="ghost"
               className={cn(
                 'flex h-6 w-6 shrink-0 items-center justify-center rounded-md opacity-0 transition-colors group-hover:opacity-100',
                 justOverwritten
@@ -473,7 +474,7 @@ function PresetRow({
               ) : (
                 <MoreHorizontal className="h-3.5 w-3.5" />
               )}
-            </button>
+            </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="min-w-44" side="left">
             <DropdownMenuItem onClick={onOverwrite}>

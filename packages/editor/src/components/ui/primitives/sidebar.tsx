@@ -365,7 +365,7 @@ function SidebarRail({ className, ...props }: React.ComponentProps<'button'>) {
   const { toggleSidebar } = useSidebar()
 
   return (
-    <button
+    <Button variant="ghost"
       aria-label="切换侧边栏"
       className={cn(
         'absolute inset-y-0 z-20 hidden w-4 -translate-x-1/2 transition-all ease-linear after:absolute after:inset-y-0 after:left-1/2 after:w-[2px] hover:after:bg-sidebar-border group-data-[side=left]:-right-4 group-data-[side=right]:left-0 sm:flex',
@@ -532,7 +532,7 @@ function SidebarGroupAction({
   }
 
   return (
-    <button
+    <Button variant="ghost"
       className={classes}
       data-sidebar="group-action"
       data-slot="sidebar-group-action"
@@ -625,7 +625,7 @@ function SidebarMenuButton({
       {...props}
     />
   ) : (
-    <button
+    <Button variant="ghost"
       className={classes}
       data-active={isActive}
       data-sidebar="menu-button"
@@ -694,7 +694,7 @@ function SidebarMenuAction({
   }
 
   return (
-    <button
+    <Button variant="ghost"
       className={classes}
       data-sidebar="menu-action"
       data-slot="sidebar-menu-action"

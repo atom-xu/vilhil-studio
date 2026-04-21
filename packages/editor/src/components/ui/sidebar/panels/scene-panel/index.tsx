@@ -35,6 +35,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { SceneFlowEditor } from './scene-flow-editor'
 import { useShallow } from 'zustand/shallow'
+import { Button } from '../../../primitives/button'
 import { cn } from '../../../../../lib/utils'
 
 // ─── 图标选择器（常用 emoji） ─────────────────────────────────────────────────
@@ -81,7 +82,7 @@ function NewSceneForm({ levelId, onDone }: NewSceneFormProps) {
         {/* 场景类型标签 */}
         <div className="flex flex-wrap gap-1">
           {SCENE_ICONS.map((label) => (
-            <button
+            <Button variant="ghost"
               className={cn(
                 'rounded-md px-2 py-1 text-[11px] font-medium transition-all',
                 icon === label
@@ -93,7 +94,7 @@ function NewSceneForm({ levelId, onDone }: NewSceneFormProps) {
               type="button"
             >
               {label}
-            </button>
+            </Button>
           ))}
         </div>
 
@@ -111,14 +112,14 @@ function NewSceneForm({ levelId, onDone }: NewSceneFormProps) {
 
         {/* 操作按钮 */}
         <div className="flex justify-end gap-2">
-          <button
+          <Button variant="ghost"
             className="rounded-md px-3 py-1 text-muted-foreground text-xs transition-colors hover:bg-accent hover:text-foreground"
             onClick={onDone}
             type="button"
           >
             取消
-          </button>
-          <button
+          </Button>
+          <Button variant="ghost"
             className={cn(
               'rounded-md px-3 py-1 text-xs font-medium transition-all',
               name.trim()
@@ -130,7 +131,7 @@ function NewSceneForm({ levelId, onDone }: NewSceneFormProps) {
             type="button"
           >
             创建
-          </button>
+          </Button>
         </div>
       </div>
     </motion.div>
@@ -177,7 +178,7 @@ function DeviceEffectRow({ device, sceneId, effect }: DeviceEffectRowProps) {
       {/* 设备行头 */}
       <div className="flex items-center gap-2">
         {/* Include 复选框 */}
-        <button
+        <Button variant="ghost"
           className={cn(
             'flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-all',
             isIncluded
@@ -193,7 +194,7 @@ function DeviceEffectRow({ device, sceneId, effect }: DeviceEffectRowProps) {
               <path d="M2 6l3 3 5-5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           )}
-        </button>
+        </Button>
 
         <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
           {(device.productName as string | undefined) ?? device.productId}
@@ -211,7 +212,7 @@ function DeviceEffectRow({ device, sceneId, effect }: DeviceEffectRowProps) {
             <span className="w-8 shrink-0 text-[10px] text-muted-foreground">开关</span>
             <div className="flex gap-1">
               {[true, false].map((val) => (
-                <button
+                <Button variant="ghost"
                   className={cn(
                     'rounded px-2 py-0.5 text-[10px] font-medium transition-all',
                     effect.state.on === val
@@ -225,7 +226,7 @@ function DeviceEffectRow({ device, sceneId, effect }: DeviceEffectRowProps) {
                   type="button"
                 >
                   {val ? '开' : '关'}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
@@ -343,7 +344,7 @@ function SceneCard({ scene, devices }: SceneCardProps) {
             {/* 场景类型标签 */}
             <div className="flex flex-wrap gap-1">
               {SCENE_ICONS.map((label) => (
-                <button
+                <Button variant="ghost"
                   className={cn(
                     'rounded px-1.5 py-0.5 text-[10px] font-medium transition-all',
                     editIcon === label
@@ -355,7 +356,7 @@ function SceneCard({ scene, devices }: SceneCardProps) {
                   type="button"
                 >
                   {label}
-                </button>
+                </Button>
               ))}
             </div>
             <input
@@ -376,7 +377,7 @@ function SceneCard({ scene, devices }: SceneCardProps) {
             />
           </div>
         ) : (
-          <button
+          <Button variant="ghost"
             className="min-w-0 flex-1 text-left"
             onClick={() => setIsExpanded((v) => !v)}
             type="button"
@@ -385,37 +386,37 @@ function SceneCard({ scene, devices }: SceneCardProps) {
             <span className="text-muted-foreground text-[10px]">
               {effects.length > 0 ? `${effects.length} 个设备` : '未配置设备'}
             </span>
-          </button>
+          </Button>
         )}
 
         {/* 操作按钮 */}
         {!isEditing && (
           <div className="flex shrink-0 items-center gap-0.5">
-            <button
+            <Button variant="ghost"
               className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               onClick={() => setIsFlowEditorOpen(true)}
               title="流程编辑"
               type="button"
             >
               <GitBranch className="h-3 w-3" />
-            </button>
-            <button
+            </Button>
+            <Button variant="ghost"
               className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               onClick={() => setIsEditing(true)}
               title="重命名"
               type="button"
             >
               <Pencil className="h-3 w-3" />
-            </button>
-            <button
+            </Button>
+            <Button variant="ghost"
               className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-red-500/15 hover:text-red-400"
               onClick={handleDelete}
               title="删除场景"
               type="button"
             >
               <Trash2 className="h-3 w-3" />
-            </button>
-            <button
+            </Button>
+            <Button variant="ghost"
               className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               onClick={() => setIsExpanded((v) => !v)}
               title={isExpanded ? '收起' : '展开配置'}
@@ -424,7 +425,7 @@ function SceneCard({ scene, devices }: SceneCardProps) {
               <ChevronDown
                 className={cn('h-3 w-3 transition-transform', isExpanded && 'rotate-180')}
               />
-            </button>
+            </Button>
           </div>
         )}
 
@@ -485,20 +486,24 @@ export function ScenePanel() {
 
   // 当前楼层的场景节点
   const sceneNodes = useMemo(
-    () =>
-      allNodes.filter(
-        (n): n is SceneNodeType => n?.type === 'scene',
-      ),
-    [allNodes],
+    () => {
+      if (!levelId) return []
+      return allNodes.filter(
+        (n): n is SceneNodeType => n?.type === 'scene' && n.parentId === levelId,
+      )
+    },
+    [allNodes, levelId],
   )
 
   // 当前楼层的设备节点（用于配置效果）
   const deviceNodes = useMemo(
-    () =>
-      allNodes.filter(
-        (n): n is DeviceNode => n?.type === 'device',
-      ),
-    [allNodes],
+    () => {
+      if (!levelId) return []
+      return allNodes.filter(
+        (n): n is DeviceNode => n?.type === 'device' && n.parentId === levelId,
+      )
+    },
+    [allNodes, levelId],
   )
 
   return (
@@ -515,7 +520,7 @@ export function ScenePanel() {
           )}
         </div>
 
-        <button
+        <Button variant="ghost"
           className={cn(
             'flex h-7 w-7 items-center justify-center rounded-lg transition-all',
             isCreating ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
@@ -525,7 +530,7 @@ export function ScenePanel() {
           type="button"
         >
           {isCreating ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-        </button>
+        </Button>
       </div>
 
       {/* 新建场景表单 */}

@@ -1,6 +1,6 @@
 import { Agentation } from 'agentation'
 import { GeistPixelSquare } from 'geist/font/pixel'
-import { Barlow } from 'next/font/google'
+import { Barlow, Instrument_Serif, Inter, JetBrains_Mono } from 'next/font/google'
 import localFont from 'next/font/local'
 import Script from 'next/script'
 import './globals.css'
@@ -21,6 +21,27 @@ const barlow = Barlow({
   display: 'swap',
 })
 
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+  display: 'swap',
+})
+
+const instrumentSerif = Instrument_Serif({
+  subsets: ['latin'],
+  weight: ['400'],
+  style: ['normal', 'italic'],
+  variable: '--font-instrument-serif',
+  display: 'swap',
+})
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500'],
+  variable: '--font-jetbrains-mono',
+  display: 'swap',
+})
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -28,7 +49,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      className={`${geistSans.variable} ${geistMono.variable} ${GeistPixelSquare.variable} ${barlow.variable}`}
+      className={`${geistSans.variable} ${geistMono.variable} ${GeistPixelSquare.variable} ${barlow.variable} ${inter.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable}`}
       lang="en"
     >
       <head>

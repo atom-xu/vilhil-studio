@@ -10,6 +10,18 @@ A 3D building editor built with React Three Fiber and WebGPU.
 
 https://github.com/user-attachments/assets/8b50e7cf-cebe-4579-9cf3-8786b35f7b6b
 
+## VilHil UI Docs (CN)
+
+- Unified UI standard (SSOT): [`docs/UI-STANDARD.md`](./docs/UI-STANDARD.md)
+- Start here (non-technical): [`docs/UI-START-HERE.md`](./docs/UI-START-HERE.md)
+- UI design library standard: [`docs/UI-DESIGN-LIB-STANDARD.md`](./docs/UI-DESIGN-LIB-STANDARD.md)
+- UI component library standard: [`docs/UI-COMPONENT-LIBRARY.md`](./docs/UI-COMPONENT-LIBRARY.md)
+- UI logic architecture standard: [`docs/UI-LOGIC-STANDARD.md`](./docs/UI-LOGIC-STANDARD.md)
+- UI style consolidation plan: [`docs/UI-STYLE-CONSOLIDATION-PLAN.md`](./docs/UI-STYLE-CONSOLIDATION-PLAN.md)
+- Navigation architecture: [`docs/NAVIGATION-ARCHITECTURE.md`](./docs/NAVIGATION-ARCHITECTURE.md)
+- BDD requirements: [`docs/BDD-REQUIREMENTS.md`](./docs/BDD-REQUIREMENTS.md)
+- Claude collaboration standard: [`CLAUDE.md`](./CLAUDE.md)
+
 
 
 ## Repository Architecture

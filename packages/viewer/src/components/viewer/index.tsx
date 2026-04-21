@@ -39,7 +39,7 @@ function AnimatedBackground({ isDark }: { isDark: boolean }) {
 
   useFrame(({ scene }, delta) => {
     const dt = Math.min(delta, 0.1) * 4
-    const targetHex = isDark ? '#1f2433' : '#ffffff'
+    const targetHex = isDark ? '#1f2433' : '#f5f5f6'
 
     if (!(scene.background && scene.background instanceof THREE.Color)) {
       scene.background = new THREE.Color(targetHex)
@@ -109,7 +109,7 @@ const Viewer: React.FC<ViewerProps> = ({
   return (
     <Canvas
       camera={{ position: [8, 6, 8], fov: 50 }}
-      className={`transition-colors duration-700 ${theme === 'dark' ? 'bg-[#1f2433]' : 'bg-[#fafafa]'}`}
+      className={`transition-colors duration-700 ${theme === 'dark' ? 'bg-[#1f2433]' : 'bg-[#f5f5f6]'}`}
       dpr={[1, 1.5]}
       gl={(props) => {
         const renderer = new THREE.WebGPURenderer(props as any)

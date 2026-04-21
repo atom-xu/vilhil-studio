@@ -1,31 +1,14 @@
 'use client'
 
 import { generateId, saveAsset, useScene } from '@pascal-app/core'
-import {
-  Editor,
-  type SidebarTab,
-  useEditor,
-  ViewerToolbarLeft,
-  ViewerToolbarRight,
-} from '@pascal-app/editor'
+import { Editor, useEditor, ViewerToolbarLeft, ViewerToolbarRight } from '@pascal-app/editor'
 import { useViewer } from '@pascal-app/viewer'
-import { useCallback, useState } from 'react'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
+import { Suspense, useCallback, useEffect, useState } from 'react'
+import { UserNavbar } from '@/components/user-navbar'
 import { DevBridge } from './dev-bridge'
 import { PdfPagePicker } from './pdf-page-picker'
-
-const SIDEBAR_TABS: (SidebarTab & { component: React.ComponentType })[] = [
-  {
-    id: 'site',
-    label: '场景树',
-    component: () => null, // Built-in SitePanel handles this
-  },
-  {
-    id: 'scenes',
-    label: '场景',
-    component: () => null, // Built-in ScenePanel handles this
-  },
-]
+import { ProjectLoader } from './project-loader'
 
 /**
  * 创建 guide 节点 + 自动引导设计师进入底图描摹模式：
@@ -99,7 +82,10 @@ async function compressImageToFile(file: File): Promise<File> {
         0.85,
       )
     }
-    img.onerror = () => { URL.revokeObjectURL(blobUrl); resolve(file) }
+    img.onerror = () => {
+      URL.revokeObjectURL(blobUrl)
+      resolve(file)
+    }
     img.src = blobUrl
   })
 }
@@ -150,6 +136,18 @@ async function pdfPageToFile(pdf: PDFDocumentProxy, pageNum: number): Promise<Fi
 }
 
 export default function Home() {
+  return (
+    <>
+      <Suspense fallback={null}>
+        <ProjectLoader />
+      </Suspense>
+      <HomeContent />
+    </>
+  )
+}
+
+function HomeContent() {
+
   // 多页 PDF 选择器状态
   const [pdfPicker, setPdfPicker] = useState<{
     pdf: PDFDocumentProxy
@@ -188,20 +186,23 @@ export default function Home() {
       }
 
       // ── 图片（先压缩，再存 IndexedDB）/ GLB（直接存 IndexedDB）
-      const fileToSave = file.type.startsWith('image/')
-        ? await compressImageToFile(file)
-        : file
+      const fileToSave = file.type.startsWith('image/') ? await compressImageToFile(file) : file
       const url = await saveAsset(fileToSave)
       if (type === 'scan') {
         const id = generateId('scan' as any)
         useScene.getState().createNode(
           {
-            id, type: 'scan', parentId: levelId,
-            object: 'node', visible: true, metadata: {},
+            id,
+            type: 'scan',
+            parentId: levelId,
+            object: 'node',
+            visible: true,
+            metadata: {},
             url,
             position: [0, 0, 0] as [number, number, number],
             rotation: [0, 0, 0] as [number, number, number],
-            scale: 1, opacity: 100,
+            scale: 1,
+            opacity: 100,
           } as any,
           levelId as any,
         )
@@ -232,11 +233,11 @@ export default function Home() {
       <Editor
         layoutVersion="v2"
         projectId="local-editor"
-        sidebarTabs={SIDEBAR_TABS}
         sitePanelProps={{
           projectId: 'local-editor',
           onUploadAsset,
         }}
+        navbarSlot={<UserNavbar />}
         viewerToolbarLeft={<ViewerToolbarLeft />}
         viewerToolbarRight={<ViewerToolbarRight />}
       />

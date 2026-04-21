@@ -19,6 +19,7 @@ import { ActionButton, ActionGroup } from '../controls/action-button'
 import { MaterialPicker } from '../controls/material-picker'
 import { MetricControl } from '../controls/metric-control'
 import { PanelSection } from '../controls/panel-section'
+import { Button } from '../primitives/button'
 import { SegmentedControl } from '../controls/segmented-control'
 import { SliderControl } from '../controls/slider-control'
 import { PanelWrapper } from './panel-wrapper'
@@ -214,9 +215,9 @@ export function StairSegmentPanel() {
       <PanelSection title="结构">
         <div className="flex items-center justify-between px-1 py-1">
           <span className="text-muted-foreground text-xs">填充到地面</span>
-          <button
+          <Button variant="ghost"
             className={`relative h-5 w-10 rounded-full transition-colors ${
-              node.fillToFloor ? 'bg-blue-500' : 'bg-[#3e3e3e]'
+              node.fillToFloor ? 'bg-blue-500' : 'bg-muted-foreground/30'
             }`}
             onClick={() => handleUpdate({ fillToFloor: !node.fillToFloor })}
             type="button"
@@ -226,7 +227,7 @@ export function StairSegmentPanel() {
                 node.fillToFloor ? 'left-6' : 'left-1'
               }`}
             />
-          </button>
+          </Button>
         </div>
         {!node.fillToFloor && (
           <SliderControl

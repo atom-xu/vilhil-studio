@@ -32,25 +32,31 @@ import { ZoneSystem } from '../systems/zone/zone-system'
 import { BoxSelectTool } from '../tools/select/box-select-tool'
 import { ToolManager } from '../tools/tool-manager'
 import { ActionMenu } from '../ui/action-menu'
-import { CommandPalette, type CommandPaletteEmptyAction } from '../ui/command-palette'
+import { CommandPalette } from '../ui/command-palette'
 import { EditorCommands } from '../ui/command-palette/editor-commands'
 import { FloatingLevelSelector } from '../ui/floating-level-selector'
 import { HelperManager } from '../ui/helpers/helper-manager'
 import { PanelManager } from '../ui/panels/panel-manager'
+import { Button } from '../ui/primitives/button'
 import { ErrorBoundary } from '../ui/primitives/error-boundary'
 import { useSidebarStore } from '../ui/primitives/sidebar'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/primitives/tooltip'
 import { SceneLoader } from '../ui/scene-loader'
 import { AppSidebar } from '../ui/sidebar/app-sidebar'
-import type { ExtraPanel } from '../ui/sidebar/icon-rail'
+import { normalizePanelId, type ExtraPanel } from '../ui/sidebar/icon-rail'
+import { BuildingPanel, type BuildingPanelProps } from '../ui/sidebar/panels/building-panel'
+import { ComingSoonPanel } from '../ui/sidebar/panels/coming-soon-panel'
+import { DevicePanel } from '../ui/sidebar/panels/device-panel'
 import { ScenePanel } from '../ui/sidebar/panels/scene-panel'
 import { SettingsPanel, type SettingsPanelProps } from '../ui/sidebar/panels/settings-panel'
+import { TopologyPanel } from '../ui/sidebar/panels/topology-panel'
 import { SitePanel, type SitePanelProps } from '../ui/sidebar/panels/site-panel'
 import type { SidebarTab } from '../ui/sidebar/tab-bar'
 import { CustomCameraControls } from './custom-camera-controls'
 import { EditorLayoutV2 } from './editor-layout-v2'
 import { ExportManager } from './export-manager'
 import { FirstPersonControls, FirstPersonOverlay } from './first-person-controls'
+import { DeviceWorkspace } from './device-workspace'
 import { FloatingActionMenu } from './floating-action-menu'
 import { FloorplanPanel } from './floorplan-panel'
 import { Grid } from './grid'
@@ -58,6 +64,7 @@ import { PresetThumbnailGenerator } from './preset-thumbnail-generator'
 import { SelectionManager } from './selection-manager'
 import { SiteEdgeLabels } from './site-edge-labels'
 import { ThumbnailGenerator } from './thumbnail-generator'
+import { TopologyWorkspace } from './topology-workspace'
 import { WallMeasurementLabel } from './wall-measurement-label'
 
 const CAMERA_CONTROLS_HINT_DISMISSED_STORAGE_KEY = 'editor-camera-controls-hint-dismissed:v1'
@@ -134,8 +141,6 @@ export interface EditorProps {
   // Presets storage backend (defaults to localStorage)
   presetsAdapter?: PresetsAdapter
 
-  // Command palette fallback when no commands match
-  commandPaletteEmptyAction?: CommandPaletteEmptyAction
 }
 
 function EditorSceneCrashFallback() {
@@ -147,19 +152,12 @@ function EditorSceneCrashFallback() {
           You can retry the scene or return home without reloading the whole app shell.
         </p>
         <div className="mt-4 flex items-center gap-2">
-          <button
-            className="rounded-md border border-border bg-accent px-3 py-2 font-medium text-sm hover:bg-accent/80"
-            onClick={() => window.location.reload()}
-            type="button"
-          >
+          <Button onClick={() => window.location.reload()} size="sm" variant="outline">
             Reload editor
-          </button>
-          <a
-            className="rounded-md border border-border bg-background px-3 py-2 font-medium text-sm hover:bg-accent/40"
-            href="/"
-          >
-            Back to home
-          </a>
+          </Button>
+          <Button asChild size="sm" variant="outline">
+            <a href="/">Back to home</a>
+          </Button>
         </div>
       </div>
     </div>
@@ -451,11 +449,13 @@ function ViewerCanvasControlsHint({
         </div>
         <Tooltip>
           <TooltipTrigger asChild>
-            <button
+            <Button
               aria-label="关闭相机控制提示"
-              className="flex h-5 shrink-0 items-center justify-center self-center border-border/18 border-l pl-3 text-muted-foreground/70 transition-colors hover:text-foreground"
+              className="h-5 shrink-0 self-center border-border/18 border-l pl-3 text-muted-foreground/70 hover:bg-transparent hover:text-foreground"
               onClick={onDismiss}
+              size="icon-sm"
               type="button"
+              variant="ghost"
             >
               <Icon
                 aria-hidden="true"
@@ -464,7 +464,7 @@ function ViewerCanvasControlsHint({
                 icon="lucide:x"
                 width={14}
               />
-            </button>
+            </Button>
           </TooltipTrigger>
           <TooltipContent side="bottom" sideOffset={8}>
             关闭提示
@@ -497,9 +497,9 @@ export default function Editor({
   sitePanelProps,
   extraSidebarPanels,
   presetsAdapter,
-  commandPaletteEmptyAction,
 }: EditorProps) {
   useKeyboard()
+  const theme = useViewer((state) => state.theme)
 
   const isPreviewMode = useEditor((s) => s.isPreviewMode)
   // L2 设备交互：编辑模式下点击 → 翻转开关+更新选中；预览模式只翻转
@@ -610,11 +610,12 @@ export default function Editor({
   }, [isVersionPreviewMode, previewScene])
 
   useEffect(() => {
-    document.body.classList.add('dark')
+    const root = document.documentElement
+    root.classList.toggle('dark', theme === 'dark')
     return () => {
-      document.body.classList.remove('dark')
+      root.classList.remove('dark')
     }
-  }, [])
+  }, [theme])
 
   useEffect(() => {
     setIsCameraControlsHintVisible(!readCameraControlsHintDismissed())
@@ -665,6 +666,10 @@ export default function Editor({
 
   // ── Shared viewer canvas (handles split/2d/3d) ──
   const viewMode = useEditor((s) => s.viewMode)
+  const activeSidebarPanel = useEditor((s) => normalizePanelId(s.activeSidebarPanel))
+  const isDeviceMode = activeSidebarPanel === 'device'
+  const isTopologyMode = activeSidebarPanel === 'topology'
+  const isWorkspaceMode = isTopologyMode || isDeviceMode
 
   const show2d = viewMode === '2d' || viewMode === 'split'
   const show3d = viewMode === '3d' || viewMode === 'split'
@@ -712,26 +717,39 @@ export default function Editor({
     </ErrorBoundary>
   )
 
+  const topologyWorkspace = (
+    <div className="h-full w-full overflow-hidden">
+      <TopologyWorkspace />
+    </div>
+  )
+
+  const deviceWorkspace = (
+    <div className="h-full w-full overflow-hidden">
+      <DeviceWorkspace />
+    </div>
+  )
+
+  const mainContent = isTopologyMode ? topologyWorkspace : isDeviceMode ? deviceWorkspace : viewerCanvas
+
   // ── V2 layout ──
   if (layoutVersion === 'v2') {
-    const tabMap = new Map(sidebarTabs?.map((t) => [t.id, t]) ?? [])
-
     const renderTabContent = (tabId: string) => {
-      // Built-in panels
+      // 新导航面板
+      if (tabId === 'device') return <DevicePanel />
+      if (tabId === 'building') {
+        return <BuildingPanel projectId={projectId ?? undefined} {...(sitePanelProps as BuildingPanelProps)} />
+      }
+      if (tabId === 'topology') return <TopologyPanel />
+      if (tabId === 'scene') return <ScenePanel />
+      if (tabId === 'share') return <ComingSoonPanel label="分享" description="生成演示链接，即将上线" />
+      if (tabId === 'review') return <ComingSoonPanel label="查看" description="设备清单与报价，即将上线" />
+      if (tabId === 'settings') return <SettingsPanel {...settingsPanelProps} />
+      // 兼容旧 ID
       if (tabId === 'site') {
-        return <SitePanel projectId={projectId ?? undefined} {...sitePanelProps} />
+        return <BuildingPanel projectId={projectId ?? undefined} {...(sitePanelProps as BuildingPanelProps)} />
       }
-      if (tabId === 'scenes') {
-        return <ScenePanel />
-      }
-      if (tabId === 'settings') {
-        return <SettingsPanel {...settingsPanelProps} />
-      }
-      // External tabs (AI chat, catalog, etc.)
-      const tab = tabMap.get(tabId)
-      if (!tab) return null
-      const Component = tab.component
-      return <Component />
+      if (tabId === 'scenes') return <ScenePanel />
+      return null
     }
 
     const tabBarTabs = sidebarTabs?.map(({ id, label }) => ({ id, label })) ?? []
@@ -745,7 +763,7 @@ export default function Editor({
         )}
 
         {!isLoading && isPreviewMode ? (
-          <div className="dark h-full w-full bg-neutral-950 text-foreground">
+          <div className="h-full w-full bg-background text-foreground">
             <ProposalLayout
               onBack={() => useEditor.getState().setPreviewMode(false)}
               projectName="智能家居方案"
@@ -756,7 +774,7 @@ export default function Editor({
         ) : (
           <>
             {/* First-person overlay — rendered on top of normal layout */}
-            {isFirstPersonMode && (
+            {isFirstPersonMode && !isWorkspaceMode && (
               <div className="fixed inset-0 z-50 pointer-events-none">
                 <FirstPersonOverlay
                   onExit={() => useEditor.getState().setFirstPersonMode(false)}
@@ -765,7 +783,7 @@ export default function Editor({
             )}
             <EditorLayoutV2
               navbarSlot={navbarSlot}
-              overlays={
+              overlays={isWorkspaceMode ? undefined : (
                 <>
                   <FloatingLevelSelector />
                   <div className="pointer-events-auto">
@@ -778,15 +796,15 @@ export default function Editor({
                     <HelperManager />
                   </div>
                 </>
-              }
+              )}
               renderTabContent={renderTabContent}
               sidebarTabs={tabBarTabs}
-              viewerContent={viewerCanvas}
-              viewerToolbarLeft={viewerToolbarLeft}
-              viewerToolbarRight={viewerToolbarRight}
+              viewerContent={mainContent}
+              viewerToolbarLeft={isWorkspaceMode ? undefined : viewerToolbarLeft}
+              viewerToolbarRight={isWorkspaceMode ? undefined : viewerToolbarRight}
             />
             <EditorCommands />
-            <CommandPalette emptyAction={commandPaletteEmptyAction} />
+            <CommandPalette />
           </>
         )}
       </PresetsProvider>
@@ -801,7 +819,7 @@ export default function Editor({
 
   return (
     <PresetsProvider adapter={presetsAdapter}>
-      <div className="dark flex h-full w-full gap-3 bg-neutral-100 p-3 text-foreground">
+      <div className="flex h-full w-full gap-3 bg-background p-3 text-foreground">
         {showLoader && (
           <div className="fixed inset-0 z-60">
             <SceneLoader />
@@ -819,7 +837,6 @@ export default function Editor({
             <SidebarSlot>
               <AppSidebar
                 appMenuButton={appMenuButton}
-                commandPaletteEmptyAction={commandPaletteEmptyAction}
                 extraPanels={extraSidebarPanels}
                 settingsPanelProps={settingsPanelProps}
                 sidebarTop={sidebarTop}
@@ -829,21 +846,23 @@ export default function Editor({
 
             {/* Viewer area */}
             <div className="relative flex-1 overflow-hidden rounded-xl" ref={viewerAreaRef}>
-              {viewerCanvas}
+              {mainContent}
             </div>
 
             {/* Fixed UI overlays scoped to the viewer area */}
-            <ViewerOverlays left={overlayLeft}>
-              <div className="pointer-events-auto">
-                <ActionMenu />
-              </div>
-              <div className="pointer-events-auto">
-                <PanelManager />
-              </div>
-              <div className="pointer-events-auto">
-                <HelperManager />
-              </div>
-            </ViewerOverlays>
+            {!isWorkspaceMode && (
+              <ViewerOverlays left={overlayLeft}>
+                <div className="pointer-events-auto">
+                  <ActionMenu />
+                </div>
+                <div className="pointer-events-auto">
+                  <PanelManager />
+                </div>
+                <div className="pointer-events-auto">
+                  <HelperManager />
+                </div>
+              </ViewerOverlays>
+            )}
           </>
         )}
       </div>

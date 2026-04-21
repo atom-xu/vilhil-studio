@@ -7,6 +7,7 @@ import { X } from 'lucide-react'
 import { useMemo } from 'react'
 import { useShallow } from 'zustand/shallow'
 import { cn } from '../../lib/utils'
+import { Button } from '../ui/primitives/button'
 
 interface QuoteItem {
   id: string
@@ -67,20 +68,21 @@ export function QuotePanel({ className, isOpen, onClose, items = [] }: QuotePane
   return (
     <div
       className={cn(
-        'absolute right-4 top-4 z-30 w-80 rounded-2xl border border-border/40 bg-background/95 shadow-lg backdrop-blur-xl',
-        className
+        'vh-panel absolute right-4 top-4 z-30 w-80',
+        className,
       )}
     >
       {/* 头部 */}
       <div className="flex items-center justify-between border-b border-border/40 px-4 py-3">
         <h2 className="font-semibold text-foreground text-lg">报价明细</h2>
-        <button
-          className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-accent/50"
+        <Button
           onClick={onClose}
+          size="icon-sm"
           type="button"
+          variant="ghost"
         >
           <X className="h-4 w-4" />
-        </button>
+        </Button>
       </div>
 
       {/* 内容 */}

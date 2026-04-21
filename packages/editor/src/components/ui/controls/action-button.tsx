@@ -1,24 +1,30 @@
 'use client'
 
+import type * as React from 'react'
 import { cn } from '../../../lib/utils'
+import { ActionButtonBase } from '../primitives/action-button-base'
 
-interface ActionButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+interface ActionButtonProps extends React.ComponentProps<typeof ActionButtonBase> {
   icon?: React.ReactNode
   label: string
 }
 
 export function ActionButton({ icon, label, className, ...props }: ActionButtonProps) {
   return (
-    <button
+    <ActionButtonBase
       {...props}
       className={cn(
-        'flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border border-border/50 bg-[#2C2C2E] px-3 font-medium text-foreground text-xs transition-colors hover:bg-[#3e3e3e] active:bg-[#3e3e3e]',
+        'vh-btn-secondary h-9 flex-1 gap-1.5 px-3 text-xs',
         className,
       )}
+      label={label}
+      size="sm"
+      tooltipDisabled
+      variant="outline"
     >
       {icon}
       <span>{label}</span>
-    </button>
+    </ActionButtonBase>
   )
 }
 

@@ -63,10 +63,10 @@ export default function TermsPage() {
           <section className="mb-8 space-y-4">
             <h2 className="font-semibold text-xl">3. Accounts and Authentication</h2>
             <p className="text-foreground/90 leading-relaxed">
-              To use certain features of the Platform, you must create an account. We use Google
-              OAuth and magic link email authentication through Supabase. You are responsible for
-              maintaining the security of your account credentials and for all activities that occur
-              under your account.
+              To use certain features of the Platform, you must create an account using email and
+              password. We use Better Auth with our own PostgreSQL database for authentication. You
+              are responsible for maintaining the security of your account credentials and for all
+              activities that occur under your account.
             </p>
           </section>
 

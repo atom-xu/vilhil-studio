@@ -1,11 +1,12 @@
 'use client'
 
 import { useScene } from '@pascal-app/core'
-import { applyScene } from '@vilhil/smarthome'
-import { CheckCircle, Play } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { applyScene, subscribeSceneRunStatus, type SceneRunStatus } from '@vilhil/smarthome'
+import { CheckCircle, LoaderCircle, Play } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { useShallow } from 'zustand/shallow'
 import { cn } from '../../lib/utils'
+import { Button } from '../ui/primitives/button'
 
 interface Scene {
   id: string
@@ -29,6 +30,13 @@ interface SceneBarProps {
  */
 export function SceneBar({ className, scenes = [], onSceneExecute }: SceneBarProps) {
   const [activeSceneId, setActiveSceneId] = useState<string | null>(null)
+  const [runStatus, setRunStatus] = useState<SceneRunStatus>({
+    sceneId: null,
+    running: false,
+    startedAt: null,
+    expectedEndAt: null,
+    completedAt: null,
+  })
 
   // Use useShallow to avoid infinite re-renders when nodes object changes reference
   const nodes = useScene(useShallow((s: any) => s.nodes))
@@ -46,8 +54,15 @@ export function SceneBar({ className, scenes = [], onSceneExecute }: SceneBarPro
           description: n.description,
         }))
 
+  useEffect(() => {
+    return subscribeSceneRunStatus((status) => {
+      setRunStatus(status)
+      if (status.sceneId) setActiveSceneId(status.sceneId)
+    })
+  }, [])
+
   const handleExecute = (scene: Scene) => {
-    // 调用 applyScene，批量更新设备状态（单个 Zundo 快照，Undo 一步还原）
+    // 调用 applyScene，按 delay / duration 顺序执行
     const count = applyScene(scene.id)
     if (count > 0 || true) {
       // 无论是否有效果，都标记激活（count=0 可能是空场景或找不到设备）
@@ -61,37 +76,41 @@ export function SceneBar({ className, scenes = [], onSceneExecute }: SceneBarPro
   return (
     <div
       className={cn(
-        'flex items-center gap-2 rounded-2xl border border-border/40 bg-background/95 p-2 shadow-lg backdrop-blur-xl',
-        className
+        'vh-panel flex items-center gap-2 p-2',
+        className,
       )}
     >
       {displayScenes.map((scene) => {
         const isActive = activeSceneId === scene.id
+        const isRunning = runStatus.running && runStatus.sceneId === scene.id
         const icon = scene.icon
 
         return (
-          <button
+          <Button
             key={scene.id}
             className={cn(
-              'group relative flex min-w-[100px] items-center gap-2 rounded-xl px-3 py-2 transition-all duration-200',
+              'group relative h-auto min-w-[100px] items-center gap-2 rounded-xl px-3 py-2 transition-all duration-200',
               'hover:bg-accent/50 active:scale-95',
               isActive
                 ? 'bg-primary/10 ring-1 ring-primary/40'
-                : 'hover:bg-accent/50'
+                : 'hover:bg-accent/50',
             )}
             onClick={() => handleExecute(scene)}
             type="button"
+            variant="ghost"
           >
             {/* 场景图标 */}
             <div
               className={cn(
                 'flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition-all duration-200',
-                isActive
-                  ? 'bg-primary shadow-[0_0_12px_rgba(45,127,249,0.4)]'
+                isRunning || isActive
+                  ? 'bg-primary shadow-md'
                   : 'bg-accent/60',
               )}
             >
-              {isActive ? (
+              {isRunning ? (
+                <LoaderCircle className="h-4 w-4 animate-spin text-white" />
+              ) : isActive ? (
                 <CheckCircle className="h-4 w-4 text-white" />
               ) : (
                 <Play className="h-3.5 w-3.5 text-muted-foreground" />
@@ -103,18 +122,20 @@ export function SceneBar({ className, scenes = [], onSceneExecute }: SceneBarPro
               <span
                 className={cn(
                   'font-medium text-sm transition-colors',
-                  isActive ? 'text-primary' : 'text-foreground'
+                  isRunning || isActive ? 'text-primary' : 'text-foreground'
                 )}
               >
                 {scene.name}
               </span>
-              {isActive ? (
+              {isRunning ? (
+                <span className="text-primary text-xs font-medium">执行中...</span>
+              ) : isActive ? (
                 <span className="text-primary text-xs font-medium">已激活</span>
               ) : scene.description ? (
                 <span className="text-muted-foreground text-xs">{scene.description}</span>
               ) : null}
             </div>
-          </button>
+          </Button>
         )
       })}
     </div>

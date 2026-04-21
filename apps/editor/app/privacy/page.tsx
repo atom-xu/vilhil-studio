@@ -56,7 +56,7 @@ export default function PrivacyPage() {
               <li>Email address</li>
               <li>Name</li>
               <li>Profile picture/avatar</li>
-              <li>OAuth provider data (from Google when you sign in with Google)</li>
+              <li>Password (bcrypt hashed, we never store plain text)</li>
             </ul>
 
             <h3 className="mt-4 font-medium text-lg">Project Data</h3>
@@ -105,13 +105,10 @@ export default function PrivacyPage() {
             </p>
             <ul className="list-disc space-y-2 pl-6 text-foreground/90">
               <li>
-                <strong>Google</strong> - OAuth authentication for sign-in
-              </li>
-              <li>
                 <strong>Vercel</strong> - Application hosting, analytics, and performance monitoring
               </li>
               <li>
-                <strong>Supabase</strong> - Database hosting and authentication infrastructure
+                <strong>Supabase</strong> - Database hosting
               </li>
             </ul>
             <p className="mt-4 text-foreground/90 leading-relaxed">

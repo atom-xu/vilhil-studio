@@ -4,6 +4,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { useCallback, useEffect, useRef } from 'react'
 import { Euler, Vector3 } from 'three'
 import useEditor from '../../store/use-editor'
+import { Button } from '../ui/primitives/button'
 
 // Average human eye height in meters
 const EYE_HEIGHT = 1.65
@@ -199,7 +200,7 @@ export const FirstPersonOverlay = ({ onExit }: { onExit: () => void }) => {
 
       {/* Exit button — top-right */}
       <div className="fixed top-4 right-4 z-50">
-        <button
+        <Button variant="ghost"
           className="pointer-events-auto flex items-center gap-2 rounded-xl border border-border/40 bg-background/90 px-4 py-2 font-medium text-foreground text-sm shadow-lg backdrop-blur-xl transition-colors hover:bg-background"
           onClick={handleExit}
           type="button"
@@ -208,7 +209,7 @@ export const FirstPersonOverlay = ({ onExit }: { onExit: () => void }) => {
             ESC
           </kbd>
           Exit Street View
-        </button>
+        </Button>
       </div>
 
       {/* Controls hint — bottom-center */}

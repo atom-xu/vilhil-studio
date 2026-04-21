@@ -8,6 +8,7 @@ import { ChevronRight, Search } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { create } from 'zustand'
 import { useShallow } from 'zustand/shallow'
+import { Button } from '../primitives/button'
 import { Dialog, DialogContent, DialogTitle } from './../../../components/ui/primitives/dialog'
 import { useCommandRegistry } from '../../../store/use-command-registry'
 import { usePaletteViewRegistry } from '../../../store/use-palette-view-registry'
@@ -327,7 +328,7 @@ export function CommandPalette() {
             <div className="flex items-center border-border/50 border-b px-3">
               <Search className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
               {page && (
-                <button
+                <Button variant="ghost"
                   className="mr-2 shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/70"
                   onClick={goBack}
                   type="button"
@@ -335,7 +336,7 @@ export function CommandPalette() {
                   {page === 'camera-scope'
                     ? (cameraScope?.label ?? 'Snapshot')
                     : (PAGE_LABEL[page] ?? views.get(page)?.label ?? page)}
-                </button>
+                </Button>
               )}
               <Command.Input
                 autoFocus

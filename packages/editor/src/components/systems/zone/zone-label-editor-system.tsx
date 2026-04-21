@@ -6,6 +6,7 @@ import { Check, Pencil } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useShallow } from 'zustand/react/shallow'
+import { Button } from '../../ui/primitives/button'
 import useEditor from '../../../store/use-editor'
 
 // ─── Per-zone label editor ────────────────────────────────────────────────────
@@ -127,7 +128,7 @@ function ZoneLabelEditor({ zoneId }: { zoneId: ZoneNode['id'] }) {
           type="text"
           value={value}
         />
-        <button
+        <Button variant="ghost"
           onClick={(e) => {
             e.stopPropagation()
             save()
@@ -145,10 +146,10 @@ function ZoneLabelEditor({ zoneId }: { zoneId: ZoneNode['id'] }) {
           type="button"
         >
           <Check size={12} />
-        </button>
+        </Button>
       </div>
     ) : (
-      <button
+      <Button variant="ghost"
         onClick={(e) => {
           e.stopPropagation()
           setSelection({ zoneId })
@@ -163,7 +164,7 @@ function ZoneLabelEditor({ zoneId }: { zoneId: ZoneNode['id'] }) {
         <span style={{ display: 'inline-flex', alignItems: 'center', opacity: 0.55 }}>
           <Pencil size={10} />
         </span>
-      </button>
+      </Button>
     ),
     labelEl,
   )

@@ -176,6 +176,11 @@ export function useSubsystemVisibility(subsystem: Subsystem) {
   return useDeviceState((s) => s.visibleSubsystems[subsystem])
 }
 
+/** 获取当前聚焦子系统（null 表示不过滤） */
+export function useSelectedSubsystem() {
+  return useDeviceState((s) => s.selectedSubsystem)
+}
+
 /** 切换子系统显隐 */
 export function useToggleSubsystem() {
   return useDeviceState((s) => s.toggleSubsystem)

@@ -3,19 +3,17 @@
 import { type ReactNode, useCallback, useEffect, useRef } from 'react'
 import useEditor from '../../store/use-editor'
 import { useSidebarStore } from '../ui/primitives/sidebar'
-import { type SidebarTab, TabBar } from '../ui/sidebar/tab-bar'
+import { IconRail, normalizePanelId } from '../ui/sidebar/icon-rail'
 
 const SIDEBAR_MIN_WIDTH = 300
 const SIDEBAR_MAX_WIDTH = 800
 const SIDEBAR_COLLAPSE_THRESHOLD = 220
 
-// ── Left column: resizable panel with tab bar ────────────────────────────────
+// ── Left column: resizable panel with icon rail ──────────────────────────────
 
 function LeftColumn({
-  tabs,
   renderTabContent,
 }: {
-  tabs: SidebarTab[]
   renderTabContent: (tabId: string) => ReactNode
 }) {
   const width = useSidebarStore((s) => s.width)
@@ -24,18 +22,11 @@ function LeftColumn({
   const setWidth = useSidebarStore((s) => s.setWidth)
   const isDragging = useSidebarStore((s) => s.isDragging)
   const setIsDragging = useSidebarStore((s) => s.setIsDragging)
-  const activePanel = useEditor((s) => s.activeSidebarPanel)
-  const setActivePanel = useEditor((s) => s.setActiveSidebarPanel)
+  const rawActivePanel = useEditor((s) => s.activeSidebarPanel)
+  const activePanel = normalizePanelId(rawActivePanel)
 
   const isResizing = useRef(false)
   const isExpanding = useRef(false)
-
-  // Ensure active panel is a valid tab
-  useEffect(() => {
-    if (tabs.length > 0 && !tabs.some((t) => t.id === activePanel)) {
-      setActivePanel(tabs[0]!.id)
-    }
-  }, [tabs, activePanel, setActivePanel])
 
   const handleResizerDown = useCallback(
     (e: React.PointerEvent) => {
@@ -101,14 +92,19 @@ function LeftColumn({
 
   return (
     <div
-      className="relative z-10 flex h-full flex-shrink-0 flex-col bg-sidebar text-sidebar-foreground"
+      className="relative z-10 flex h-full flex-shrink-0 bg-sidebar text-sidebar-foreground"
       style={{
         width,
         transition: isDragging ? 'none' : 'width 150ms ease',
       }}
     >
-      <TabBar activeTab={activePanel} onTabChange={setActivePanel} tabs={tabs} />
-      <div className="flex flex-1 flex-col overflow-hidden">{renderTabContent(activePanel)}</div>
+      {/* 左侧图标导航栏 */}
+      <IconRail />
+
+      {/* 面板内容区 */}
+      <div className="flex flex-1 flex-col overflow-hidden">
+        {renderTabContent(activePanel)}
+      </div>
 
       {/* Resize handle + hit area */}
       <div
@@ -169,7 +165,8 @@ function RightColumn({
 
 export interface EditorLayoutV2Props {
   navbarSlot?: ReactNode
-  sidebarTabs?: SidebarTab[]
+  /** @deprecated 不再需要，侧边栏导航已内置 */
+  sidebarTabs?: unknown[]
   renderTabContent: (tabId: string) => ReactNode
   viewerToolbarLeft?: ReactNode
   viewerToolbarRight?: ReactNode
@@ -179,7 +176,6 @@ export interface EditorLayoutV2Props {
 
 export function EditorLayoutV2({
   navbarSlot,
-  sidebarTabs = [],
   renderTabContent,
   viewerToolbarLeft,
   viewerToolbarRight,
@@ -187,15 +183,13 @@ export function EditorLayoutV2({
   overlays,
 }: EditorLayoutV2Props) {
   return (
-    <div className="dark flex h-full w-full flex-col bg-sidebar text-foreground">
+    <div className="flex h-full w-full flex-col bg-sidebar text-foreground">
       {/* Top navbar */}
       {navbarSlot}
 
       {/* Main content: left column + right column */}
       <div className="flex min-h-0 flex-1">
-        {sidebarTabs.length > 0 && (
-          <LeftColumn renderTabContent={renderTabContent} tabs={sidebarTabs} />
-        )}
+        <LeftColumn renderTabContent={renderTabContent} />
         <RightColumn
           overlays={overlays}
           toolbarLeft={viewerToolbarLeft}

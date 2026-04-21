@@ -4,6 +4,7 @@ import type { SceneNodeType } from '@pascal-app/core'
 import { useViewer } from '@pascal-app/viewer'
 import { deleteScene } from '@vilhil/smarthome'
 import { Sparkles, Trash2 } from 'lucide-react'
+import { Button } from '../../../primitives/button'
 import { focusTreeNode, handleTreeSelection, TreeNodeWrapper } from './tree-node'
 
 interface SceneTreeNodeProps {
@@ -41,13 +42,13 @@ export function SceneTreeNode({ node, depth, isLast }: SceneTreeNodeProps) {
   return (
     <TreeNodeWrapper
       actions={
-        <button
+        <Button variant="ghost"
           className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-red-500/15 hover:text-red-400"
           onClick={handleDelete}
           title="删除场景"
         >
           <Trash2 className="h-3 w-3" />
-        </button>
+        </Button>
       }
       depth={depth}
       expanded={false}

@@ -13,6 +13,7 @@ import { useCallback, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { cn } from '../../../lib/utils'
 import { SliderControl } from '../controls/slider-control'
+import { Button } from '../primitives/button'
 import { Popover, PopoverContent, PopoverTrigger } from '../primitives/popover'
 import { ActionButton } from './action-button'
 
@@ -108,7 +109,7 @@ function GuidesControl() {
 
         {/* Dropdown chevron */}
         <PopoverTrigger asChild>
-          <button
+          <Button variant="ghost"
             aria-expanded={isOpen}
             aria-label="参考图设置"
             className={cn(
@@ -118,7 +119,7 @@ function GuidesControl() {
             type="button"
           >
             <ChevronDown className={cn('h-3 w-3 transition-transform', isOpen && 'rotate-180')} />
-          </button>
+          </Button>
         </PopoverTrigger>
       </div>
 
@@ -185,20 +186,20 @@ function GuidesControl() {
               <div className="flex items-center justify-between gap-2">
                 <p className="font-medium text-foreground text-sm">对齐参考层</p>
                 {referenceLevelId && (
-                  <button
+                  <Button variant="ghost"
                     className="text-[10px] text-muted-foreground hover:text-foreground"
                     onClick={() => setReferenceLevelId(null)}
                     type="button"
                   >
                     清除
-                  </button>
+                  </Button>
                 )}
               </div>
               <p className="text-[10px] text-muted-foreground leading-relaxed">
                 在本层下方半透明显示所选楼层的底图，便于对齐墙体位置
               </p>
               <div className="grid grid-cols-2 gap-1.5">
-                <button
+                <Button variant="ghost"
                   className={cn(
                     'rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors',
                     !referenceLevelId
@@ -209,11 +210,11 @@ function GuidesControl() {
                   type="button"
                 >
                   无
-                </button>
+                </Button>
                 {siblingLevels.map((lvl) => {
                   const isActive = referenceLevelId === lvl.id
                   return (
-                    <button
+                    <Button variant="ghost"
                       className={cn(
                         'truncate rounded-md px-2 py-1.5 text-[11px] font-medium transition-colors',
                         isActive
@@ -225,7 +226,7 @@ function GuidesControl() {
                       type="button"
                     >
                       {lvl.name || `Level ${lvl.level}`}
-                    </button>
+                    </Button>
                   )
                 })}
               </div>
@@ -278,7 +279,7 @@ function ScansControl() {
 
         {/* Dropdown chevron */}
         <PopoverTrigger asChild>
-          <button
+          <Button variant="ghost"
             aria-expanded={isOpen}
             aria-label="扫描图设置"
             className={cn(
@@ -288,7 +289,7 @@ function ScansControl() {
             type="button"
           >
             <ChevronDown className={cn('h-3 w-3 transition-transform', isOpen && 'rotate-180')} />
-          </button>
+          </Button>
         </PopoverTrigger>
       </div>
 

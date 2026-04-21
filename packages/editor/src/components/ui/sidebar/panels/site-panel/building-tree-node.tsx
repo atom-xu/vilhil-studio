@@ -2,6 +2,7 @@ import { type BuildingNode, LevelNode, useScene } from '@pascal-app/core'
 import { useViewer } from '@pascal-app/viewer'
 import { Building2, Plus } from 'lucide-react'
 import { useState } from 'react'
+import { Button } from '../../../primitives/button'
 import {
   Tooltip,
   TooltipContent,
@@ -44,12 +45,12 @@ export function BuildingTreeNode({ node, depth, isLast }: BuildingTreeNodeProps)
           <TreeNodeActions node={node} />
           <Tooltip>
             <TooltipTrigger asChild>
-              <button
+              <Button variant="ghost"
                 className="flex h-5 w-5 items-center justify-center rounded hover:bg-primary-foreground/20"
                 onClick={handleAddLevel}
               >
                 <Plus className="h-3 w-3" />
-              </button>
+              </Button>
             </TooltipTrigger>
             <TooltipContent side="right">添加楼层</TooltipContent>
           </Tooltip>

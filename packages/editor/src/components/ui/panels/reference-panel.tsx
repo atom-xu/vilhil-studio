@@ -7,6 +7,7 @@ import useEditor from '../../../store/use-editor'
 import { ActionButton, ActionGroup } from '../controls/action-button'
 import { MetricControl } from '../controls/metric-control'
 import { PanelSection } from '../controls/panel-section'
+import { Button } from '../primitives/button'
 import { SliderControl } from '../controls/slider-control'
 import { PanelWrapper } from './panel-wrapper'
 
@@ -219,19 +220,19 @@ function CalibrationButton({ guideNodeId }: { guideNodeId: string }) {
           <div className="h-2 w-2 animate-pulse rounded-full bg-primary" />
           <span className="text-[11px] font-medium text-primary">在 2D 底图上点两个点</span>
         </div>
-        <button
+        <Button variant="ghost"
           className="text-[10px] text-muted-foreground hover:text-foreground"
           onClick={cancelCalibration}
           type="button"
         >
           取消
-        </button>
+        </Button>
       </div>
     )
   }
 
   return (
-    <button
+    <Button variant="ghost"
       className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-primary/30 bg-primary/5 px-3 py-1.5 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10"
       onClick={() => {
         startCalibration(guideNodeId)
@@ -241,7 +242,7 @@ function CalibrationButton({ guideNodeId }: { guideNodeId: string }) {
       type="button"
     >
       画线标定比例
-    </button>
+    </Button>
   )
 }
 
@@ -279,14 +280,14 @@ function QuickScaleInput({
           />
           <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted-foreground">m</span>
         </div>
-        <button
+        <Button variant="ghost"
           className="shrink-0 rounded-md bg-primary/80 px-2.5 py-1 text-[11px] font-medium text-white transition-colors hover:bg-primary disabled:cursor-not-allowed disabled:opacity-40"
           disabled={!value || parseFloat(value) <= 0}
           onClick={handleApply}
           type="button"
         >
           应用
-        </button>
+        </Button>
       </div>
     </div>
   )

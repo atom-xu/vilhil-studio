@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react'
 import { useState } from 'react'
+import { Button } from '../../../../components/ui/primitives/button'
 import { ColorDot } from '../../../../components/ui/primitives/color-dot'
 import {
   DropdownMenu,
@@ -104,7 +105,7 @@ export function CollectionsPopover({ nodeId, collectionIds, children }: Collecti
               集合
             </span>
           </div>
-          <button
+          <Button variant="ghost"
             className="flex items-center gap-1 rounded-md px-2 py-1 font-medium text-[11px] text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
             onClick={() => {
               setShowCreateInput((v) => !v)
@@ -114,7 +115,7 @@ export function CollectionsPopover({ nodeId, collectionIds, children }: Collecti
           >
             <Plus className="h-3 w-3" />
             新建
-          </button>
+          </Button>
         </div>
 
         {/* Create input */}
@@ -134,15 +135,15 @@ export function CollectionsPopover({ nodeId, collectionIds, children }: Collecti
               placeholder="集合名称…"
               value={createName}
             />
-            <button
+            <Button variant="ghost"
               className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/20 text-primary transition-colors hover:bg-primary/30 disabled:opacity-40"
               disabled={!createName.trim()}
               onClick={handleCreate}
               type="button"
             >
               <Check className="h-3.5 w-3.5" />
-            </button>
-            <button
+            </Button>
+            <Button variant="ghost"
               className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/10"
               onClick={() => {
                 setShowCreateInput(false)
@@ -151,7 +152,7 @@ export function CollectionsPopover({ nodeId, collectionIds, children }: Collecti
               type="button"
             >
               <X className="h-3.5 w-3.5" />
-            </button>
+            </Button>
           </div>
         )}
 
@@ -182,7 +183,7 @@ export function CollectionsPopover({ nodeId, collectionIds, children }: Collecti
                         删除 "{collection.name}"?
                       </span>
                       <div className="flex shrink-0 items-center gap-1">
-                        <button
+                        <Button variant="ghost"
                           className="rounded-md bg-red-500/20 px-2 py-0.5 font-medium text-[11px] text-red-400 transition-colors hover:bg-red-500/30"
                           onClick={() => {
                             deleteCollection(collection.id)
@@ -191,14 +192,14 @@ export function CollectionsPopover({ nodeId, collectionIds, children }: Collecti
                           type="button"
                         >
                           删除
-                        </button>
-                        <button
+                        </Button>
+                        <Button variant="ghost"
                           className="rounded-md px-2 py-0.5 font-medium text-[11px] text-muted-foreground transition-colors hover:bg-white/10"
                           onClick={() => setDeletingId(null)}
                           type="button"
                         >
                           取消
-                        </button>
+                        </Button>
                       </div>
                     </li>
                   )
@@ -218,20 +219,20 @@ export function CollectionsPopover({ nodeId, collectionIds, children }: Collecti
                         }}
                         value={renameValue}
                       />
-                      <button
+                      <Button variant="ghost"
                         className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/20 text-primary transition-colors hover:bg-primary/30"
                         onClick={() => handleRenameConfirm(collection.id)}
                         type="button"
                       >
                         <Check className="h-3.5 w-3.5" />
-                      </button>
-                      <button
+                      </Button>
+                      <Button variant="ghost"
                         className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/10"
                         onClick={() => setRenamingId(null)}
                         type="button"
                       >
                         <X className="h-3.5 w-3.5" />
-                      </button>
+                      </Button>
                     </li>
                   )
                 }
@@ -246,7 +247,7 @@ export function CollectionsPopover({ nodeId, collectionIds, children }: Collecti
                       />
 
                       {/* Name + count — clicking toggles membership */}
-                      <button
+                      <Button variant="ghost"
                         className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
                         onClick={() => toggleMembership(collection.id)}
                         type="button"
@@ -262,7 +263,7 @@ export function CollectionsPopover({ nodeId, collectionIds, children }: Collecti
                         <span className="shrink-0 text-[10px] text-muted-foreground/60">
                           {collection.nodeIds.length}
                         </span>
-                      </button>
+                      </Button>
 
                       {/* Membership check */}
                       <div
@@ -276,7 +277,7 @@ export function CollectionsPopover({ nodeId, collectionIds, children }: Collecti
 
                       {/* Expand toggle (only if has members) */}
                       {collection.nodeIds.length > 0 && (
-                        <button
+                        <Button variant="ghost"
                           className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground"
                           onClick={() => toggleExpand(collection.id)}
                           type="button"
@@ -286,18 +287,18 @@ export function CollectionsPopover({ nodeId, collectionIds, children }: Collecti
                           ) : (
                             <ChevronRight className="h-3 w-3" />
                           )}
-                        </button>
+                        </Button>
                       )}
 
                       {/* More dropdown */}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <button
+                          <Button variant="ghost"
                             className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition-colors hover:bg-white/10 hover:text-foreground group-hover:opacity-100"
                             type="button"
                           >
                             <MoreHorizontal className="h-3.5 w-3.5" />
-                          </button>
+                          </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start" className="min-w-40" side="left">
                           <DropdownMenuItem

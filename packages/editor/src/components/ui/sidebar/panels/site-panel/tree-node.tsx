@@ -2,6 +2,7 @@ import { type AnyNodeId, emitter, useScene } from '@pascal-app/core'
 import { ChevronRight } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { forwardRef, useEffect, useRef } from 'react'
+import { Button } from '../../../primitives/button'
 
 export function handleTreeSelection(
   e: React.MouseEvent,
@@ -212,8 +213,8 @@ export const TreeNodeWrapper = forwardRef<HTMLDivElement, TreeNodeWrapperProps>(
             />
           )}
 
-          <button
-            className="z-10 flex h-4 w-4 shrink-0 items-center justify-center bg-inherit"
+          <Button variant="ghost"
+            className="z-10 flex h-4 w-4 shrink-0 items-center justify-center bg-transparent"
             onClick={(e) => {
               e.stopPropagation()
               onToggle()
@@ -228,7 +229,7 @@ export const TreeNodeWrapper = forwardRef<HTMLDivElement, TreeNodeWrapperProps>(
                 <ChevronRight className="h-3 w-3" />
               </motion.div>
             ) : null}
-          </button>
+          </Button>
           <div className="flex min-w-0 flex-1 items-center gap-1.5">
             <span
               className={cn(

@@ -94,7 +94,7 @@ export function PdfPagePicker({ pdf, numPages, onSelect, onClose }: PdfPagePicke
           <span className="font-medium text-foreground text-sm">
             选择页面（共 {numPages} 页）
           </span>
-          <button
+          <button variant="ghost"
             className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             onClick={onClose}
             type="button"
@@ -109,7 +109,7 @@ export function PdfPagePicker({ pdf, numPages, onSelect, onClose }: PdfPagePicke
             const pageNum = i + 1
             const isRendering = rendering === pageNum
             return (
-              <button
+              <button variant="ghost"
                 className="group relative flex flex-col items-center gap-1.5 rounded-lg border border-border/30 p-2 transition-all hover:border-primary/50 hover:bg-accent/30 disabled:opacity-50"
                 disabled={rendering !== null}
                 key={pageNum}

@@ -121,7 +121,9 @@ export function FurnishTools() {
         <div className="flex flex-col items-center gap-0.5">
           <div
             className="h-4 w-4 rounded-full"
-            style={{ backgroundColor: isSmartActive ? '#2D7FF9' : '#6b7280' }}
+            style={{
+              backgroundColor: isSmartActive ? 'var(--primary)' : 'var(--muted-foreground)',
+            }}
           />
           <span className="text-[8px] font-medium leading-none">智能</span>
         </div>

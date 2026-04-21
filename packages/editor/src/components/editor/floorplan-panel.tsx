@@ -36,6 +36,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { sfxEmitter } from '../../lib/sfx-bus'
 import { cn } from '../../lib/utils'
 import useEditor from '../../store/use-editor'
+import { Button } from '../ui/primitives/button'
 import { snapToHalf } from '../tools/item/placement-math'
 import {
   collectTrackingCandidates,
@@ -125,6 +126,10 @@ const FLOORPLAN_GUIDE_HANDLE_HINT_PADDING_Y = 48
 const FLOORPLAN_GUIDE_ROTATION_SNAP_DEGREES = 45
 const FLOORPLAN_GUIDE_ROTATION_FINE_SNAP_DEGREES = 1
 const FLOORPLAN_SITE_COLOR = '#10b981'
+const FLOORPLAN_COLOR_BRAND_PRIMARY = '#2D7FF9'
+const FLOORPLAN_COLOR_WARNING = '#f59e0b'
+const FLOORPLAN_COLOR_SURFACE = '#f5f5f6'
+const FLOORPLAN_COLOR_TRACK = '#94a3b8'
 
 type FloorplanViewport = {
   centerX: number
@@ -760,8 +765,8 @@ function LevelAlignmentOverlay({
   const labelOff = 14 * px
 
   // 当前层用品牌蓝，参考层用琥珀橙（与蓝色叠加墙对比清晰）
-  const CUR_COLOR = '#2D7FF9'
-  const REF_COLOR = '#f59e0b'
+  const CUR_COLOR = FLOORPLAN_COLOR_BRAND_PRIMARY
+  const REF_COLOR = FLOORPLAN_COLOR_WARNING
 
   const LABELS = ['①', '②']
 
@@ -834,7 +839,7 @@ function LevelAlignmentOverlay({
     return (
       <line
         pointerEvents="none"
-        stroke="#94a3b8"
+        stroke={FLOORPLAN_COLOR_TRACK}
         strokeDasharray={`${3 * px} ${5 * px}`}
         strokeOpacity={0.5}
         strokeWidth={strokeW * 0.8}
@@ -900,10 +905,10 @@ function LevelAlignmentOverlay({
 
 // 步骤进度配置 — 先点当前层（本楼层），再自动跳转到参考层点对应点
 const ALIGN_STEPS = [
-  { phase: 'cur', index: 0, color: '#2D7FF9', label: '当前层', hint: '点第 1 个特征点（墙角 / 交点）' },
-  { phase: 'cur', index: 1, color: '#2D7FF9', label: '当前层', hint: '点第 2 个特征点（另一个墙角）' },
-  { phase: 'ref', index: 0, color: '#f59e0b', label: '参考层', hint: '已切换到参考层，点对应的第 1 个特征点' },
-  { phase: 'ref', index: 1, color: '#f59e0b', label: '参考层', hint: '继续点对应的第 2 个特征点，完成对齐' },
+  { phase: 'cur', index: 0, color: FLOORPLAN_COLOR_BRAND_PRIMARY, label: '当前层', hint: '点第 1 个特征点（墙角 / 交点）' },
+  { phase: 'cur', index: 1, color: FLOORPLAN_COLOR_BRAND_PRIMARY, label: '当前层', hint: '点第 2 个特征点（另一个墙角）' },
+  { phase: 'ref', index: 0, color: FLOORPLAN_COLOR_WARNING, label: '参考层', hint: '已切换到参考层，点对应的第 1 个特征点' },
+  { phase: 'ref', index: 1, color: FLOORPLAN_COLOR_WARNING, label: '参考层', hint: '继续点对应的第 2 个特征点，完成对齐' },
 ]
 
 /**
@@ -949,7 +954,7 @@ function LevelAlignmentHUD() {
         {/* 提示文字 */}
         <span className="text-[13px] text-foreground">{currentStep.hint}</span>
         {/* 取消 */}
-        <button
+        <Button variant="ghost"
           className="pointer-events-auto ml-2 text-[11px] text-muted-foreground/60 hover:text-muted-foreground"
           onClick={() => {
             const la = useEditor.getState().levelAlignment
@@ -969,7 +974,7 @@ function LevelAlignmentHUD() {
           type="button"
         >
           ESC 取消
-        </button>
+        </Button>
       </div>
     </div>
   )
@@ -1083,8 +1088,8 @@ function buildCursorUrl(svgMarkup: string, hotspotX: number, hotspotY: number, f
 }
 
 function getGuideRotateCursor(isDarkMode: boolean) {
-  const strokeColor = isDarkMode ? '#ffffff' : '#09090b'
-  const outlineColor = isDarkMode ? '#0a0e1b' : '#ffffff'
+  const strokeColor = isDarkMode ? FLOORPLAN_COLOR_SURFACE : '#09090b'
+  const outlineColor = isDarkMode ? '#0a0e1b' : FLOORPLAN_COLOR_SURFACE
   const svgMarkup = `
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
       <path d="M7 15.75a6 6 0 1 0 1.9-8.28" stroke="${outlineColor}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
@@ -2577,9 +2582,9 @@ function FloorplanGuideSelectionOverlay({
   const centerX = toSvgX(guide.position[0])
   const centerY = toSvgY(guide.position[2])
   const rotationDeg = (-guide.rotation[1] * 180) / Math.PI
-  const selectionStroke = isDarkMode ? '#ffffff' : '#09090b'
-  const handleFill = isDarkMode ? '#ffffff' : '#09090b'
-  const handleStroke = isDarkMode ? '#0a0e1b' : '#ffffff'
+  const selectionStroke = isDarkMode ? FLOORPLAN_COLOR_SURFACE : '#09090b'
+  const handleFill = isDarkMode ? FLOORPLAN_COLOR_SURFACE : '#09090b'
+  const handleStroke = isDarkMode ? '#0a0e1b' : FLOORPLAN_COLOR_SURFACE
 
   return (
     <g transform={`translate(${centerX} ${centerY}) rotate(${rotationDeg})`}>
@@ -3697,7 +3702,7 @@ function CalibrationInputInline() {
         </span>
         <input
           autoFocus
-          className="h-7 w-20 rounded border border-white/20 bg-white/10 px-2 text-[12px] text-white outline-none focus:border-[#2D7FF9]"
+          className="h-7 w-20 rounded border border-white/20 bg-white/10 px-2 text-[12px] text-white outline-none focus:border-primary"
           onChange={(e) => setInputValue(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') handleApply()
@@ -3708,21 +3713,21 @@ function CalibrationInputInline() {
           value={inputValue}
         />
         <span className="text-[11px] text-white/60">m</span>
-        <button
-          className="rounded bg-[#2D7FF9] px-2.5 py-1 text-[11px] font-medium text-white transition-colors hover:bg-[#2D7FF9]/90 disabled:cursor-not-allowed disabled:opacity-40"
+        <Button variant="ghost"
+          className="rounded bg-primary px-2.5 py-1 text-[11px] font-medium text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40"
           disabled={!inputValue || parseFloat(inputValue) <= 0}
           onClick={handleApply}
           type="button"
         >
           确定
-        </button>
-        <button
+        </Button>
+        <Button variant="ghost"
           className="rounded px-2 py-1 text-[11px] text-white/50 transition-colors hover:bg-white/10 hover:text-white"
           onClick={() => { cancelCalibration(); setInputValue('') }}
           type="button"
         >
           取消
-        </button>
+        </Button>
       </div>
     </div>
   )
@@ -3817,13 +3822,13 @@ function FloorplanCompass({
       open={isOpen}
     >
       <PopoverTrigger asChild>
-        <button
+        <Button variant="ghost"
           className="pointer-events-auto absolute right-3 bottom-3 z-30 flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-black/45 text-white shadow backdrop-blur-sm transition-colors hover:bg-black/65"
           title={`建筑朝向 ${northAngle}°`}
           type="button"
         >
           <CompassSvg angle={northAngle} size={22} />
-        </button>
+        </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-52 p-3" side="top">
         <div className="mb-2.5 font-semibold text-[13px] text-foreground">建筑朝向</div>
@@ -3832,7 +3837,7 @@ function FloorplanCompass({
         </div>
         <div className="mb-2.5 flex gap-1">
           {PRESETS.map(({ label, deg, title }) => (
-            <button
+            <Button variant="ghost"
               className={cn(
                 'flex-1 rounded-lg py-1.5 text-sm font-medium transition-colors',
                 northAngle === deg
@@ -3845,7 +3850,7 @@ function FloorplanCompass({
               type="button"
             >
               {label}
-            </button>
+            </Button>
           ))}
         </div>
         <div className="flex items-center gap-1.5">
@@ -5075,7 +5080,7 @@ export function FloorplanPanel() {
         ? {
             surface: '#0a0e1b',
             minorGrid: '#475569',
-            majorGrid: '#94a3b8',
+            majorGrid: FLOORPLAN_COLOR_TRACK,
             minorGridOpacity: 0.7,
             majorGridOpacity: 0.9,
             slabFill: '#5f6483',
@@ -5101,11 +5106,11 @@ export function FloorplanPanel() {
             endpointHandleActiveStroke: '#8381ed',
           }
         : {
-            surface: '#ffffff',
-            minorGrid: '#94a3b8',
-            majorGrid: '#475569',
-            minorGridOpacity: 0.7,
-            majorGridOpacity: 0.9,
+            surface: FLOORPLAN_COLOR_SURFACE,
+            minorGrid: '#c5cfdd',
+            majorGrid: '#a6b4c6',
+            minorGridOpacity: 0.55,
+            majorGridOpacity: 0.72,
             slabFill: '#c4c4cc',
             slabStroke: '#52525b',
             selectedSlabFill: '#b7b5f7',
@@ -5120,9 +5125,9 @@ export function FloorplanPanel() {
             cursor: '#6366f1',
             editCursor: '#8381ed',
             anchor: '#4338ca',
-            openingFill: '#ffffff',
+            openingFill: FLOORPLAN_COLOR_SURFACE,
             openingStroke: '#171717',
-            endpointHandleFill: '#ffffff',
+            endpointHandleFill: FLOORPLAN_COLOR_SURFACE,
             endpointHandleStroke: '#71717a',
             endpointHandleHoverStroke: '#52525b',
             endpointHandleActiveFill: '#8381ed',
@@ -8182,7 +8187,7 @@ export function FloorplanPanel() {
             {trackingHit && cursorPoint && (() => {
               const px = floorplanWorldUnitsPerPixel
               const extent = Math.max(viewBox.width, viewBox.height) * 2
-              const color = '#2D7FF9'
+              const color = FLOORPLAN_COLOR_BRAND_PRIMARY
               const fontSizeWorld = 11 * px
               const padX = 5 * px
               const padY = 2.5 * px
@@ -8221,7 +8226,7 @@ export function FloorplanPanel() {
                     <text
                       x={midSvgX}
                       y={midSvgY}
-                      fill="#ffffff"
+                      fill={FLOORPLAN_COLOR_SURFACE}
                       fontSize={fontSizeWorld}
                       fontFamily="ui-monospace, SFMono-Regular, monospace"
                       fontWeight={600}
@@ -8372,7 +8377,7 @@ export function FloorplanPanel() {
             {extensionHit && cursorPoint && (() => {
               const px = floorplanWorldUnitsPerPixel
               const wall = extensionHit.wall
-              const color = '#2D7FF9'
+              const color = FLOORPLAN_COLOR_BRAND_PRIMARY
               // 延长线：从墙的参考端点沿墙方向延伸到光标投影位置（+ 继续延伸一点点）
               const refPoint = extensionHit.referencePoint
               const snappedPoint = extensionHit.snappedPoint
@@ -8452,7 +8457,7 @@ export function FloorplanPanel() {
                   <text
                     x={toSvgX(labelWorldX)}
                     y={toSvgY(labelWorldZ)}
-                    fill="#ffffff"
+                    fill={FLOORPLAN_COLOR_SURFACE}
                     fontSize={fontSizeWorld}
                     fontFamily="ui-monospace, SFMono-Regular, monospace"
                     fontWeight={600}
@@ -8470,7 +8475,7 @@ export function FloorplanPanel() {
             {perpendicularHit && cursorPoint && (() => {
               const px = floorplanWorldUnitsPerPixel
               const { anchorPoint, snappedPoint, wallUnitVector } = perpendicularHit
-              const color = '#2D7FF9'
+              const color = FLOORPLAN_COLOR_BRAND_PRIMARY
               const [ux, uz] = wallUnitVector
               // 垂直单位向量（沿墙 90° CCW）
               const vx = -uz
@@ -8557,7 +8562,7 @@ export function FloorplanPanel() {
                   <text
                     x={toSvgX(labelX)}
                     y={toSvgY(labelZ)}
-                    fill="#ffffff"
+                    fill={FLOORPLAN_COLOR_SURFACE}
                     fontSize={fontSizeWorld}
                     fontFamily="ui-monospace, SFMono-Regular, monospace"
                     fontWeight={600}
@@ -8581,7 +8586,7 @@ export function FloorplanPanel() {
               const p1z = draftMeasurement.startZ - sinA * extent
               const p2x = draftMeasurement.startX + cosA * extent
               const p2z = draftMeasurement.startZ + sinA * extent
-              const color = draftMeasurement.isOrthogonal ? '#2D7FF9' : '#f59e0b'
+              const color = draftMeasurement.isOrthogonal ? FLOORPLAN_COLOR_BRAND_PRIMARY : FLOORPLAN_COLOR_WARNING
               return (
                 <line
                   x1={toSvgX(p1x)}
@@ -8651,7 +8656,7 @@ export function FloorplanPanel() {
                   <text
                     x={toSvgX(labelX)}
                     y={toSvgY(labelZ)}
-                    fill="#ffffff"
+                    fill={FLOORPLAN_COLOR_SURFACE}
                     fontSize={fontSizeWorld}
                     fontFamily="ui-monospace, SFMono-Regular, monospace"
                     fontWeight={600}
@@ -8659,7 +8664,7 @@ export function FloorplanPanel() {
                     dominantBaseline="central"
                   >
                     {lengthText}
-                    <tspan fill="#94a3b8" fontWeight={400}>{'  '}{angleText}</tspan>
+                    <tspan fill={FLOORPLAN_COLOR_TRACK} fontWeight={400}>{'  '}{angleText}</tspan>
                   </text>
                 </g>
               )
@@ -8897,15 +8902,15 @@ function CalibrationOverlay({
         cx={toSvgX(p[0])}
         cy={toSvgY(p[1])}
         r={pinHeadR * 2}
-        fill="#2D7FF9"
+        fill={FLOORPLAN_COLOR_BRAND_PRIMARY}
         fillOpacity={0.18}
       />
       <circle
         cx={toSvgX(p[0])}
         cy={toSvgY(p[1])}
         r={pinHeadR}
-        fill="#2D7FF9"
-        stroke="#ffffff"
+        fill={FLOORPLAN_COLOR_BRAND_PRIMARY}
+        stroke={FLOORPLAN_COLOR_SURFACE}
         strokeWidth={strokeW}
       />
     </g>
@@ -8915,7 +8920,7 @@ function CalibrationOverlay({
   const Cross = ({
     p,
     opacity = 1,
-    color = '#2D7FF9',
+    color = FLOORPLAN_COLOR_BRAND_PRIMARY,
   }: {
     p: [number, number]
     opacity?: number
@@ -8983,13 +8988,13 @@ function CalibrationOverlay({
     if (didSnap) {
       cursorPreview = (
         <g>
-          <Cross p={livePt} opacity={0.55} color="#f59e0b" />
+          <Cross p={livePt} opacity={0.55} color={FLOORPLAN_COLOR_WARNING} />
           <circle
             cx={toSvgX(livePt[0])}
             cy={toSvgY(livePt[1])}
             r={5 * px}
             fill="none"
-            stroke="#f59e0b"
+            stroke={FLOORPLAN_COLOR_WARNING}
             strokeWidth={strokeW * 0.8}
             pointerEvents="none"
           />
@@ -9041,7 +9046,7 @@ function CalibrationOverlay({
     p1 && livePt ? (
       <line
         pointerEvents="none"
-        stroke="#2D7FF9"
+        stroke={FLOORPLAN_COLOR_BRAND_PRIMARY}
         strokeDasharray={`${6 * px} ${4 * px}`}
         strokeOpacity={0.8}
         strokeWidth={1.5 * px}
@@ -9078,7 +9083,7 @@ function CalibrationOverlay({
             x={mx}
             y={my - 8}
             textAnchor="middle"
-            fill="#ffffff"
+            fill={FLOORPLAN_COLOR_SURFACE}
             fontSize={10}
             fontFamily="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace"
             fontWeight={600}
@@ -9096,7 +9101,7 @@ function CalibrationOverlay({
   const line = hasValidLine ? (
     <line
       pointerEvents="none"
-      stroke="#2D7FF9"
+      stroke={FLOORPLAN_COLOR_BRAND_PRIMARY}
       strokeDasharray={`${8 * px} ${4 * px}`}
       strokeWidth={1.5 * px}
       x1={toSvgX(validPoints[0]![0])}

@@ -1,6 +1,7 @@
 'use client'
 
 import { cn } from './../../../lib/utils'
+import { Button } from '../primitives/button'
 
 export type SidebarTab = {
   id: string
@@ -19,7 +20,7 @@ export function TabBar({ tabs, activeTab, onTabChange }: TabBarProps) {
       {tabs.map((tab) => {
         const isActive = activeTab === tab.id
         return (
-          <button
+          <Button variant="ghost"
             className={cn(
               'relative h-7 rounded-md px-3 font-medium text-sm transition-colors',
               isActive
@@ -31,7 +32,7 @@ export function TabBar({ tabs, activeTab, onTabChange }: TabBarProps) {
             type="button"
           >
             {tab.label}
-          </button>
+          </Button>
         )
       })}
     </div>

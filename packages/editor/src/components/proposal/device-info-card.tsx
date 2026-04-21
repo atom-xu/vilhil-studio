@@ -6,6 +6,7 @@ import { setDeviceState, SUBSYSTEM_META } from '@vilhil/smarthome'
 import { Lock, Power, Sun, Thermometer, Unlock, Wind } from 'lucide-react'
 import { useCallback } from 'react'
 import { cn } from '../../lib/utils'
+import { Button } from '../ui/primitives/button'
 
 interface DeviceInfoCardProps {
   device: DeviceNode
@@ -62,13 +63,14 @@ export function DeviceInfoCard({ device, className }: DeviceInfoCardProps) {
         {device.subsystem !== 'curtain' &&
           device.subsystem !== 'sensor' &&
           device.subsystem !== 'network' && (
-            <button
+            <Button
               className={cn(
-                'flex w-full items-center justify-between rounded-xl px-3 py-2 transition-all duration-200',
+                'h-auto w-full justify-between rounded-xl px-3 py-2 transition-all duration-200',
                 isOn ? 'bg-accent/60' : 'bg-muted/50 hover:bg-muted',
               )}
               onClick={() => setState({ on: !isOn })}
               type="button"
+              variant="ghost"
             >
               <span className="text-sm">{isOn ? '已开启' : '已关闭'}</span>
               <div
@@ -84,7 +86,7 @@ export function DeviceInfoCard({ device, className }: DeviceInfoCardProps) {
                   )}
                 />
               </div>
-            </button>
+            </Button>
           )}
 
         {/* ── 亮度滑块 (灯光) */}
@@ -126,7 +128,8 @@ export function DeviceInfoCard({ device, className }: DeviceInfoCardProps) {
               <div
                 className="pointer-events-none absolute inset-x-0 rounded-full"
                 style={{
-                  background: 'linear-gradient(to right, #ff9329, #fff5e0, #cce8ff)',
+                  background:
+                    'linear-gradient(to right, rgb(255 147 41), rgb(255 245 224), rgb(204 232 255))',
                   height: 4,
                   top: '50%',
                   transform: 'translateY(-50%)',
@@ -204,19 +207,20 @@ export function DeviceInfoCard({ device, className }: DeviceInfoCardProps) {
                 { label: '一半', value: 50 },
                 { label: '全关', value: 100 },
               ].map(({ label, value }) => (
-                <button
+                <Button
                   key={value}
                   className={cn(
-                    'rounded-lg py-1 text-xs transition-colors',
+                    'h-auto rounded-lg py-1 text-xs transition-colors',
                     (deviceState.position as number) === value
                       ? 'bg-primary/20 text-primary'
                       : 'bg-muted/60 text-muted-foreground hover:bg-muted',
                   )}
                   onClick={() => setState({ position: value })}
                   type="button"
+                  variant="ghost"
                 >
                   {label}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
@@ -224,15 +228,16 @@ export function DeviceInfoCard({ device, className }: DeviceInfoCardProps) {
 
         {/* ── 门锁 (security) */}
         {device.subsystem === 'security' && (
-          <button
+          <Button
             className={cn(
-              'flex w-full items-center justify-center gap-2 rounded-xl py-2 transition-all duration-200',
+              'h-auto w-full justify-center gap-2 rounded-xl py-2 transition-all duration-200',
               (deviceState.locked as boolean)
                 ? 'bg-green-500/15 text-green-400'
                 : 'bg-red-500/15 text-red-400',
             )}
             onClick={() => setState({ locked: !(deviceState.locked as boolean) })}
             type="button"
+            variant="ghost"
           >
             {(deviceState.locked as boolean) ? (
               <>
@@ -245,7 +250,7 @@ export function DeviceInfoCard({ device, className }: DeviceInfoCardProps) {
                 <span className="text-sm">未上锁</span>
               </>
             )}
-          </button>
+          </Button>
         )}
 
         {/* ── 传感器 / 网络 — 只读 */}

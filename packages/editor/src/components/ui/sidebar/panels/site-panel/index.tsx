@@ -26,6 +26,7 @@ import {
 } from 'lucide-react'
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
+import { Button } from '../../../primitives/button'
 import { ColorDot } from './../../../../../components/ui/primitives/color-dot'
 import {
   Popover,
@@ -143,7 +144,7 @@ function PropertyLineSection() {
           <Pentagon className="h-4 w-4 text-muted-foreground" />
           <span className="font-medium text-sm">Property Line</span>
         </div>
-        <button
+        <Button variant="ghost"
           className={cn(
             'flex h-6 w-6 cursor-pointer items-center justify-center rounded transition-colors',
             isEditing
@@ -153,7 +154,7 @@ function PropertyLineSection() {
           onClick={handleToggleEdit}
         >
           <Pencil className="h-3.5 w-3.5" />
-        </button>
+        </Button>
       </div>
 
       {/* Measurements */}
@@ -193,7 +194,7 @@ function PropertyLineSection() {
                   type="number"
                   value={point[1]}
                 />
-                <button
+                <Button variant="ghost"
                   className={cn(
                     'flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded',
                     points.length > 3
@@ -204,17 +205,17 @@ function PropertyLineSection() {
                   onClick={() => handleDeletePoint(index)}
                 >
                   <Trash2 className="h-3 w-3" />
-                </button>
+                </Button>
               </div>
             ))}
           </div>
-          <button
+          <Button variant="ghost"
             className="mt-1.5 flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-muted-foreground text-xs transition-colors hover:bg-accent/50 hover:text-foreground"
             onClick={handleAddPoint}
           >
             <Plus className="h-3 w-3" />
             Add point
-          </button>
+          </Button>
         </div>
       )}
     </div>
@@ -242,7 +243,7 @@ function CameraPopover({
   return (
     <Popover onOpenChange={onOpenChange} open={open}>
       <PopoverTrigger asChild>
-        <button
+        <Button variant="ghost"
           className={cn(
             'relative flex h-6 w-6 cursor-pointer items-center justify-center rounded',
             buttonClassName,
@@ -254,7 +255,7 @@ function CameraPopover({
           {hasCamera && (
             <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-primary" />
           )}
-        </button>
+        </Button>
       </PopoverTrigger>
       <PopoverContent
         align="start"
@@ -264,7 +265,7 @@ function CameraPopover({
       >
         <div className="flex flex-col gap-0.5">
           {hasCamera && (
-            <button
+            <Button variant="ghost"
               className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-popover-foreground text-sm hover:bg-accent"
               onClick={(e) => {
                 e.stopPropagation()
@@ -274,9 +275,9 @@ function CameraPopover({
             >
               <Camera className="h-3.5 w-3.5" />
               View snapshot
-            </button>
+            </Button>
           )}
-          <button
+          <Button variant="ghost"
             className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-popover-foreground text-sm hover:bg-accent"
             onClick={(e) => {
               e.stopPropagation()
@@ -286,9 +287,9 @@ function CameraPopover({
           >
             <Camera className="h-3.5 w-3.5" />
             {hasCamera ? '更新快照' : '拍摄快照'}
-          </button>
+          </Button>
           {hasCamera && (
-            <button
+            <Button variant="ghost"
               className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-popover-foreground text-sm hover:bg-destructive hover:text-destructive-foreground"
               onClick={(e) => {
                 e.stopPropagation()
@@ -298,7 +299,7 @@ function CameraPopover({
             >
               <Trash2 className="h-3.5 w-3.5" />
               Clear snapshot
-            </button>
+            </Button>
           )}
         </div>
       </PopoverContent>
@@ -379,24 +380,24 @@ function ReferenceItem({
       </div>
 
       {/* 显隐切换按钮 —— 隐藏时常驻显示，可见时 hover 显示 */}
-      <button
+      <Button variant="ghost"
         className={cn(
-          'z-20 flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10',
+          'z-20 flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent/85 hover:text-foreground',
           isVisible ? 'opacity-0 group-hover/ref:opacity-100' : 'opacity-100',
         )}
         onClick={handleToggleVisible}
         title={isVisible ? '隐藏' : '显示'}
       >
         {isVisible ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
-      </button>
+      </Button>
 
-      <button
-        className="z-20 flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 transition-colors hover:bg-black/5 hover:text-foreground group-hover/ref:opacity-100 dark:hover:bg-white/10"
+      <Button variant="ghost"
+        className="z-20 flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 transition-colors hover:bg-sidebar-accent/85 hover:text-foreground group-hover/ref:opacity-100"
         onClick={(e) => handleDelete(refNode.id, e)}
         title="删除"
       >
         <Trash2 className="h-3 w-3" />
-      </button>
+      </Button>
     </div>
   )
 }
@@ -528,7 +529,7 @@ function LevelReferences({
                 style={{ left: 45, width: 8 }}
               />
 
-              <button
+              <Button variant="ghost"
                 className="flex h-8 w-full cursor-pointer select-none items-center gap-2 py-0 pr-2 pl-[60px] text-left text-muted-foreground text-xs transition-colors hover:bg-accent/30 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={uploading}
                 onClick={() => scanInputRef.current?.click()}
@@ -539,7 +540,7 @@ function LevelReferences({
                   <Plus className="h-3.5 w-3.5" />
                 )}
                 {uploading ? `上传${uploadingType}... ${progress}%` : '上传底图'}
-              </button>
+              </Button>
 
               <input
                 accept=".glb,.gltf,.pdf,.dxf,image/jpeg,image/png,image/webp,image/gif,application/pdf"
@@ -646,7 +647,7 @@ function LevelItem({
         <div
           className={cn(
             'pointer-events-none absolute top-[10px] left-[32px] z-10 h-[12px] w-4 transition-colors duration-200',
-            isSelected ? 'bg-accent/50' : 'bg-background group-hover/level:bg-accent/30',
+            isSelected ? 'bg-accent/50' : 'bg-transparent group-hover/level:bg-accent/30',
           )}
         />
         {/* Line down to children */}
@@ -655,8 +656,8 @@ function LevelItem({
         )}
 
         <div className="relative z-20 flex h-8 items-center pr-1 pl-[28px]">
-          <button
-            className="z-20 flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center bg-inherit"
+          <Button variant="ghost"
+            className="z-20 flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center bg-transparent"
             onClick={(e) => {
               e.stopPropagation()
               if (isSelected) {
@@ -671,7 +672,7 @@ function LevelItem({
             ) : (
               <ChevronDown className="h-3 w-3 -rotate-90 text-muted-foreground" />
             )}
-          </button>
+          </Button>
         </div>
 
         <div className="flex h-8 min-w-0 flex-1 cursor-pointer items-center gap-2 py-0 pl-0.5 text-sm">
@@ -694,11 +695,11 @@ function LevelItem({
         {/* Camera snapshot button */}
         <Popover onOpenChange={setCameraPopoverOpen} open={cameraPopoverOpen}>
           <PopoverTrigger asChild>
-            <button
+            <Button variant="ghost"
               className={cn(
                 'relative mr-1 flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md opacity-0 transition-colors group-hover/level:opacity-100',
                 selectedLevelId === level.id
-                  ? 'hover:bg-black/5 dark:hover:bg-white/10'
+                  ? 'hover:bg-sidebar-accent/85'
                   : 'text-muted-foreground hover:bg-accent hover:text-foreground',
               )}
               onClick={(e) => e.stopPropagation()}
@@ -708,7 +709,7 @@ function LevelItem({
               {level.camera && (
                 <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-primary" />
               )}
-            </button>
+            </Button>
           </PopoverTrigger>
           <PopoverContent
             align="start"
@@ -718,7 +719,7 @@ function LevelItem({
           >
             <div className="flex flex-col gap-0.5">
               {level.camera && (
-                <button
+                <Button variant="ghost"
                   className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-popover-foreground text-sm hover:bg-accent"
                   onClick={(e) => {
                     e.stopPropagation()
@@ -728,9 +729,9 @@ function LevelItem({
                 >
                   <Camera className="h-3.5 w-3.5" />
                   View snapshot
-                </button>
+                </Button>
               )}
-              <button
+              <Button variant="ghost"
                 className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-popover-foreground text-sm hover:bg-accent"
                 onClick={(e) => {
                   e.stopPropagation()
@@ -740,9 +741,9 @@ function LevelItem({
               >
                 <Camera className="h-3.5 w-3.5" />
                 {level.camera ? '更新快照' : '拍摄快照'}
-              </button>
+              </Button>
               {level.camera && (
-                <button
+                <Button variant="ghost"
                   className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-popover-foreground text-sm hover:bg-destructive hover:text-destructive-foreground"
                   onClick={(e) => {
                     e.stopPropagation()
@@ -752,27 +753,27 @@ function LevelItem({
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   Clear snapshot
-                </button>
+                </Button>
               )}
             </div>
           </PopoverContent>
         </Popover>
         <Popover>
           <PopoverTrigger asChild>
-            <button
+            <Button variant="ghost"
               className={cn(
                 'mr-1 flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md opacity-0 transition-colors group-hover/level:opacity-100',
                 selectedLevelId === level.id
-                  ? 'hover:bg-black/5 dark:hover:bg-white/10'
+                  ? 'hover:bg-sidebar-accent/85'
                   : 'text-muted-foreground hover:bg-accent hover:text-foreground',
               )}
               onClick={(e) => e.stopPropagation()}
             >
               <MoreHorizontal className="h-3.5 w-3.5" />
-            </button>
+            </Button>
           </PopoverTrigger>
           <PopoverContent align="start" className="w-40 p-1" side="right">
-            <button
+            <Button variant="ghost"
               className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-sm transition-colors enabled:cursor-pointer enabled:hover:bg-accent enabled:hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
               disabled={!canDeleteLevel}
               onClick={() => deleteLevelWithFallbackSelection(level.id)}
@@ -780,7 +781,7 @@ function LevelItem({
             >
               <Trash2 className="h-3.5 w-3.5" />
               删除
-            </button>
+            </Button>
           </PopoverContent>
         </Popover>
       </div>
@@ -845,7 +846,7 @@ function LevelsSection({
     <div className="relative flex flex-col">
       {/* Level buttons */}
       <div className="flex min-h-0 flex-1 flex-col">
-        <button
+        <Button variant="ghost"
           className="relative flex h-8 cursor-pointer select-none items-center gap-2 border-border/50 border-b py-0 pl-0 text-muted-foreground text-sm transition-all duration-200 hover:bg-accent/30 hover:text-foreground"
           onClick={handleAddLevel}
         >
@@ -858,7 +859,7 @@ function LevelsSection({
             <Plus className="h-3.5 w-3.5" />
           </div>
           <span className="truncate">Add level</span>
-        </button>
+        </Button>
         {levels.length === 0 && (
           <div className="relative flex h-8 select-none items-center border-border/50 border-b py-0 pr-2 pl-[38px] text-muted-foreground text-xs">
             {/* Vertical tree line */}
@@ -891,10 +892,16 @@ function LayerToggle() {
   const setStructureLayer = useEditor((state) => state.setStructureLayer)
   const phase = useEditor((state) => state.phase)
   const setPhase = useEditor((state) => state.setPhase)
+  const tool = useEditor((state) => state.tool)
+  const setTool = useEditor((state) => state.setTool)
+  const setCatalogCategory = useEditor((state) => state.setCatalogCategory)
+  const setMode = useEditor((state) => state.setMode)
 
   const activeTab =
     phase === 'structure' && structureLayer === 'elements'
       ? 'structure'
+      : phase === 'furnish' && tool === 'device'
+        ? 'smart'
       : phase === 'furnish'
         ? 'furnish'
         : phase === 'structure' && structureLayer === 'zones'
@@ -902,13 +909,13 @@ function LayerToggle() {
           : 'none'
 
   return (
-    <div className="relative flex items-center gap-1 border-border/50 border-b bg-[#2C2C2E] p-1">
-      <button
+    <div className="relative flex items-center gap-1 border-border/50 border-b bg-sidebar-accent/85 p-1">
+      <Button variant="ghost"
         className={cn(
           'relative flex flex-1 cursor-pointer flex-col items-center justify-center rounded-md py-2 font-medium text-[10px] transition-all duration-200',
           activeTab === 'structure'
             ? 'text-foreground'
-            : 'text-muted-foreground hover:bg-white/5 hover:text-foreground',
+            : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground',
         )}
         onClick={() => {
           setPhase('structure')
@@ -917,7 +924,7 @@ function LayerToggle() {
       >
         {activeTab === 'structure' && (
           <motion.div
-            className="absolute inset-0 rounded-md bg-[#3e3e3e] shadow-sm ring-1 ring-border/50"
+            className="absolute inset-0 rounded-md bg-accent shadow-sm ring-1 ring-border/50"
             layoutId="layerToggleActiveBg"
             transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
           />
@@ -933,27 +940,29 @@ function LayerToggle() {
           />
           结构
         </div>
-        <div className="absolute right-1.5 bottom-1 z-10 rounded border border-border/40 bg-background/40 px-1 py-[2px] backdrop-blur-md">
+        <div className="absolute right-1.5 bottom-1 z-10 rounded border border-border/60 bg-sidebar-accent/85 px-1 py-[2px] backdrop-blur-md">
           <span className="block font-medium font-mono text-[9px] text-muted-foreground/70 leading-none">
             S
           </span>
         </div>
-      </button>
+      </Button>
 
-      <button
+      <Button variant="ghost"
         className={cn(
           'relative flex flex-1 cursor-pointer flex-col items-center justify-center rounded-md py-2 font-medium text-[10px] transition-all duration-200',
           activeTab === 'furnish'
             ? 'text-foreground'
-            : 'text-muted-foreground hover:bg-white/5 hover:text-foreground',
+            : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground',
         )}
         onClick={() => {
           setPhase('furnish')
+          setTool('item')
+          setCatalogCategory('furniture')
         }}
       >
         {activeTab === 'furnish' && (
           <motion.div
-            className="absolute inset-0 rounded-md bg-[#3e3e3e] shadow-sm ring-1 ring-border/50"
+            className="absolute inset-0 rounded-md bg-accent shadow-sm ring-1 ring-border/50"
             layoutId="layerToggleActiveBg"
             transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
           />
@@ -969,19 +978,58 @@ function LayerToggle() {
           />
           家具
         </div>
-        <div className="absolute right-1.5 bottom-1 z-10 rounded border border-border/40 bg-background/40 px-1 py-[2px] backdrop-blur-md">
+        <div className="absolute right-1.5 bottom-1 z-10 rounded border border-border/60 bg-sidebar-accent/85 px-1 py-[2px] backdrop-blur-md">
           <span className="block font-medium font-mono text-[9px] text-muted-foreground/70 leading-none">
             F
           </span>
         </div>
-      </button>
+      </Button>
 
-      <button
+      <Button variant="ghost"
+        className={cn(
+          'relative flex flex-1 cursor-pointer flex-col items-center justify-center rounded-md py-2 font-medium text-[10px] transition-all duration-200',
+          activeTab === 'smart'
+            ? 'text-foreground'
+            : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground',
+        )}
+        onClick={() => {
+          setPhase('furnish')
+          setTool('device')
+          setCatalogCategory(null)
+          setMode('build')
+        }}
+      >
+        {activeTab === 'smart' && (
+          <motion.div
+            className="absolute inset-0 rounded-md bg-accent shadow-sm ring-1 ring-border/50"
+            layoutId="layerToggleActiveBg"
+            transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+          />
+        )}
+        <div className="relative z-10 flex flex-col items-center">
+          <img
+            alt="智能"
+            className={cn(
+              'mb-1 h-6 w-6 transition-all',
+              activeTab !== 'smart' && 'opacity-50 grayscale',
+            )}
+            src="/icons/item.png"
+          />
+          智能
+        </div>
+        <div className="absolute right-1.5 bottom-1 z-10 rounded border border-border/60 bg-sidebar-accent/85 px-1 py-[2px] backdrop-blur-md">
+          <span className="block font-medium font-mono text-[9px] text-muted-foreground/70 leading-none">
+            D
+          </span>
+        </div>
+      </Button>
+
+      <Button variant="ghost"
         className={cn(
           'relative flex flex-1 cursor-pointer flex-col items-center justify-center rounded-md py-2 font-medium text-[10px] transition-all duration-200',
           activeTab === 'zones'
             ? 'text-foreground'
-            : 'text-muted-foreground hover:bg-white/5 hover:text-foreground',
+            : 'text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground',
         )}
         onClick={() => {
           setPhase('structure')
@@ -990,7 +1038,7 @@ function LayerToggle() {
       >
         {activeTab === 'zones' && (
           <motion.div
-            className="absolute inset-0 rounded-md bg-[#3e3e3e] shadow-sm ring-1 ring-border/50"
+            className="absolute inset-0 rounded-md bg-accent shadow-sm ring-1 ring-border/50"
             layoutId="layerToggleActiveBg"
             transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
           />
@@ -1006,12 +1054,12 @@ function LayerToggle() {
           />
           区域
         </div>
-        <div className="absolute right-1.5 bottom-1 z-10 rounded border border-border/40 bg-background/40 px-1 py-[2px] backdrop-blur-md">
+        <div className="absolute right-1.5 bottom-1 z-10 rounded border border-border/60 bg-sidebar-accent/85 px-1 py-[2px] backdrop-blur-md">
           <span className="block font-medium font-mono text-[9px] text-muted-foreground/70 leading-none">
             Z
           </span>
         </div>
-      </button>
+      </Button>
     </div>
   )
 }
@@ -1110,8 +1158,8 @@ function ZoneItem({ zone, isLast }: { zone: ZoneNode; isLast?: boolean }) {
         {/* Camera snapshot button */}
         <Popover onOpenChange={setCameraPopoverOpen} open={cameraPopoverOpen}>
           <PopoverTrigger asChild>
-            <button
-              className="relative flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 transition-colors hover:bg-black/5 hover:text-foreground group-hover/row:opacity-100 dark:hover:bg-white/10"
+            <Button variant="ghost"
+              className="relative flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 transition-colors hover:bg-sidebar-accent/85 hover:text-foreground group-hover/row:opacity-100"
               onClick={(e) => e.stopPropagation()}
               title="相机快照"
             >
@@ -1119,7 +1167,7 @@ function ZoneItem({ zone, isLast }: { zone: ZoneNode; isLast?: boolean }) {
               {zone.camera && (
                 <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-primary" />
               )}
-            </button>
+            </Button>
           </PopoverTrigger>
           <PopoverContent
             align="start"
@@ -1129,7 +1177,7 @@ function ZoneItem({ zone, isLast }: { zone: ZoneNode; isLast?: boolean }) {
           >
             <div className="flex flex-col gap-0.5">
               {zone.camera && (
-                <button
+                <Button variant="ghost"
                   className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-popover-foreground text-sm hover:bg-accent"
                   onClick={(e) => {
                     e.stopPropagation()
@@ -1139,9 +1187,9 @@ function ZoneItem({ zone, isLast }: { zone: ZoneNode; isLast?: boolean }) {
                 >
                   <Camera className="h-3.5 w-3.5" />
                   View snapshot
-                </button>
+                </Button>
               )}
-              <button
+              <Button variant="ghost"
                 className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-popover-foreground text-sm hover:bg-accent"
                 onClick={(e) => {
                   e.stopPropagation()
@@ -1151,9 +1199,9 @@ function ZoneItem({ zone, isLast }: { zone: ZoneNode; isLast?: boolean }) {
               >
                 <Camera className="h-3.5 w-3.5" />
                 {zone.camera ? '更新快照' : '拍摄快照'}
-              </button>
+              </Button>
               {zone.camera && (
-                <button
+                <Button variant="ghost"
                   className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-popover-foreground text-sm hover:bg-destructive hover:text-destructive-foreground"
                   onClick={(e) => {
                     e.stopPropagation()
@@ -1163,17 +1211,17 @@ function ZoneItem({ zone, isLast }: { zone: ZoneNode; isLast?: boolean }) {
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   Clear snapshot
-                </button>
+                </Button>
               )}
             </div>
           </PopoverContent>
         </Popover>
-        <button
-          className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 transition-colors hover:bg-black/5 hover:text-foreground group-hover/row:opacity-100 dark:hover:bg-white/10"
+        <Button variant="ghost"
+          className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 transition-colors hover:bg-sidebar-accent/85 hover:text-foreground group-hover/row:opacity-100"
           onClick={handleDelete}
         >
           <Trash2 className="h-3 w-3" />
-        </button>
+        </Button>
       </div>
     </div>
   )
@@ -1189,13 +1237,13 @@ function MultiSelectionBadge() {
     <div className="pointer-events-none sticky top-4 z-50 flex h-0 w-full justify-center overflow-visible">
       <div className="pointer-events-auto flex items-center gap-2.5 rounded-full border border-primary/20 bg-primary px-0.5 py-4 pl-2 font-medium text-primary-foreground text-xs shadow-black/10 shadow-lg backdrop-blur-md">
         <span>已选 {selectedIds.length} 个对象</span>
-        <button
+        <Button variant="ghost"
           className="cursor-pointer rounded-full p-1.5 transition-colors hover:bg-primary-foreground/20"
           onClick={() => setSelection({ selectedIds: [] })}
           title="清除选择"
         >
           <X className="h-4 w-4" />
-        </button>
+        </Button>
       </div>
     </div>
   )
@@ -1234,9 +1282,9 @@ function ContentSection() {
       return (
         <div className="px-3 py-4 text-muted-foreground text-sm">
           No zones on this level.{' '}
-          <button className="cursor-pointer text-primary hover:underline" onClick={handleAddZone}>
+          <Button variant="ghost" className="cursor-pointer text-primary hover:underline" onClick={handleAddZone}>
             Add one
-          </button>
+          </Button>
         </div>
       )
     }
@@ -1355,11 +1403,11 @@ function BuildingItem({
           open={buildingCameraOpen === building.id}
         >
           <PopoverTrigger asChild>
-            <button
+            <Button variant="ghost"
               className={cn(
                 'relative mr-1.5 flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md opacity-0 transition-colors group-hover/building:opacity-100',
                 isBuildingActive
-                  ? 'text-muted-foreground hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10'
+                  ? 'text-muted-foreground hover:bg-sidebar-accent/85 hover:text-foreground'
                   : 'text-muted-foreground hover:bg-accent hover:text-foreground',
               )}
               onClick={(e) => e.stopPropagation()}
@@ -1369,7 +1417,7 @@ function BuildingItem({
               {building.camera && (
                 <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-primary" />
               )}
-            </button>
+            </Button>
           </PopoverTrigger>
           <PopoverContent
             align="start"
@@ -1379,7 +1427,7 @@ function BuildingItem({
           >
             <div className="flex flex-col gap-0.5">
               {building.camera && (
-                <button
+                <Button variant="ghost"
                   className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-popover-foreground text-sm hover:bg-accent"
                   onClick={(e) => {
                     e.stopPropagation()
@@ -1389,9 +1437,9 @@ function BuildingItem({
                 >
                   <Camera className="h-3.5 w-3.5" />
                   View snapshot
-                </button>
+                </Button>
               )}
-              <button
+              <Button variant="ghost"
                 className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-popover-foreground text-sm hover:bg-accent"
                 onClick={(e) => {
                   e.stopPropagation()
@@ -1401,9 +1449,9 @@ function BuildingItem({
               >
                 <Camera className="h-3.5 w-3.5" />
                 {building.camera ? '更新快照' : '拍摄快照'}
-              </button>
+              </Button>
               {building.camera && (
-                <button
+                <Button variant="ghost"
                   className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-popover-foreground text-sm hover:bg-destructive hover:text-destructive-foreground"
                   onClick={(e) => {
                     e.stopPropagation()
@@ -1413,7 +1461,7 @@ function BuildingItem({
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   Clear snapshot
-                </button>
+                </Button>
               )}
             </div>
           </PopoverContent>
@@ -1506,7 +1554,7 @@ export function SitePanel({ projectId, onUploadAsset, onDeleteAsset }: SitePanel
             <CameraPopover
               buttonClassName={cn(
                 'transition-colors',
-                phase === 'site' ? 'hover:bg-black/5 dark:hover:bg-white/10' : 'hover:bg-accent',
+                phase === 'site' ? 'hover:bg-sidebar-accent/85' : 'hover:bg-accent',
               )}
               hasCamera={!!siteNode.camera}
               nodeId={siteNode.id as AnyNodeId}

@@ -2,6 +2,7 @@
 
 import { DEFAULT_MATERIALS, type MaterialPreset, type MaterialSchema } from '@pascal-app/core'
 import { useState } from 'react'
+import { Button } from '../primitives/button'
 
 const PRESET_COLORS: Record<MaterialPreset, string> = {
   white: '#ffffff',
@@ -74,7 +75,7 @@ export function MaterialPicker({ value, onChange }: MaterialPickerProps) {
     <div className="space-y-3">
       <div className="grid grid-cols-5 gap-1.5">
         {(Object.keys(PRESET_COLORS) as MaterialPreset[]).map((preset) => (
-          <button
+          <Button variant="ghost"
             className={`h-8 w-8 rounded border-2 transition-all ${
               currentPreset === preset
                 ? 'border-blue-500 ring-2 ring-blue-500/30'

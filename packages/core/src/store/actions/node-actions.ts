@@ -14,7 +14,7 @@ export const createNodesAction = (
   get: () => SceneState,
   ops: { node: AnyNode; parentId?: AnyNodeId }[],
 ) => {
-  if (get().readOnly) return
+  if (get().readOnly || get().interactionMode !== 'edit') return
   set((state) => {
     const nextNodes = { ...state.nodes }
     const nextRootIds = [...state.rootNodeIds]
@@ -63,7 +63,15 @@ export const updateNodesAction = (
   get: () => SceneState,
   updates: { id: AnyNodeId; data: Partial<AnyNode> }[],
 ) => {
-  if (get().readOnly) return
+  const mode = get().interactionMode
+  if (mode === 'view') return
+  if (mode === 'operate') {
+    // In operate mode, only allow state/params updates (device interaction)
+    // Block structural updates (position, rotation, parentId, etc.)
+    const allowedKeys = new Set(['state', 'params'])
+    const isStateOnly = updates.every((u) => Object.keys(u.data).every((k) => allowedKeys.has(k)))
+    if (!isStateOnly) return
+  }
   const parentsToUpdate = new Set<AnyNodeId>()
   const idsToMarkDirty = new Set<AnyNodeId>()
 
@@ -144,7 +152,7 @@ export const deleteNodesAction = (
   get: () => SceneState,
   ids: AnyNodeId[],
 ) => {
-  if (get().readOnly) return
+  if (get().readOnly || get().interactionMode !== 'edit') return
   const parentsToMarkDirty = new Set<AnyNodeId>()
 
   set((state) => {

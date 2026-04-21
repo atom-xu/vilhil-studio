@@ -8,6 +8,7 @@ import useEditor from '../../../store/use-editor'
 import { ActionButton } from '../controls/action-button'
 import { MaterialPicker } from '../controls/material-picker'
 import { PanelSection } from '../controls/panel-section'
+import { Button } from '../primitives/button'
 import { SliderControl } from '../controls/slider-control'
 import { PanelWrapper } from './panel-wrapper'
 
@@ -187,20 +188,20 @@ export function CeilingPanel() {
                       />
                     ) : (
                       <>
-                        <button
-                          className="flex h-7 w-7 items-center justify-center rounded-md bg-[#2C2C2E] text-muted-foreground hover:bg-[#3e3e3e] hover:text-foreground"
+                        <Button variant="ghost"
+                          className="flex h-7 w-7 items-center justify-center rounded-md bg-accent/70 text-muted-foreground hover:bg-accent hover:text-foreground"
                           onClick={() => handleEditHole(index)}
                           type="button"
                         >
                           <Edit className="h-3.5 w-3.5" />
-                        </button>
-                        <button
+                        </Button>
+                        <Button variant="ghost"
                           className="flex h-7 w-7 items-center justify-center rounded-md bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300"
                           onClick={() => handleDeleteHole(index)}
                           type="button"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        </Button>
                       </>
                     )}
                   </div>

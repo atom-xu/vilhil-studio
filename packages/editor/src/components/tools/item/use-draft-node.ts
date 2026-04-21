@@ -1,7 +1,11 @@
 import {
+  type AnyNode,
   type AnyNodeId,
   type AssetInput,
+  DeviceNode,
+  generateId,
   ItemNode,
+  resolveLevelId,
   sceneRegistry,
   useScene,
 } from '@pascal-app/core'
@@ -16,6 +20,54 @@ interface OriginalState {
   side: ItemNode['side']
   parentId: string | null
   metadata: ItemNode['metadata']
+}
+
+type SmartProfile = {
+  subsystem: 'av' | 'security' | 'panel' | 'network'
+  protocol: 'matter' | 'wifi' | 'zigbee'
+  renderType: string
+  brand: string
+}
+
+const SMART_ITEM_PROFILE: Record<string, SmartProfile> = {
+  'apple-homepod': {
+    subsystem: 'av',
+    protocol: 'matter',
+    renderType: 'homepod',
+    brand: 'Apple',
+  },
+  'security-camera-dome': {
+    subsystem: 'security',
+    protocol: 'wifi',
+    renderType: 'camera_dome',
+    brand: 'Generic',
+  },
+  'security-camera-bullet': {
+    subsystem: 'security',
+    protocol: 'wifi',
+    renderType: 'camera_bullet',
+    brand: 'Generic',
+  },
+  'smart-switch': {
+    subsystem: 'panel',
+    protocol: 'zigbee',
+    renderType: 'switch_1key',
+    brand: 'Generic',
+  },
+}
+
+function getSmartProfile(asset: AssetInput): SmartProfile | null {
+  const assetId = `${asset.id ?? ''}`
+  if (SMART_ITEM_PROFILE[assetId]) return SMART_ITEM_PROFILE[assetId]
+  if ((asset.tags ?? []).includes('smarthome')) {
+    return {
+      subsystem: 'network',
+      protocol: 'wifi',
+      renderType: assetId || 'item_smart',
+      brand: 'Generic',
+    }
+  }
+  return null
 }
 
 export interface DraftNodeHandle {
@@ -135,6 +187,21 @@ export function useDraftNode(): DraftNodeHandle {
         parentId: parentId as string,
       })
 
+      // Keep linked smart device (if any) in sync on move.
+      const linkedDeviceId = (draft.metadata as any)?.smartDeviceId as string | undefined
+      if (linkedDeviceId) {
+        const state = useScene.getState()
+        const movedItem = state.nodes[draft.id as AnyNodeId] as AnyNode | undefined
+        const levelId = movedItem ? resolveLevelId(movedItem, state.nodes as Record<string, AnyNode>) : null
+        const existingDevice = state.nodes[linkedDeviceId as AnyNodeId]
+        if (existingDevice?.type === 'device') {
+          state.updateNode(linkedDeviceId as AnyNodeId, {
+            parentId: levelId ?? parentId ?? null,
+            position: (updateProps.position ?? draft.position) as [number, number, number],
+          })
+        }
+      }
+
       useScene.temporal.getState().pause()
 
       const id = draft.id
@@ -149,6 +216,9 @@ export function useDraftNode(): DraftNodeHandle {
     const parentId = (newParentId ?? useViewer.getState().selection.levelId) as AnyNodeId
     if (!parentId) return null
 
+    const smartProfile = getSmartProfile(draft.asset)
+    const linkedDeviceId = smartProfile ? (generateId('device') as string) : null
+
     // Delete draft while paused (invisible to undo)
     useScene.getState().deleteNode(draft.id)
     draftRef.current = null
@@ -162,9 +232,44 @@ export function useDraftNode(): DraftNodeHandle {
       position: updateProps.position ?? draft.position,
       rotation: updateProps.rotation ?? draft.rotation,
       side: updateProps.side ?? draft.side,
-      metadata: updateProps.metadata ?? stripTransient(draft.metadata),
+      metadata: linkedDeviceId
+        ? { ...(updateProps.metadata ?? stripTransient(draft.metadata) as any), smartDeviceId: linkedDeviceId }
+        : (updateProps.metadata ?? stripTransient(draft.metadata)),
     })
     useScene.getState().createNode(finalNode, parentId)
+
+    if (smartProfile && linkedDeviceId) {
+      const state = useScene.getState()
+      const createdItem = state.nodes[finalNode.id as AnyNodeId] as AnyNode | undefined
+      const levelId = createdItem
+        ? resolveLevelId(createdItem, state.nodes as Record<string, AnyNode>)
+        : (useViewer.getState().selection.levelId as string | null)
+
+      const smartDevice = DeviceNode.parse({
+        id: linkedDeviceId,
+        parentId: levelId ?? parentId ?? null,
+        subsystem: smartProfile.subsystem,
+        renderType: smartProfile.renderType,
+        position: finalNode.position,
+        rotation: finalNode.rotation,
+        mountType: 'floor',
+        productId: draft.asset.id,
+        productName: draft.asset.name,
+        brand: smartProfile.brand,
+        params: {
+          protocol: smartProfile.protocol,
+          custom: {
+            source: 'item',
+            sourceItemId: finalNode.id,
+          },
+        },
+        metadata: {
+          sourceItemId: finalNode.id,
+          generatedBy: 'item-smart-bridge',
+        },
+      })
+      state.createNode(smartDevice, (levelId ?? parentId) as AnyNodeId)
+    }
 
     // Re-pause for next draft cycle
     useScene.temporal.getState().pause()

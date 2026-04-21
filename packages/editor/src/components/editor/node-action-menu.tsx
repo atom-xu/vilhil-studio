@@ -2,6 +2,7 @@
 
 import { Copy, Move, Trash2 } from 'lucide-react'
 import type { MouseEventHandler, PointerEventHandler } from 'react'
+import { Button } from '../ui/primitives/button'
 
 type NodeActionMenuProps = {
   onDelete: MouseEventHandler<HTMLButtonElement>
@@ -31,7 +32,7 @@ export function NodeActionMenu({
       onPointerUp={onPointerUp}
     >
       {onMove && (
-        <button
+        <Button variant="ghost"
           aria-label="移动"
           className="tooltip-trigger rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           onClick={onMove}
@@ -39,10 +40,10 @@ export function NodeActionMenu({
           type="button"
         >
           <Move className="h-4 w-4" />
-        </button>
+        </Button>
       )}
       {onDuplicate && (
-        <button
+        <Button variant="ghost"
           aria-label="复制"
           className="tooltip-trigger rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           onClick={onDuplicate}
@@ -50,9 +51,9 @@ export function NodeActionMenu({
           type="button"
         >
           <Copy className="h-4 w-4" />
-        </button>
+        </Button>
       )}
-      <button
+      <Button variant="ghost"
         aria-label="删除"
         className="tooltip-trigger rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
         onClick={onDelete}
@@ -60,7 +61,7 @@ export function NodeActionMenu({
         type="button"
       >
         <Trash2 className="h-4 w-4" />
-      </button>
+      </Button>
     </div>
   )
 }

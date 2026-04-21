@@ -2,6 +2,7 @@ import { type AnyNode, type AnyNodeId, emitter, useScene } from '@pascal-app/cor
 import { useViewer } from '@pascal-app/viewer'
 import { Camera, Eye, EyeOff, Trash2 } from 'lucide-react'
 import { useState } from 'react'
+import { Button } from '../../../primitives/button'
 import {
   Popover,
   PopoverContent,
@@ -68,26 +69,26 @@ export function TreeNodeActions({ node }: TreeNodeActionsProps) {
   return (
     <div className="flex items-center gap-0.5">
       {canDelete && (
-        <button
+        <Button variant="ghost"
           className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-red-500/15 hover:text-red-400"
           onClick={handleDelete}
           title="删除"
         >
           <Trash2 className="h-3 w-3" />
-        </button>
+        </Button>
       )}
-      <button
-        className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10"
+      <Button variant="ghost"
+        className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent/85 hover:text-foreground"
         onClick={toggleVisibility}
         title={isVisible ? '隐藏' : '显示'}
       >
         {isVisible ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3 opacity-50" />}
-      </button>
+      </Button>
 
       <Popover onOpenChange={setOpen} open={open}>
         <PopoverTrigger asChild>
-          <button
-            className="relative flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-white/10"
+          <Button variant="ghost"
+            className="relative flex h-6 w-6 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent/85 hover:text-foreground"
             onClick={(e) => e.stopPropagation()}
             title="相机快照"
           >
@@ -95,7 +96,7 @@ export function TreeNodeActions({ node }: TreeNodeActionsProps) {
             {hasCamera && (
               <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-primary" />
             )}
-          </button>
+          </Button>
         </PopoverTrigger>
         <PopoverContent
           align="start"
@@ -105,29 +106,29 @@ export function TreeNodeActions({ node }: TreeNodeActionsProps) {
         >
           <div className="flex flex-col gap-0.5">
             {hasCamera && (
-              <button
+              <Button variant="ghost"
                 className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-popover-foreground text-sm hover:bg-accent"
                 onClick={handleViewCamera}
               >
                 <Camera className="h-3.5 w-3.5" />
                 查看快照
-              </button>
+              </Button>
             )}
-            <button
+            <Button variant="ghost"
               className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-popover-foreground text-sm hover:bg-accent"
               onClick={handleCaptureCamera}
             >
               <Camera className="h-3.5 w-3.5" />
               {hasCamera ? '更新快照' : '拍摄快照'}
-            </button>
+            </Button>
             {hasCamera && (
-              <button
+              <Button variant="ghost"
                 className="flex w-full cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-left text-popover-foreground text-sm hover:bg-destructive hover:text-destructive-foreground"
                 onClick={handleClearCamera}
               >
                 <Trash2 className="h-3.5 w-3.5" />
                 清除快照
-              </button>
+              </Button>
             )}
           </div>
         </PopoverContent>

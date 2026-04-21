@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  transpilePackages: ['three', 'three-bvh-csg', '@pascal-app/viewer', '@pascal-app/core', '@pascal-app/editor'],
+  transpilePackages: ['three', 'three-bvh-csg', '@pascal-app/viewer', '@pascal-app/core', '@pascal-app/editor', '@vilhil/smarthome'],
   experimental: {
     serverActions: {
       bodySizeLimit: '100mb',

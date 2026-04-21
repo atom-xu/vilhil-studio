@@ -23,6 +23,10 @@
     "./models": {
       "types": "./src/models/index.ts",
       "default": "./src/models/index.ts"
+    },
+    "./tools": {
+      "types": "./src/tools/index.ts",
+      "default": "./src/tools/index.ts"
     }
   },
   "dependencies": {

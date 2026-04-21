@@ -45,7 +45,7 @@ const MAX_PIPELINE_RETRIES = 3
 const RETRY_DELAY_MS = 500
 
 const DARK_BG = '#1f2433'
-const LIGHT_BG = '#ffffff'
+const LIGHT_BG = '#f5f5f6'
 
 const PostProcessingPasses = () => {
   const { gl: renderer, scene, camera } = useThree()

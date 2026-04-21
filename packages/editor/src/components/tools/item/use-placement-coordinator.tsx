@@ -85,7 +85,11 @@ export function usePlacementCoordinator(config: PlacementCoordinatorConfig): Rea
   const placementState = useRef<PlacementState>(
     config.initialState ?? { surface: 'floor', wallId: null, ceilingId: null, surfaceItemId: null },
   )
-  const shiftFreeRef = useRef(false)
+  // 自由放置开关 — localStorage 里 `vilhil.freePlacement = '1'` 时默认常开（绕过所有约束），
+  // 否则维持默认行为（Shift 临时绕过）
+  const shiftFreeRef = useRef(
+    typeof window !== 'undefined' && window.localStorage?.getItem('vilhil.freePlacement') === '1',
+  )
 
   // Store config callbacks in refs to avoid re-running effect when they change
   const configRef = useRef(config)

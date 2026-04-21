@@ -10,6 +10,45 @@ import { generateId, SceneNode, useScene } from '@pascal-app/core'
 import type { AnyNode, SceneEffect, SceneNodeType } from '@pascal-app/core'
 import { setDeviceState } from './set-device-params'
 
+let activeSceneRunToken: symbol | null = null
+let activeRunEndTimer: ReturnType<typeof setTimeout> | null = null
+
+export interface SceneRunStatus {
+  sceneId: string | null
+  running: boolean
+  startedAt: number | null
+  expectedEndAt: number | null
+  completedAt: number | null
+}
+
+const sceneRunSubscribers = new Set<(status: SceneRunStatus) => void>()
+let sceneRunStatus: SceneRunStatus = {
+  sceneId: null,
+  running: false,
+  startedAt: null,
+  expectedEndAt: null,
+  completedAt: null,
+}
+
+function emitSceneRunStatus(next: SceneRunStatus): void {
+  sceneRunStatus = next
+  for (const subscriber of sceneRunSubscribers) subscriber(next)
+}
+
+export function subscribeSceneRunStatus(
+  subscriber: (status: SceneRunStatus) => void,
+): () => void {
+  sceneRunSubscribers.add(subscriber)
+  subscriber(sceneRunStatus)
+  return () => {
+    sceneRunSubscribers.delete(subscriber)
+  }
+}
+
+export function getSceneRunStatus(): SceneRunStatus {
+  return sceneRunStatus
+}
+
 // ═══════════════════════════════════════════════════════════════
 // 场景 CRUD
 // ═══════════════════════════════════════════════════════════════
@@ -128,12 +167,12 @@ export function removeSceneEffect(sceneId: string, deviceId: string): void {
 /**
  * applyScene — 执行场景（批量更新设备状态）
  *
- * 将场景中所有 effects 批量写入设备状态。
- * 由于所有 setDeviceState 在同一个 Zustand 事务中执行，
- * Undo 只需一步即可还原所有设备到场景应用前的状态。
+ * 按顺序执行场景效果，支持 delay / duration：
+ * - delay: 在当前步骤前等待（秒）
+ * - duration: 对数值字段做线性插值（秒）
  *
  * @param sceneId 场景 ID
- * @returns 实际更新的设备数量
+ * @returns 场景中可执行的设备效果数量
  */
 export function applyScene(sceneId: string): number {
   const { nodes } = useScene.getState()
@@ -149,18 +188,115 @@ export function applyScene(sceneId: string): number {
     return 0
   }
 
-  // 批量更新：所有设备状态在一个 Zundo 快照里
-  // Zustand 的 batched updates 会合并成单次 Undo 步骤
+  const runToken = Symbol(`scene-run-${sceneId}`)
+  activeSceneRunToken = runToken
+  if (activeRunEndTimer) {
+    clearTimeout(activeRunEndTimer)
+    activeRunEndTimer = null
+  }
+
+  const startedAt = Date.now()
+  let elapsedMs = 0
+  let maxEndMs = 0
   let count = 0
+
   for (const effect of sceneNode.effects) {
     const deviceNode = nodes[effect.deviceId as AnyNode['id']]
     if (!deviceNode || deviceNode.type !== 'device') continue
 
-    setDeviceState(effect.deviceId as any, effect.state)
+    elapsedMs += Math.max(0, (effect.delay ?? 0) * 1000)
+    maxEndMs = Math.max(maxEndMs, elapsedMs + Math.max(0, (effect.duration ?? 0) * 1000))
+    scheduleEffect(effect, elapsedMs, runToken)
     count++
   }
 
+  if (count === 0) {
+    emitSceneRunStatus({
+      sceneId,
+      running: false,
+      startedAt,
+      expectedEndAt: startedAt,
+      completedAt: startedAt,
+    })
+    return 0
+  }
+
+  emitSceneRunStatus({
+    sceneId,
+    running: true,
+    startedAt,
+    expectedEndAt: startedAt + maxEndMs,
+    completedAt: null,
+  })
+
+  activeRunEndTimer = setTimeout(() => {
+    if (activeSceneRunToken !== runToken) return
+    emitSceneRunStatus({
+      sceneId,
+      running: false,
+      startedAt,
+      expectedEndAt: startedAt + maxEndMs,
+      completedAt: Date.now(),
+    })
+  }, maxEndMs + 16)
+
   return count
+}
+
+function scheduleEffect(effect: SceneEffect, atMs: number, runToken: symbol): void {
+  setTimeout(() => {
+    if (activeSceneRunToken !== runToken) return
+
+    const durationMs = Math.max(0, (effect.duration ?? 0) * 1000)
+    if (durationMs === 0) {
+      setDeviceState(effect.deviceId as any, effect.state)
+      return
+    }
+
+    animateNumericState(effect, durationMs, runToken)
+  }, atMs)
+}
+
+function animateNumericState(effect: SceneEffect, durationMs: number, runToken: symbol): void {
+  const current = useScene.getState().nodes[effect.deviceId as AnyNode['id']]
+  if (!current || current.type !== 'device') return
+
+  const currentState = (current.state ?? {}) as Record<string, unknown>
+  const targetState = effect.state as Record<string, unknown>
+
+  const numericKeys = Object.keys(targetState).filter(
+    (key) => typeof targetState[key] === 'number' && typeof currentState[key] === 'number',
+  )
+  const immediateKeys = Object.keys(targetState).filter((key) => !numericKeys.includes(key))
+
+  if (immediateKeys.length > 0) {
+    const immediatePatch: Record<string, unknown> = {}
+    for (const key of immediateKeys) immediatePatch[key] = targetState[key]
+    setDeviceState(effect.deviceId as any, immediatePatch)
+  }
+
+  if (numericKeys.length === 0) return
+
+  const start = Date.now()
+
+  const tick = () => {
+    if (activeSceneRunToken !== runToken) return
+    const progress = Math.min(1, (Date.now() - start) / durationMs)
+
+    const patch: Record<string, unknown> = {}
+    for (const key of numericKeys) {
+      const from = currentState[key] as number
+      const to = targetState[key] as number
+      patch[key] = from + (to - from) * progress
+    }
+    setDeviceState(effect.deviceId as any, patch)
+
+    if (progress < 1) {
+      requestAnimationFrame(tick)
+    }
+  }
+
+  requestAnimationFrame(tick)
 }
 
 /**

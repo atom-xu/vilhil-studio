@@ -24,6 +24,7 @@ import {
   diagnoseWallGraph,
   splitTJunctions,
 } from '../../tools/wall/wall-cleanup'
+import { Button } from '../primitives/button'
 import { ActionButton } from './action-button'
 
 export type ToolConfig = {
@@ -145,7 +146,7 @@ function WallThicknessSelector() {
         {WALL_TYPES.map((t) => {
           const isActive = currentType === t.id
           return (
-            <button
+            <Button variant="ghost"
               className={cn(
                 'flex flex-col items-center justify-center rounded-md px-2 py-1 transition-all',
                 isActive
@@ -182,7 +183,7 @@ function WallThicknessSelector() {
               >
                 {(t.thickness * 1000).toFixed(0)}
               </span>
-            </button>
+            </Button>
           )
         })}
       </div>
@@ -205,7 +206,7 @@ function DoorPresetSelector() {
         {DOOR_PRESETS.map((p) => {
           const isActive = current === p.id
           return (
-            <button
+            <Button variant="ghost"
               className={cn(
                 'flex flex-col items-center justify-center rounded-md px-2 py-1 transition-all',
                 isActive ? 'bg-white/15' : 'hover:bg-white/10',
@@ -231,7 +232,7 @@ function DoorPresetSelector() {
               >
                 {(p.width * 100).toFixed(0)}
               </span>
-            </button>
+            </Button>
           )
         })}
       </div>
@@ -254,7 +255,7 @@ function WindowPresetSelector() {
         {WINDOW_PRESETS.map((p) => {
           const isActive = current === p.id
           return (
-            <button
+            <Button variant="ghost"
               className={cn(
                 'flex flex-col items-center justify-center rounded-md px-2 py-1 transition-all',
                 isActive ? 'bg-white/15' : 'hover:bg-white/10',
@@ -280,7 +281,7 @@ function WindowPresetSelector() {
               >
                 {(p.height * 100).toFixed(0)}h
               </span>
-            </button>
+            </Button>
           )
         })}
       </div>
@@ -620,14 +621,14 @@ function CleanupWallsButton() {
     <>
       <div className="mx-0.5 h-6 w-px bg-white/10" />
       <div className="relative">
-        <button
+        <Button variant="ghost"
           className="rounded-lg px-2 py-1.5 text-[11px] font-medium text-white/70 transition-all hover:bg-white/10 hover:text-white"
           onClick={handleCleanup}
           title="合并端点漂移 + 去除重叠重复墙（共线去重）"
           type="button"
         >
           清理端点
-        </button>
+        </Button>
         <ActionHintBubble hint={hint} />
       </div>
     </>
@@ -721,14 +722,14 @@ function AutoSlabButton() {
     <>
       <div className="mx-0.5 h-6 w-px bg-white/10" />
       <div className="relative">
-        <button
+        <Button variant="ghost"
           className="rounded-lg px-2 py-1.5 text-[11px] font-medium text-white/70 transition-all hover:bg-white/10 hover:text-white"
           onClick={handleGenerate}
           title="根据当前层墙体外轮廓自动生成楼板"
           type="button"
         >
           自动生成
-        </button>
+        </Button>
         <ActionHintBubble hint={hint} />
       </div>
     </>

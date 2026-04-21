@@ -1,7 +1,7 @@
 import { type DeviceNode, useRegistry, useScene } from '@pascal-app/core'
-import { useMemo, useRef } from 'react'
-import type { Group } from 'three'
-import { getDeviceDefinition, useSubsystemVisibility } from '@vilhil/smarthome'
+import { useEffect, useMemo, useRef } from 'react'
+import type { Group, Material, Mesh } from 'three'
+import { getDeviceDefinition, useSelectedSubsystem, useSubsystemVisibility } from '@vilhil/smarthome'
 import { useNodeEvents } from '../../../hooks/use-node-events'
 import { ErrorBoundary } from '../../error-boundary'
 import { APCoverage, CameraFOV, CurtainPanel, HvacAirflow, LightCone, PIRCoverage } from './animations'
@@ -12,12 +12,15 @@ import { DeviceLight } from './device-light'
 // Device renderer - renders smart home devices in 3D
 export const DeviceRenderer = ({ node }: { node: DeviceNode }) => {
   const ref = useRef<Group>(null!)
+  const materialFocusKey = '__vilhilFocusBase'
 
   // 注册到空间查询系统 — 使得选中、射线检测、表面策略均可感知设备
   useRegistry(node.id, 'device', ref)
 
   // 子系统显隐控制 — SubsystemBar 切换时立即生效
   const isSubsystemVisible = useSubsystemVisibility(node.subsystem)
+  const selectedSubsystem = useSelectedSubsystem()
+  const isFocusedBySubsystem = selectedSubsystem === null || selectedSubsystem === node.subsystem
 
   const deviceDef = useMemo(() => {
     if (node.productId) {
@@ -40,6 +43,59 @@ export const DeviceRenderer = ({ node }: { node: DeviceNode }) => {
 
   const handlers = useNodeEvents(node, 'device')
   const isOn = (deviceState?.on as boolean) ?? false
+
+  // 子系统聚焦：未选中的设备降低存在感，但不完全隐藏
+  useEffect(() => {
+    const group = ref.current
+    if (!group) return
+
+    const applyToMaterial = (material: Material) => {
+      const mat = material as Material & {
+        opacity?: number
+        transparent?: boolean
+        depthWrite?: boolean
+        userData: Record<string, unknown>
+        needsUpdate?: boolean
+      }
+      if (typeof mat.opacity !== 'number') return
+
+      if (!mat.userData[materialFocusKey]) {
+        mat.userData[materialFocusKey] = {
+          opacity: mat.opacity,
+          transparent: mat.transparent ?? false,
+          depthWrite: mat.depthWrite ?? true,
+        }
+      }
+
+      const base = mat.userData[materialFocusKey] as {
+        opacity: number
+        transparent: boolean
+        depthWrite: boolean
+      }
+
+      if (isFocusedBySubsystem) {
+        mat.opacity = base.opacity
+        mat.transparent = base.transparent
+        mat.depthWrite = base.depthWrite
+      } else {
+        mat.opacity = Math.max(0.15, Math.min(base.opacity, 0.22))
+        mat.transparent = true
+        mat.depthWrite = false
+      }
+
+      mat.needsUpdate = true
+    }
+
+    group.traverse((obj) => {
+      const mesh = obj as Mesh & { material?: Material | Material[] }
+      if (!mesh.material) return
+      if (Array.isArray(mesh.material)) {
+        mesh.material.forEach(applyToMaterial)
+      } else {
+        applyToMaterial(mesh.material)
+      }
+    })
+  }, [isFocusedBySubsystem, materialFocusKey])
 
   // 子系统隐藏时不渲染（返回空 group 以保持 ref 注册）
   if (!isSubsystemVisible) {
@@ -160,4 +216,3 @@ export const DeviceRenderer = ({ node }: { node: DeviceNode }) => {
     </group>
   )
 }
-

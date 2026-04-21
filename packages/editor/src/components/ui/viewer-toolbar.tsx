@@ -24,6 +24,7 @@ import type { ViewMode } from '../../store/use-editor'
 import { Popover, PopoverContent, PopoverTrigger } from './primitives/popover'
 import { useSidebarStore } from './primitives/sidebar'
 import { Tooltip, TooltipContent, TooltipTrigger } from './primitives/tooltip'
+import { Button } from './primitives/button'
 
 // ── Shared styles ───────────────────────────────────────────────────────────
 
@@ -33,7 +34,7 @@ const TOOLBAR_CONTAINER =
 
 /** Ghost button inside a container — flush edges, no individual border/radius. */
 const TOOLBAR_BTN =
-  'flex items-center justify-center w-8 text-muted-foreground/80 transition-colors hover:bg-white/8 hover:text-foreground/90'
+  'flex h-8 min-h-0 w-8 items-center justify-center rounded-none text-muted-foreground/80 transition-colors hover:bg-white/8 hover:text-foreground/90'
 
 // ── View mode segmented control ─────────────────────────────────────────────
 
@@ -64,9 +65,9 @@ function ViewModeControl() {
       {VIEW_MODES.map((mode) => {
         const isActive = viewMode === mode.id
         return (
-          <button
+          <Button
             className={cn(
-              'flex items-center justify-center gap-1.5 px-2.5 font-medium text-xs transition-colors',
+              'flex h-8 min-h-0 items-center justify-center gap-1.5 rounded-none px-2.5 font-medium text-xs transition-colors',
               isActive
                 ? 'bg-white/10 text-foreground'
                 : 'text-muted-foreground/70 hover:bg-white/8 hover:text-muted-foreground',
@@ -74,10 +75,11 @@ function ViewModeControl() {
             key={mode.id}
             onClick={() => setViewMode(mode.id)}
             type="button"
+            variant="ghost"
           >
             {mode.icon}
             <span>{mode.label}</span>
-          </button>
+          </Button>
         )
       })}
     </div>
@@ -96,14 +98,15 @@ function CollapseSidebarButton() {
 
   return (
     <div className={TOOLBAR_CONTAINER}>
-      <button
+      <Button
         className={TOOLBAR_BTN}
         onClick={toggle}
         title={isCollapsed ? '展开侧边栏' : '收起侧边栏'}
         type="button"
+        variant="ghost"
       >
         {isCollapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
-      </button>
+      </Button>
     </div>
   )
 }
@@ -121,16 +124,17 @@ function WalkthroughButton() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button
+        <Button
           className={cn(
             TOOLBAR_BTN,
             isFirstPersonMode && 'bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/20',
           )}
           onClick={toggle}
           type="button"
+          variant="ghost"
         >
           <Footprints className="h-4 w-4" />
-        </button>
+        </Button>
       </TooltipTrigger>
       <TooltipContent side="bottom">漫游</TooltipContent>
     </Tooltip>
@@ -144,13 +148,14 @@ function UnitToggle() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button
+        <Button
           className={TOOLBAR_BTN}
           onClick={() => setUnit(unit === 'metric' ? 'imperial' : 'metric')}
           type="button"
+          variant="ghost"
         >
           <span className="font-semibold text-[10px]">{unit === 'metric' ? 'm' : 'ft'}</span>
-        </button>
+        </Button>
       </TooltipTrigger>
       <TooltipContent side="bottom">
         {unit === 'metric' ? '公制 (m)' : '英制 (ft)'}
@@ -166,13 +171,14 @@ function ThemeToggle() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button
+        <Button
           className={cn(TOOLBAR_BTN, theme === 'dark' ? 'text-indigo-400/60' : 'text-amber-400/60')}
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
           type="button"
+          variant="ghost"
         >
           {theme === 'dark' ? <Moon className="h-3.5 w-3.5" /> : <Sun className="h-3.5 w-3.5" />}
-        </button>
+        </Button>
       </TooltipTrigger>
       <TooltipContent side="bottom">{theme === 'dark' ? '暗色' : '亮色'}</TooltipContent>
     </Tooltip>
@@ -208,7 +214,7 @@ function LevelModeToggle() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button
+        <Button
           className={cn(
             TOOLBAR_BTN,
             'w-auto gap-1.5 px-2.5',
@@ -216,6 +222,7 @@ function LevelModeToggle() {
           )}
           onClick={cycle}
           type="button"
+          variant="ghost"
         >
           {levelMode === 'solo' ? (
             <IconifyIcon height={14} icon="lucide:diamond" width={14} />
@@ -225,7 +232,7 @@ function LevelModeToggle() {
             <IconifyIcon height={14} icon="charm:stack-push" width={14} />
           )}
           <span className="font-medium text-xs">{levelModeLabels[levelMode] ?? 'Stack'}</span>
-        </button>
+        </Button>
       </TooltipTrigger>
       <TooltipContent side="bottom">
         楼层: {levelMode === 'manual' ? '手动' : levelModeLabels[levelMode]}
@@ -258,7 +265,7 @@ function WallModeToggle() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button
+        <Button
           className={cn(
             TOOLBAR_BTN,
             'w-auto gap-1.5 px-2.5',
@@ -268,10 +275,11 @@ function WallModeToggle() {
           )}
           onClick={cycle}
           type="button"
+          variant="ghost"
         >
           <img alt={config.label} className="h-4 w-4 object-contain" src={config.icon} />
           <span className="font-medium text-xs">{config.label}</span>
-        </button>
+        </Button>
       </TooltipTrigger>
       <TooltipContent side="bottom">墙体: {config.label}</TooltipContent>
     </Tooltip>
@@ -287,7 +295,7 @@ function CameraModeToggle() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button
+        <Button
           className={cn(
             TOOLBAR_BTN,
             cameraMode === 'orthographic' && 'bg-white/10 text-foreground/90',
@@ -296,13 +304,14 @@ function CameraModeToggle() {
             setCameraMode(cameraMode === 'perspective' ? 'orthographic' : 'perspective')
           }
           type="button"
+          variant="ghost"
         >
           {cameraMode === 'perspective' ? (
             <IconifyIcon height={16} icon="icon-park-outline:perspective" width={16} />
           ) : (
             <IconifyIcon height={16} icon="vaadin:grid" width={16} />
           )}
-        </button>
+        </Button>
       </TooltipTrigger>
       <TooltipContent side="bottom">
         {cameraMode === 'perspective' ? '透视' : '正交'}
@@ -374,7 +383,7 @@ function AlignmentButton() {
       <Tooltip>
         <TooltipTrigger asChild>
           <PopoverTrigger asChild>
-            <button
+            <Button
               className={cn(
                 TOOLBAR_BTN,
                 'w-auto gap-1.5 px-2.5',
@@ -383,10 +392,11 @@ function AlignmentButton() {
                   : isOpen && 'bg-white/10 text-foreground/90',
               )}
               type="button"
+              variant="ghost"
             >
               <Layers className="h-3.5 w-3.5 shrink-0" />
               <span className="font-medium text-xs">对齐</span>
-            </button>
+            </Button>
           </PopoverTrigger>
         </TooltipTrigger>
         <TooltipContent side="bottom">多层底图对齐</TooltipContent>
@@ -401,13 +411,14 @@ function AlignmentButton() {
         {isAlignmentActive ? (
           <div className="space-y-2">
             <p className="px-1 text-[11px] text-primary">对齐进行中…</p>
-            <button
+            <Button
               className="flex w-full items-center justify-center rounded-lg px-2.5 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-white/8 hover:text-foreground"
               onClick={handleCancel}
               type="button"
+              variant="ghost"
             >
               取消对齐
-            </button>
+            </Button>
           </div>
         ) : (
           <div className="space-y-1.5">
@@ -415,15 +426,16 @@ function AlignmentButton() {
               选择参考楼层，2 点对齐当前层
             </p>
             {levels.map((lvl) => (
-              <button
+              <Button
                 className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-white/8 hover:text-foreground"
                 key={lvl.id}
                 onClick={() => handleLevelClick(lvl.id)}
                 type="button"
+                variant="ghost"
               >
                 <Layers className="h-3.5 w-3.5 shrink-0 opacity-50" />
                 <span className="truncate">{lvl.name || `Level ${lvl.level}`}</span>
-              </button>
+              </Button>
             ))}
           </div>
         )}
@@ -438,14 +450,15 @@ function PreviewButton() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button
-          className="flex h-8 items-center gap-1.5 rounded-xl border border-border bg-background/90 px-3 font-medium text-muted-foreground/80 text-xs shadow-2xl backdrop-blur-md transition-colors hover:bg-white/8 hover:text-foreground/90"
+        <Button
+          className="flex h-8 min-h-0 items-center gap-1.5 rounded-xl border border-border bg-background/90 px-3 font-medium text-muted-foreground/80 text-xs shadow-2xl backdrop-blur-md transition-colors hover:bg-white/8 hover:text-foreground/90"
           onClick={() => useEditor.getState().setPreviewMode(true)}
           type="button"
+          variant="ghost"
         >
           <Eye className="h-3.5 w-3.5 shrink-0" />
           <span>预览</span>
-        </button>
+        </Button>
       </TooltipTrigger>
       <TooltipContent side="bottom">预览模式</TooltipContent>
     </Tooltip>
@@ -459,7 +472,7 @@ function ProposalDemoButton() {
     <Tooltip>
       <TooltipTrigger asChild>
         <a
-          className="inline-flex h-8 items-center gap-1.5 rounded-xl bg-[#2D7FF9] px-3.5 font-semibold text-white text-xs shadow-lg shadow-[#2D7FF9]/20 transition-all hover:bg-[#2D7FF9]/90 hover:shadow-[#2D7FF9]/30"
+          className="inline-flex h-8 items-center gap-1.5 rounded-xl bg-primary px-3.5 font-semibold text-primary-foreground text-xs shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 hover:shadow-primary/30"
           href="/proposal-demo"
           rel="noopener noreferrer"
           target="_blank"
@@ -494,9 +507,9 @@ function SaveSceneButton() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button className={TOOLBAR_BTN} onClick={handleSave} type="button">
+        <Button className={TOOLBAR_BTN} onClick={handleSave} type="button" variant="ghost">
           <Save className="h-3.5 w-3.5" />
-        </button>
+        </Button>
       </TooltipTrigger>
       <TooltipContent side="bottom">保存方案（下载 JSON）</TooltipContent>
     </Tooltip>
@@ -538,13 +551,14 @@ function LoadSceneButton() {
       />
       <Tooltip>
         <TooltipTrigger asChild>
-          <button
+          <Button
             className={TOOLBAR_BTN}
             onClick={() => inputRef.current?.click()}
             type="button"
+            variant="ghost"
           >
             <FolderOpen className="h-3.5 w-3.5" />
-          </button>
+          </Button>
         </TooltipTrigger>
         <TooltipContent side="bottom">打开方案（加载 JSON）</TooltipContent>
       </Tooltip>

@@ -4,6 +4,7 @@ import { type BuildingNode, type LevelNode, useScene } from '@pascal-app/core'
 import { useViewer } from '@pascal-app/viewer'
 import { useShallow } from 'zustand/react/shallow'
 import { cn } from '../../lib/utils'
+import { Button } from './primitives/button'
 
 function getLevelDisplayLabel(level: LevelNode) {
   return level.name || `Level ${level.level}`
@@ -47,7 +48,7 @@ export function FloatingLevelSelector() {
         {reversedLevels.map((level) => {
           const isSelected = level.id === levelId
           return (
-            <button
+            <Button variant="ghost"
               className={cn(
                 'flex min-w-[80px] items-center justify-start rounded-lg px-2.5 py-1.5 font-medium text-xs transition-colors',
                 isSelected
@@ -66,7 +67,7 @@ export function FloatingLevelSelector() {
               type="button"
             >
               <span className="truncate">{getLevelDisplayLabel(level)}</span>
-            </button>
+            </Button>
           )
         })}
       </div>

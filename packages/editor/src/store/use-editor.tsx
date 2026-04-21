@@ -19,7 +19,7 @@ import { useViewer } from '@pascal-app/viewer'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-const DEFAULT_ACTIVE_SIDEBAR_PANEL = 'site'
+const DEFAULT_ACTIVE_SIDEBAR_PANEL = 'building'
 const DEFAULT_FLOORPLAN_PANE_RATIO = 0.5
 const MIN_FLOORPLAN_PANE_RATIO = 0.15
 const MAX_FLOORPLAN_PANE_RATIO = 0.85

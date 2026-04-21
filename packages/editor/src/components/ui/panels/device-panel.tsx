@@ -14,6 +14,7 @@ import {
 import { ChevronDown, Sparkles, ToggleLeft, Trash2, X, Zap } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { cn } from '../../../lib/utils'
+import { Button } from '../primitives/button'
 import { PanelSection } from '../controls/panel-section'
 import { SliderControl } from '../controls/slider-control'
 import { PanelWrapper } from './panel-wrapper'
@@ -131,7 +132,7 @@ function PanelKeyEditor({
   return (
     <div className="overflow-hidden rounded-lg border border-border/50 bg-accent/10">
       {/* 按键头部 */}
-      <button
+      <Button variant="ghost"
         className={cn(
           'flex w-full items-center gap-2 px-2 py-1.5 text-left transition-colors',
           expanded ? 'bg-accent/30' : 'hover:bg-accent/20',
@@ -161,14 +162,14 @@ function PanelKeyEditor({
             expanded && 'rotate-180',
           )}
         />
-      </button>
+      </Button>
 
       {/* 展开内容 */}
       {expanded && (
         <div className="border-border/50 border-t px-2 py-2 space-y-2">
           {/* 模式切换 */}
           <div className="flex rounded-md border border-border/50 bg-accent/20 p-0.5">
-            <button
+            <Button variant="ghost"
               className={cn(
                 'flex flex-1 items-center justify-center gap-1.5 rounded py-1 text-[10px] font-medium transition-all',
                 mode === 'toggle'
@@ -180,8 +181,8 @@ function PanelKeyEditor({
             >
               <ToggleLeft className="h-3 w-3" />
               切换灯光
-            </button>
-            <button
+            </Button>
+            <Button variant="ghost"
               className={cn(
                 'flex flex-1 items-center justify-center gap-1.5 rounded py-1 text-[10px] font-medium transition-all',
                 mode === 'scene'
@@ -193,7 +194,7 @@ function PanelKeyEditor({
             >
               <Sparkles className="h-3 w-3" />
               触发场景
-            </button>
+            </Button>
           </div>
 
           {/* 切换灯光模式 */}
@@ -208,7 +209,7 @@ function PanelKeyEditor({
                   {lightingDevices.map((device) => {
                     const isIncluded = linkedLightIds.includes(device.id)
                     return (
-                      <button
+                      <Button variant="ghost"
                         className={cn(
                           'flex w-full items-center gap-2 rounded-md px-2 py-1 text-left transition-colors',
                           isIncluded
@@ -234,7 +235,7 @@ function PanelKeyEditor({
                         <span className="min-w-0 flex-1 truncate text-[11px]">
                           {(device.productName as string | undefined) ?? device.productId}
                         </span>
-                      </button>
+                      </Button>
                     )
                   })}
                 </div>
@@ -242,22 +243,22 @@ function PanelKeyEditor({
 
               {lightingDevices.length > 0 && (
                 <div className="flex items-center gap-1 pt-0.5">
-                  <button
+                  <Button variant="ghost"
                     className="flex-1 rounded-md bg-accent/40 px-2 py-1 text-[10px] font-medium transition-colors hover:bg-accent"
                     onClick={handleLinkAllLights}
                     type="button"
                   >
                     全选
-                  </button>
+                  </Button>
                   {isConfigured && (
-                    <button
+                    <Button variant="ghost"
                       className="flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-1 text-[10px] font-medium text-red-400 transition-colors hover:bg-red-500/20"
                       onClick={handleClear}
                       type="button"
                     >
                       <X className="h-3 w-3" />
                       清除
-                    </button>
+                    </Button>
                   )}
                 </div>
               )}
@@ -276,7 +277,7 @@ function PanelKeyEditor({
                   {sceneNodes.map((scene) => {
                     const isSelected = linkedSceneId === scene.id
                     return (
-                      <button
+                      <Button variant="ghost"
                         className={cn(
                           'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors',
                           isSelected
@@ -294,20 +295,20 @@ function PanelKeyEditor({
                         {isSelected && (
                           <Zap className="h-3 w-3 shrink-0 text-violet-400" />
                         )}
-                      </button>
+                      </Button>
                     )
                   })}
                 </div>
               )}
               {isConfigured && (
-                <button
+                <Button variant="ghost"
                   className="flex w-full items-center justify-center gap-1 rounded-md bg-red-500/10 px-2 py-1 text-[10px] font-medium text-red-400 transition-colors hover:bg-red-500/20"
                   onClick={handleClear}
                   type="button"
                 >
                   <X className="h-3 w-3" />
                   解除绑定
-                </button>
+                </Button>
               )}
             </>
           )}
@@ -454,14 +455,14 @@ export function DevicePanel() {
 
       {/* 操作 */}
       <PanelSection defaultExpanded={false} title="操作">
-        <button
+        <Button variant="ghost"
           className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-red-400 text-xs transition-colors hover:bg-red-500/10"
           onClick={handleDelete}
           type="button"
         >
           <Trash2 className="h-3.5 w-3.5 shrink-0" />
           删除设备
-        </button>
+        </Button>
       </PanelSection>
     </PanelWrapper>
   )

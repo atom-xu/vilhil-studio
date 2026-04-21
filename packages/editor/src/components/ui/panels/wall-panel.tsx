@@ -9,6 +9,7 @@ import { sfxEmitter } from '../../../lib/sfx-bus'
 import { DEFAULT_WALL_TYPE, WALL_TYPES, WALL_TYPE_BY_ID, type WallType } from '../../tools/wall/wall-types'
 import { MaterialPicker } from '../controls/material-picker'
 import { PanelSection } from '../controls/panel-section'
+import { Button } from '../primitives/button'
 import { SliderControl } from '../controls/slider-control'
 import { PanelWrapper } from './panel-wrapper'
 
@@ -184,7 +185,7 @@ export function WallPanel() {
             描摹底图时墙体对不齐？点击翻转让墙向对面偏移一个墙厚。
           </p>
           <div className="flex gap-1.5">
-            <button
+            <Button variant="ghost"
               className="flex-1 rounded-md bg-accent/60 px-2 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-accent"
               onClick={() => {
                 // 将墙中心线沿法线方向偏移一个墙厚
@@ -201,8 +202,8 @@ export function WallPanel() {
               type="button"
             >
               向左偏移
-            </button>
-            <button
+            </Button>
+            <Button variant="ghost"
               className="flex-1 rounded-md bg-accent/60 px-2 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-accent"
               onClick={() => {
                 const t = thickness
@@ -218,7 +219,7 @@ export function WallPanel() {
               type="button"
             >
               向右偏移
-            </button>
+            </Button>
           </div>
         </div>
       </PanelSection>
@@ -238,7 +239,7 @@ export function WallPanel() {
 function DeleteFooter({ onDelete, label }: { onDelete: () => void; label: string }) {
   return (
     <div className="border-border/30 border-t px-3 py-2">
-      <button
+      <Button variant="ghost"
         className="flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-2 text-[12px] font-medium text-destructive transition-colors hover:bg-destructive/10"
         onClick={onDelete}
         type="button"
@@ -246,7 +247,7 @@ function DeleteFooter({ onDelete, label }: { onDelete: () => void; label: string
         <Trash2 className="h-3.5 w-3.5" />
         {label}
         <span className="ml-1 rounded bg-white/5 px-1 py-0.5 font-mono text-[10px] text-muted-foreground">⌫</span>
-      </button>
+      </Button>
     </div>
   )
 }
@@ -268,7 +269,7 @@ function WallTypeSwitcher({
         {WALL_TYPES.map((t) => {
           const isActive = currentTypeId === t.id
           return (
-            <button
+            <Button variant="ghost"
               className={cn(
                 'flex flex-col items-center justify-center gap-0.5 rounded-md px-1 py-1.5 transition-all',
                 isActive
@@ -303,7 +304,7 @@ function WallTypeSwitcher({
               >
                 {(t.thickness * 1000).toFixed(0)}
               </span>
-            </button>
+            </Button>
           )
         })}
       </div>

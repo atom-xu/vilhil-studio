@@ -19,6 +19,7 @@ import { ActionButton, ActionGroup } from '../controls/action-button'
 import { MaterialPicker } from '../controls/material-picker'
 import { MetricControl } from '../controls/metric-control'
 import { PanelSection } from '../controls/panel-section'
+import { Button } from '../primitives/button'
 import { SliderControl } from '../controls/slider-control'
 import { PanelWrapper } from './panel-wrapper'
 
@@ -154,15 +155,15 @@ export function RoofPanel() {
       <PanelSection title="分段">
         <div className="flex flex-col gap-1">
           {segments.map((seg, i) => (
-            <button
-              className="flex items-center justify-between rounded-lg border border-border/50 bg-[#2C2C2E] px-3 py-2 text-foreground text-sm transition-colors hover:bg-[#3e3e3e]"
+            <Button variant="ghost"
+              className="flex items-center justify-between rounded-lg border border-border/50 bg-accent/70 px-3 py-2 text-foreground text-sm transition-colors hover:bg-accent"
               key={seg.id}
               onClick={() => handleSelectSegment(seg.id)}
               type="button"
             >
               <span className="truncate">{seg.name || `分段 ${i + 1}`}</span>
               <span className="text-muted-foreground text-xs">{ROOF_TYPE_LABELS[seg.roofType] || seg.roofType}</span>
-            </button>
+            </Button>
           ))}
         </div>
         <ActionButton

@@ -1,6 +1,10 @@
 import { loadAssetUrl } from '@pascal-app/core'
 
-export const ASSETS_CDN_URL = process.env.NEXT_PUBLIC_ASSETS_CDN_URL || 'https://editor.pascal.app'
+// In development (no explicit CDN set), use relative paths so local public/ files are served
+// directly by the dev server instead of going through editor.pascal.app.
+export const ASSETS_CDN_URL =
+  process.env.NEXT_PUBLIC_ASSETS_CDN_URL ??
+  (process.env.NODE_ENV === 'development' ? '' : 'https://editor.pascal.app')
 
 /**
  * Resolves an asset URL to the appropriate format:

@@ -71,6 +71,13 @@ export type SceneState = {
   readOnly: boolean
   setReadOnly: (readOnly: boolean) => void
 
+  // 6. Interaction mode — controls what level of editing is allowed
+  // 'edit' = full editing (default)
+  // 'operate' = can update device state (on/off/brightness) but cannot create/delete/move
+  // 'view' = completely read-only
+  interactionMode: 'edit' | 'operate' | 'view'
+  setInteractionMode: (mode: 'edit' | 'operate' | 'view') => void
+
   // Actions
   loadScene: () => void
   clearScene: () => void
@@ -121,6 +128,10 @@ const useScene: UseSceneStore = create<SceneState>()(
       // 5. Read-only lock
       readOnly: false,
       setReadOnly: (readOnly: boolean) => set({ readOnly }),
+
+      // 6. Interaction mode
+      interactionMode: 'edit',
+      setInteractionMode: (mode) => set({ interactionMode: mode }),
 
       unloadScene: () => {
         // Clear temporal tracking to prevent memory leaks from stale node references

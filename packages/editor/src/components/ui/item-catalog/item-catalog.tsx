@@ -4,6 +4,7 @@ import type { AssetInput } from '@pascal-app/core'
 import { resolveCdnUrl } from '@pascal-app/viewer'
 import Image from 'next/image'
 import { useEffect, useState } from 'react'
+import { Button } from '../primitives/button'
 import {
   Tooltip,
   TooltipContent,
@@ -108,7 +109,7 @@ export function ItemCatalog({ category }: { category: CatalogCategory }) {
           {/* Placement row */}
           {placementTags.length > 0 && (
             <div className="flex flex-wrap gap-1">
-              <button
+              <Button variant="ghost"
                 className={cn(
                   'cursor-pointer rounded-md px-2 py-0.5 font-medium text-xs transition-colors',
                   activePlacementTag === null
@@ -119,13 +120,13 @@ export function ItemCatalog({ category }: { category: CatalogCategory }) {
                 type="button"
               >
                 {TAG_LABELS['all']}
-              </button>
+              </Button>
               {placementTags.map((tag) => {
                 const count = placementCount(tag)
                 const isActive = activePlacementTag === tag
                 const isEmpty = count === 0 && !isActive
                 return (
-                  <button
+                  <Button variant="ghost"
                     className={cn(
                       'inline-flex cursor-pointer items-center gap-1 rounded-md py-0.5 pr-1.5 pl-2 font-medium text-xs transition-colors',
                       isActive
@@ -148,7 +149,7 @@ export function ItemCatalog({ category }: { category: CatalogCategory }) {
                     >
                       {count}
                     </span>
-                  </button>
+                  </Button>
                 )
               })}
             </div>
@@ -162,7 +163,7 @@ export function ItemCatalog({ category }: { category: CatalogCategory }) {
                 const isActive = activeFunctionalTag === tag
                 const isEmpty = count === 0 && !isActive
                 return (
-                  <button
+                  <Button variant="ghost"
                     className={cn(
                       'inline-flex cursor-pointer items-center gap-1 rounded-md py-0.5 pr-1.5 pl-2 font-medium text-xs transition-colors',
                       isActive
@@ -189,7 +190,7 @@ export function ItemCatalog({ category }: { category: CatalogCategory }) {
                     >
                       {count}
                     </span>
-                  </button>
+                  </Button>
                 )
               })}
             </div>
@@ -205,7 +206,7 @@ export function ItemCatalog({ category }: { category: CatalogCategory }) {
           return (
             <Tooltip key={index}>
               <TooltipTrigger asChild>
-                <button
+                <Button variant="ghost"
                   className={cn(
                     'relative aspect-square h-14 min-h-14 w-14 min-w-14 shrink-0 flex-col gap-px rounded-lg transition-all duration-200 ease-out hover:scale-105 hover:cursor-pointer',
                     isSelected && 'ring-2 ring-primary-foreground',
@@ -232,7 +233,7 @@ export function ItemCatalog({ category }: { category: CatalogCategory }) {
                       />
                     </div>
                   )}
-                </button>
+                </Button>
               </TooltipTrigger>
               <TooltipContent className="text-xs" side="top">
                 {item.name}
