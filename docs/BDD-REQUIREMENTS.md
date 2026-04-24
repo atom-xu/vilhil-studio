@@ -422,3 +422,418 @@ And   拓扑页面显示“待接入”数量
 
 *最后更新: 2026-04-09*
 *维护者: AI设计师 + 开发团队*
+
+---
+
+## Phase 2.5: 9 大子系统展示动态（已实现，待前端测试）
+
+> 本节对应 2026-04 的"横向铺平"阶段——9 大子系统的 `模型 / 交互 / 操作 / 展示动态` 已全量落地。
+> 本节场景全部可直接在浏览器验收，无需后端。
+>
+> **共同前置条件（省略于每个场景）：**
+> - 项目中已至少放置一层带若干墙体的楼层
+> - 进入**展示模式**（proposal 页面），`SubsystemBar` 可见
+> - 设备目录中挑选对应子系统的设备放置到位（详见每个场景的 Given）
+>
+> **共同真值（用于断言）：**
+> - 设备运行时状态：`useScene.nodes[deviceId].state`
+> - 设备参数：`useScene.nodes[deviceId].params`
+> - 子系统 UI 偏好：`useDeviceState.visibleSubsystems / selectedSubsystem`
+
+---
+
+### P2.5-0: 子系统聚焦语义（聚焦 ≠ 显隐）
+
+```gherkin
+场景：聚焦子系统但不隐藏其他子系统
+Given 场景中有灯光、窗帘、传感器各若干
+When  用户点击 SubsystemBar 的"灯光"按钮标签（label 点击）
+Then  selectedSubsystem === 'lighting'
+And   灯光设备 material.opacity 保持原值
+And   非灯光设备 material.opacity 被拉低到 0.15-0.22（淡化但不隐藏）
+And   visibleSubsystems.* 全部仍为 true
+
+场景：切换子系统显隐（眼睛图标点击）
+Given selectedSubsystem === null
+When  用户点击 SubsystemBar "传感器"行的眼睛图标
+Then  visibleSubsystems.sensor === false
+And   所有 sensor 设备 group.visible === false
+And   selectedSubsystem 不受影响
+
+场景：取消聚焦
+Given selectedSubsystem === 'lighting'
+When  用户再次点击"灯光"按钮标签
+Then  selectedSubsystem === null
+And   所有设备 material.opacity 恢复到 __vilhilFocusBase.opacity
+```
+
+**验收：**
+- [ ] 聚焦只影响透明度，不影响 visible
+- [ ] 显隐只影响 visible，不影响 selectedSubsystem
+- [ ] 同一次点击**永远只做一件事**（硬规则 #4）
+
+---
+
+### P2.5-1: 灯光（Lighting）
+
+```gherkin
+场景：客户开关筒灯
+Given 天花板上有一盏筒灯，state.on=false
+When  客户点击筒灯
+Then  state.on === true
+And   几何体发光（emissive）渐亮
+And   LightCone 光锥亮度从 0 渐入到 100%
+And   DeviceLight 场景光照同步渐入（不跳变）
+
+场景：调整亮度
+Given 筒灯处于开启状态
+When  在 DeviceInfoCard 将亮度滑块拖到 50%
+Then  state.brightness === 50
+And   LightCone 亮度对应缩到 0.5
+And   无 Zustand 写入风暴（拖动期间不掉帧）
+
+场景：色温切换
+Given 筒灯支持色温调节
+When  在 InfoCard 将色温滑块拖到 5000K（冷白）
+Then  state.colorTemp === 5000
+And   光锥颜色由暖黄渐变到冷白
+```
+
+**验收：**
+- [ ] 点击切换 on/off 有渐入渐出（非瞬跳）
+- [ ] 关灯时光锥不立即消失，而是 brightness=0 平滑淡出
+- [ ] 亮度 0 时几何体 emissive 也归零
+
+---
+
+### P2.5-2: 面板（Panel）
+
+```gherkin
+场景：开关按键按下
+Given 墙上有一个单路开关
+When  客户点击开关
+Then  按键几何体出现按下动画（scale.z 缩 1-2mm，颜色略变）
+And   LED 指示灯颜色同步（绿=开 / 灭=关）
+And   关联灯具状态同步切换（如已绑定）
+
+场景：调光旋钮
+Given 墙上有一个调光旋钮，state.brightness=50
+When  在 InfoCard 拖动亮度滑块到 100%
+Then  旋钮几何体绕 y 轴旋转从 0° 到 +135°
+And   外圈 LED 环亮度渐进
+And   state.brightness === 100
+
+场景：场景面板按键
+Given 墙上有一个 6 键场景面板，第 3 键绑定了"回家"场景
+When  客户点击第 3 键
+Then  该键出现按下动画
+And   触发"回家"场景（后续联动效果）
+```
+
+**验收：**
+- [ ] 按键按下动画时长 ≤ 150ms，松开回弹
+- [ ] 旋钮旋转连续无抖动
+- [ ] LED 颜色与 isOn 实时一致
+
+---
+
+### P2.5-3: 窗帘（Curtain，含 4 种类型 + 多层）
+
+```gherkin
+场景：单层侧开帘开合
+Given 客厅窗前有一个 side-open 窗帘，params.layers=[{material:'blackout'}]
+When  客户在 InfoCard 拖动第 1 层开合度滑块到 0.8
+Then  state.layerPositions[0] === 0.8
+And   10 片布面沿 X 轴平移到窗口宽度 × 0.8 位置
+And   带轻微 flutter 动画（周期 ≈1.5s）
+
+场景：双层纱 + 遮光帘独立控制
+Given 窗前有一个 side-open 窗帘，params.layers=[{material:'sheer'},{material:'blackout'}]
+When  拖动第 1 层（纱）到 1.0（全开），第 2 层（遮光）到 0.0（全闭）
+Then  state.layerPositions[0]=1.0, state.layerPositions[1]=0.0
+And   两层沿 wall 法线方向 z 偏移 3cm，不穿模
+And   InfoCard 每层独立显示 tag（sheer / blackout）
+
+场景：百叶帘角度
+Given 窗前有一个 venetian 百叶帘，state.layerPositions[0]=1.0
+When  在 InfoCard 拖动叶片角度滑块到 45°
+Then  state.slatAngleDeg === 45
+And   所有叶片绕自身 X 轴转到 45°
+And   高度不改变
+
+场景：窗帘关联窗户
+Given 窗帘 params.openingId 指向窗 W，W 在墙 M 上
+When  渲染窗帘
+Then  窗帘 group.rotation.y 对齐 M 的法线
+And   窗帘 position 贴在 W 的世界中心上方
+```
+
+**验收：**
+- [ ] 4 种类型（side-open / roller / venetian / roman）均有各自合理的动画
+- [ ] 多层 z 偏移 3cm 不穿模
+- [ ] `openingId` 失效时窗帘不崩溃（fallback 到设备自身 position）
+
+---
+
+### P2.5-4: 传感器（Sensor）
+
+```gherkin
+场景：PIR 未触发
+Given 天花板有一个 PIR，state.triggered=false
+When  用户聚焦传感器子系统
+Then  PIR 下方出现绿色粒子锥覆盖（radius=params.coverageRadius）
+And   粒子数约 120，呼吸节奏
+
+场景：PIR 触发告警
+Given PIR 在线
+When  在 InfoCard 点击"模拟触发"（或 state.triggered 被置 true）
+Then  覆盖粒子颜色切到红色 #ef4444
+And   粒子数约 200（密度上升）
+And   InfoCard 状态徽章变红
+
+场景：烟感告警
+Given 天花板有一个烟感
+When  state.triggered=true
+Then  烟感周围出现告警 LED 红环脉动
+```
+
+**验收：**
+- [ ] `triggered` 切换无几何重建，仅 uniform / 粒子数切换
+- [ ] 聚焦传感器时其他子系统降低存在感，覆盖可视化不被墙体遮挡
+
+---
+
+### P2.5-5: 窗帘以外的墙/天花挂件 — 暖通（HVAC）
+
+```gherkin
+场景：吸顶四向出风口制冷
+Given 天花板有一个 vent-4way 出风口
+When  客户点击它开启，并在 InfoCard 选择"制冷"
+Then  state.on=true, state.mode='cold'
+And   4 个方向（±30° 抖动）喷出蓝色粒子流
+And   粒子强度跟 isOn 渐入渐出（不跳）
+
+场景：壁挂空调制热 ribbon
+Given 墙上有一个 ac-wall 壁挂空调
+When  切到"制热"模式
+Then  正前方出现红色 ribbon 流线 + 云雾
+And   mode 切换时 cloud texture 重建一次
+
+场景：关闭 HVAC
+Given 出风口 / 空调处于开启
+When  用户关闭它
+Then  粒子 / ribbon 强度 lerp 到 0，平滑淡出
+```
+
+**验收：**
+- [ ] 冷/热颜色差异明显
+- [ ] mode 切换 ≤ 500ms 内完成颜色过渡
+- [ ] 关闭后 3s 内粒子完全不可见
+
+---
+
+### P2.5-6: 安防（Security）
+
+```gherkin
+场景：摄像头 FOV 展示
+Given 天花板有一个 dome（半球摄像头），params.coverageAngle=90, coverageRadius=8
+When  聚焦安防子系统
+Then  出现 4 层叠加锥形激光扫描范围（FOV=90°, 长度=8m）
+And   整体缓慢左右摆动 ±3.5°
+And   离焦时强度 0.25（仍可见但不抢眼）
+
+场景：调整摄像头 FOV
+Given 安防子系统聚焦
+When  在 InfoCard 将 FOV 拖到 120°
+Then  state.coverageAngle === 120
+And   锥底半径实时扩大（不重建几何）
+
+场景：门锁上锁/解锁
+Given 门上有一个门锁，state.locked=true
+When  客户点击"解锁"
+Then  state.locked=false
+And   门锁 LED 环从红色脉动切到绿色呼吸
+```
+
+**验收：**
+- [ ] FOV / range 滑动时无几何重建（仅 shader uniform 变化）
+- [ ] 摄像头非聚焦时**仍可见**但不喧宾夺主
+- [ ] 门锁 locked=false → true 过渡有渐变（非瞬跳）
+
+---
+
+### P2.5-7: 影音（AV）
+
+```gherkin
+场景：智能音箱播放
+Given 桌面有一个 smart-speaker
+When  客户点击开启，并在 InfoCard 拖音量到 80
+Then  state.on=true, state.volume=80
+And   音箱顶部 LED 环发光
+And   周围出现 5 圈向外扩散音波环，最大半径 ≈ 1.4m（volume 相关）
+
+场景：停止播放
+Given 音箱正在播放
+When  关闭
+Then  音波环淡出，LED 环熄灭
+```
+
+**验收：**
+- [ ] 音量影响音波环扩散半径与速度
+- [ ] 音波环 5 圈相位错开，不出现"一齐脉动"的节拍感
+
+---
+
+### P2.5-8: 架构（Architecture）
+
+```gherkin
+场景：KNX 网关运行态
+Given 墙挂机柜中有一个 KNX 网关，state.on=true（默认）
+When  聚焦架构子系统
+Then  网关周围出现 80 个黄色 (#d4a853) 粒子绕水平环旋转（半径 30-50cm）
+And   粒子各自独立速度 / 相位，不齐步
+
+场景：智能主机（IP）
+Given 机柜中有一个智能主机
+When  聚焦架构子系统
+Then  主机周围出现蓝色 (#4ea8ff) 粒子环
+And   屏幕 emissive 呼吸式脉动
+
+场景：架构子系统关闭
+Given 任意架构设备 state.on=false
+Then  粒子 intensity lerp 到 0.25（弱提示，仍知道"还在"）
+```
+
+**验收：**
+- [ ] KNX 黄色 vs IP 蓝色可视觉区分
+- [ ] 聚焦离焦时粒子 opacity 平滑过渡
+
+---
+
+### P2.5-9: 网络（Network）+ WiFi 体积热力图
+
+```gherkin
+场景：WiFi 热力图显形
+Given 楼层中有至少 1 个 AP（ap-ceiling / ap-wall / router），各自参数已配置
+When  用户点击 SubsystemBar "网络"聚焦
+Then  visibleSubsystems.network === true
+And   selectedSubsystem === 'network'
+And   整层房间（由所有墙端点 + 0.5m padding 组成的 bbox）内浮现体积热力图
+And   颜色梯度从深绿（近 AP 中心）→ 黄绿 → 黄 → 橙 → 红（边缘）
+And   脉动频率 ≈ 1.1Hz
+
+场景：取消网络聚焦
+Given 网络热力图正在显示
+When  再次点击"网络"取消聚焦
+Then  热力图消失（<NetworkHeatmapOverlay /> 返回 null）
+And   墙体透明度恢复
+
+场景：AP 方向性
+Given 一个 ap-wall，params.direction=90
+When  网络聚焦
+Then  该 AP 的覆盖呈"朝屋内的椭球"（正方向 boost=1+0.6*1.5，反向 penal 衰减）
+And   背墙方向信号强度显著更弱
+
+场景：多 AP 叠加取最大
+Given 楼层有 3 个 AP
+When  网络聚焦
+Then  shader 对每个体素取 max(signal_i)，不是求和
+And   AP 功率低的角落呈现红色（弱信号）
+
+场景：无 AP 不渲染
+Given 楼层中没有 ap-ceiling/ap-wall/router
+When  网络聚焦
+Then  NetworkHeatmapOverlay 返回 null（无几何 / 无 shader 成本）
+```
+
+**验收：**
+- [ ] 热力图仅在**聚焦 network 且有 AP**时出现
+- [ ] 房间 bbox 从 useScene 的墙端点并集自动派生
+- [ ] 相机绕场景一圈，热力图色块始终"在房间里"（uCamPos 正确）
+- [ ] 无 AP / 切换子系统时立即消失，无残影
+
+---
+
+### P2.5-10: X 光透明模式（Xray）
+
+```gherkin
+场景：网络聚焦触发 X 光
+Given 任意楼层
+When  用户聚焦网络子系统
+Then  所有墙体 material.opacity 从基线 lerp 到 0.12
+And   墙体 transparent=true, depthWrite=false
+And   过渡时长 ≈ 0.25s
+And   穿过墙体可看到机柜内的路由/交换机 + 热力图
+
+场景：架构聚焦触发 X 光
+Given 任意楼层
+When  聚焦架构子系统
+Then  墙体透明度同样变为 0.12
+And   机柜内的 KNX 网关/智能主机粒子环清晰可见
+
+场景：离开 X 光触发子系统
+Given 墙体处于 X 光透明状态
+When  切到非 network/architecture 子系统（如灯光） 或 取消聚焦
+Then  墙体 opacity lerp 回 __vilhilXrayBase.opacity（原始值）
+And   transparent / depthWrite 恢复原始值
+And   不留下任何"残留半透明墙"
+
+场景：X 光不影响 device focus fade
+Given 网络聚焦 + X 光开启
+Then  墙体透明度来自 __vilhilXrayBase
+And   设备透明度来自 __vilhilFocusBase（两套 base 独立）
+And   两者不相互污染
+```
+
+**验收：**
+- [ ] 墙体透明过渡平滑（无 0→0.12 跳变）
+- [ ] 离开触发子系统后 0.3s 内墙体完全恢复
+- [ ] 多次来回切换不会出现 opacity 漂移（每次都对齐 base）
+- [ ] 性能无劣化（`useFrame` 仅遍历 wall 集合，非全场景 traverse）
+
+---
+
+### P2.5-11: 楼层作用域一致性（跨场景硬规则）
+
+```gherkin
+场景：多楼层切换不污染展示
+Given 项目有 2 层，1F 有 AP，2F 无 AP
+When  用户切到 1F 并聚焦网络
+Then  热力图出现且 bbox 只包含 1F 的墙
+When  用户切到 2F（仍保持聚焦）
+Then  热力图基于 2F 的墙 bbox（此处无 AP 则消失）
+And   墙体 X 光只对当前楼层可见墙生效
+```
+
+**验收：**
+- [ ] 楼层切换时 bbox 会 recompute（不缓存跨层数据）
+- [ ] 当前被隐藏的楼层不计入 wall bbox（若 UI 设有楼层过滤）
+- [ ] 切层时不出现热力图"闪一帧旧 bbox"
+
+---
+
+### P2.5 测试检查表（一次性跑完）
+
+按此顺序手测，可以覆盖 9 大子系统 + 热力图 + X 光：
+
+1. **放置**：每个子系统放 1-2 个设备（筒灯 / 开关 / 窗帘 / 出风口 / PIR / 门锁 / 音箱 / KNX / AP）
+2. **聚焦语义**：依次点击 SubsystemBar 9 个 label，验证"淡化但不隐藏"
+3. **显隐语义**：点击眼睛图标，验证"隐藏但不改变聚焦"
+4. **灯光**：点灯 → 渐亮 → 拖亮度 → 色温 → 关灯渐灭
+5. **面板**：点开关按键动画 + LED / 调光旋钮旋转 / 场景键触发
+6. **窗帘**：4 种类型各测开合度 + 百叶角度 + 双层独立
+7. **传感器**：PIR 触发切红色 / 烟感告警
+8. **暖通**：vent-4way 制冷 / ac-wall 制热 / 关闭淡出
+9. **安防**：摄像头 FOV 滑动 / 门锁切换
+10. **影音**：音箱音量 + 音波扩散
+11. **架构**：KNX 黄色粒子 / 主机蓝色粒子
+12. **网络**：聚焦 → 热力图 → 取消 → 消失
+13. **X 光**：网络 + 架构分别聚焦，验墙体透明 + 恢复
+14. **跨楼层**：切层验证 bbox 重算
+15. **取消聚焦**：点击空白区域 / 再次点击当前子系统，全部复原
+
+---
+
+*Phase 2.5 最后更新: 2026-04-22*
+*状态：代码已实现 + `tsc --noEmit` clean；等待前端手测 / e2e*
+

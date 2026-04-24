@@ -1,7 +1,8 @@
 # VilHil Studio — Claude/AI 协作标准
 
 > 本文件是 AI 协作主规范。`CLAUDE.md` 软链到本文件。
-> 当文档冲突时，优先级：`AGENTS.md` > `docs/UI-STANDARD.md` > 其他 docs。
+> 当文档冲突时，优先级：`AGENTS.md` > `docs/CODE-REVIEW.md` > `docs/UI-STANDARD.md` > 其他 docs。
+> **每次提交前必须对照 `docs/CODE-REVIEW.md` 的自检清单逐项确认。**
 
 ## 1. 项目定位
 

@@ -282,3 +282,49 @@ packages/editor/
 ### 关于 WebGPU 与微信
 
 S5 的"客户在微信里打开方案链接"场景可能遇到 WebGPU 不支持的问题。分享链接的 Viewer 可能需要单独做一个 WebGL 版本的轻量渲染器。这是 S5 的问题，当前不处理。
+
+---
+
+## 七、子系统深链接协议
+
+演示页（`/proposal-demo`）支持通过 URL query 参数直接打开指定子系统视图，方便设计师向客户分享特定子系统的演示链接。
+
+### URL 格式
+
+```
+/proposal-demo?module=<subsystem>
+```
+
+### 合法 module 值
+
+| 参数值 | 子系统 |
+|--------|--------|
+| `lighting` | 灯光（默认） |
+| `curtain` | 窗帘 |
+| `sensor` | 传感器 |
+| `panel` | 控制面板 |
+| `hvac` | 暖通空调 |
+| `av` | 音视频 |
+| `security` | 安防 |
+| `network` | 网络 |
+
+### 行为规则
+
+1. **挂载时读取**：页面加载时从 `window.location.search` 读取 `?module` 值，若合法则作为初始子系统视图，否则回落到 `lighting`。
+2. **状态变化时写入**：用户切换子系统时，通过 `window.history.replaceState` 静默更新 URL，不触发 Next.js 路由跳转。
+3. **无 SSR 依赖**：完全基于 `window` API，不使用 `useSearchParams`，不引入 Suspense boundary。
+4. **HUD 无需改动**：`_modules/hud.tsx` 的子系统切换按钮只调用 `setView`，URL 同步由页面层的 `useEffect` 自动处理。
+
+### 使用示例
+
+```
+# 直接打开 HVAC 子系统演示
+/proposal-demo?module=hvac
+
+# 直接打开安防子系统演示
+/proposal-demo?module=security
+```
+
+### 实现位置
+
+`apps/editor/app/proposal-demo/page.tsx` — 两个 `useEffect`（挂载读取 + 状态写入）。

@@ -79,6 +79,26 @@ Current Level Changed
 规则：
 1. 禁止画布是 A 楼层而面板显示 B 楼层数据。
 
-## 6. 变更记录
+## 6. 渲染模式分层 — DeviceRenderMode Context
 
+```text
+DeviceRenderModeProvider（mode='base' | 'demo'）
+  └─ DeviceRenderer
+       ├─ DeviceGeometry（始终渲染，base + demo 共有）
+       ├─ DeviceLight（始终渲染）
+       └─ DeviceEffects（仅 mode='demo' 时渲染）
+            └─ animations/*（13 个独立 effect 文件）
+```
+
+规则：
+1. `DeviceRenderMode` 是纯 UI 渲染层开关，与 `useScene` / `useDeviceState` 数据流正交。
+2. 编辑器后台（`mode='base'`）：无动画、无粒子，保持轻量快速。
+3. 演示页（`mode='demo'`）：叠加全部 9 子系统动态效果。
+4. 渲染模式变化不触发设备状态变化，两者独立。
+
+Provider 入口：`apps/editor/app/proposal-demo/page.tsx`（`<DeviceRenderModeProvider mode="demo">`）。
+
+## 7. 变更记录
+
+- 2026-04-23: 补充 DeviceRenderMode 渲染模式分层说明。
 - 2026-04-17: 新增状态流文档，统一场景/子系统/设备/楼层事件流。
