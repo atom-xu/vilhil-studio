@@ -262,21 +262,77 @@ const HVAC_DEVICES: DeviceDefinition[] = [
     mountType: 'ceiling',
     price: 600,
   },
+  {
+    catalogId: 'HVAC-AC-WALL',
+    name: '壁挂空调',
+    description: '壁挂式空调室内机（冷暖双模）',
+    type: 'equipment',
+    subtype: 'ac-wall',
+    color: '#9b7bea',
+    defaultH: 2.3,                   // 常见安装高度
+    size: [1.00, 0.30, 0.22],        // 100×30×22cm 典型壁挂机
+    subsystem: 'hvac',
+    mountType: 'wall',
+    price: 4500,
+  },
 ]
 
 const CURTAIN_DEVICES: DeviceDefinition[] = [
   {
-    catalogId: 'CURTAIN-TRACK-MOTOR',
-    name: '窗帘轨道电机',
-    description: '电动窗帘轨道电机',
+    catalogId: 'CURTAIN-SIDE-OPEN',
+    name: '对开窗帘',
+    description: '经典左右对开帘，适配任意窗户宽度',
     type: 'motor',
-    subtype: 'track',
+    subtype: 'curtain-side-open',
     color: '#3dd9b6',
     defaultH: 2.5,
-    size: [0.05, 0.3, 0.05],
+    size: [2.4, 2.2, 0.10],              // 默认宽 2.4m（无窗时）/ 高 2.2m / 整体组件占 10cm 深度
     subsystem: 'curtain',
-    mountType: 'hidden',
+    mountType: 'wall',
+    requiresOpening: 'window',
     price: 1200,
+  },
+  {
+    catalogId: 'CURTAIN-ROLLER',
+    name: '卷帘',
+    description: '简洁卷帘，从顶部展开到底',
+    type: 'motor',
+    subtype: 'curtain-roller',
+    color: '#3dd9b6',
+    defaultH: 2.5,
+    size: [1.8, 2.0, 0.10],
+    subsystem: 'curtain',
+    mountType: 'wall',
+    requiresOpening: 'window',
+    price: 800,
+  },
+  {
+    catalogId: 'CURTAIN-VENETIAN',
+    name: '百叶窗',
+    description: '横向叶片升降 + 角度可调',
+    type: 'motor',
+    subtype: 'curtain-venetian',
+    color: '#3dd9b6',
+    defaultH: 2.5,
+    size: [1.5, 1.8, 0.04],              // 装窗框内，深度小
+    subsystem: 'curtain',
+    mountType: 'wall',                    // 特殊：关联到窗户后走窗内定位
+    requiresOpening: 'window',
+    price: 900,
+  },
+  {
+    catalogId: 'CURTAIN-ROMAN',
+    name: '罗马帘',
+    description: '分段折叠罗马帘',
+    type: 'motor',
+    subtype: 'curtain-roman',
+    color: '#3dd9b6',
+    defaultH: 2.5,
+    size: [1.8, 2.0, 0.10],
+    subsystem: 'curtain',
+    mountType: 'wall',
+    requiresOpening: 'window',
+    price: 1500,
   },
 ]
 
@@ -286,7 +342,7 @@ const AV_DEVICES: DeviceDefinition[] = [
     name: '智能音箱',
     description: '桌面智能语音音箱（HomePod 类）',
     type: 'equipment',
-    subtype: 'ap-ceiling',
+    subtype: 'smart-speaker',        // 修：原来错写成 'ap-ceiling' 渲染成 AP 圆盘
     color: '#5ba0f5',
     defaultH: 0.12,
     size: [0.14, 0.17, 0.14],
@@ -393,6 +449,58 @@ const NETWORK_DEVICES: DeviceDefinition[] = [
     mountType: 'wall_switch',
     coverageRadius: 8,
     price: 800,
+  },
+  {
+    catalogId: 'NETWORK-ROUTER',
+    name: '路由器',
+    description: '家用 / 商用千兆路由器',
+    type: 'gateway',
+    subtype: 'router',
+    color: '#60a5fa',
+    defaultH: 0.1,                   // 放在机柜 / 弱电箱中，默认贴地
+    size: [0.32, 0.05, 0.22],        // 32×5×22cm（标准 1U）
+    subsystem: 'network',
+    mountType: 'floor',
+    price: 800,
+  },
+  {
+    catalogId: 'NETWORK-SWITCH',
+    name: '交换机',
+    description: '8 口 / 16 口千兆以太网交换机',
+    type: 'equipment',
+    subtype: 'switch-network',
+    color: '#60a5fa',
+    defaultH: 0.1,
+    size: [0.28, 0.04, 0.18],        // 28×4×18cm
+    subsystem: 'network',
+    mountType: 'floor',
+    price: 600,
+  },
+  {
+    catalogId: 'NETWORK-CABINET-WALL',
+    name: '弱电箱',
+    description: '墙面嵌入 / 明装家用弱电箱（复用 electric-panel GLB）',
+    type: 'equipment',
+    subtype: 'cabinet-wall',
+    color: '#e5e7eb',
+    defaultH: 1.2,                   // 离地 1.2m 安装
+    size: [0.31, 0.74, 0.21],        // 匹配 electric-panel.glb 实际尺寸
+    subsystem: 'network',
+    mountType: 'wall',
+    price: 500,
+  },
+  {
+    catalogId: 'NETWORK-CABINET-FLOOR',
+    name: '落地机柜',
+    description: '18U / 22U 标准机柜',
+    type: 'equipment',
+    subtype: 'cabinet-floor',
+    color: '#e5e7eb',
+    defaultH: 0,                     // 从地面起
+    size: [0.60, 1.80, 0.60],        // 60×180×60cm（约 36U）
+    subsystem: 'network',
+    mountType: 'floor',
+    price: 3500,
   },
 ]
 

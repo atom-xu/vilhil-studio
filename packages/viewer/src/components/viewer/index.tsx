@@ -135,6 +135,11 @@ const Viewer: React.FC<ViewerProps> = ({
       <Bvh>
         <SceneRenderer />
       </Bvh>
+      {/*
+        注意：NetworkHeatmapOverlay / XrayOverlay / DeviceEffects 已搬到演示页（/proposal-demo）。
+        编辑器作为建模工具只做位置/朝向编辑，不承担任何 3D 演示效果，
+        以保持"简单、快速、直接、可编辑"的定位（CLAUDE.md §1 + 2026-04-22 架构决策）。
+      */}
 
       {/* Default Systems */}
       <LevelSystem />

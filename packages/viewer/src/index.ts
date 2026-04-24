@@ -1,4 +1,20 @@
 export { default as Viewer } from './components/viewer'
+export {
+  DeviceEffects,
+  DeviceGeometry,
+  DeviceIndicator,
+  DeviceLight,
+  DeviceRenderer,
+  type DeviceRenderMode,
+  DeviceRenderModeProvider,
+  useDeviceRenderMode,
+} from './components/renderers/device'
+export {
+  NetworkHeatmapOverlay,
+  XrayOverlay,
+  WifiVolumetricHeatmap,
+  type HeatmapAP,
+} from './components/renderers/device/animations'
 export { ASSETS_CDN_URL, resolveAssetUrl, resolveCdnUrl } from './lib/asset-url'
 export { SCENE_LAYER, ZONE_LAYER } from './lib/layers'
 export {

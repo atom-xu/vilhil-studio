@@ -198,13 +198,16 @@ export const APCoverage = ({ radius, position = [0, 0, 0] }: APCoverageProps) =>
 interface PIRCoverageProps {
   radius: number
   position?: [number, number, number]
+  /** 触发态：锥切红色 + 粒子更密集 */
+  triggered?: boolean
 }
 
-export const PIRCoverage = ({ radius, position = [0, 0, 0] }: PIRCoverageProps) => {
-  const color = getSubsystemColor('sensor')
+export const PIRCoverage = ({ radius, position = [0, 0, 0], triggered }: PIRCoverageProps) => {
+  const color = triggered ? '#ef4444' : getSubsystemColor('sensor')
+  const particleCount = triggered ? 200 : 120    // 触发时粒子更密
   return (
     <group>
-      <ParticleCoverage radius={radius} color={color} particleCount={120} position={position} />
+      <ParticleCoverage radius={radius} color={color} particleCount={particleCount} position={position} />
       <PIRParticleCone radius={radius} color={color} position={position} />
     </group>
   )

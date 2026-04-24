@@ -8,6 +8,8 @@ interface LightConeProps {
   position: [number, number, number]
   /** 目标亮度 0-1。传 0 = 关，会渐隐消失。 */
   brightness?: number
+  /** brightness 的别名，供新 effect 统一字段名使用。两者同时传时 brightness 优先。 */
+  intensity?: number
   beamAngle?: number
   height?: number
 }
@@ -21,10 +23,12 @@ interface LightConeProps {
  */
 export const LightCone = ({
   position,
-  brightness = 0.8,
+  brightness,
+  intensity,
   beamAngle = 30,
   height = 2.4,
 }: LightConeProps) => {
+  const resolvedBrightness = brightness ?? intensity ?? 0.8
   const pointsRef = useRef<THREE.Points>(null)
   const groundRef = useRef<THREE.Points>(null)
   const PARTICLE_COUNT = 300
@@ -75,7 +79,7 @@ export const LightCone = ({
     if (!cone || !ground) return
 
     // 亮度插值（约 300ms 过渡）
-    currentBrightness.current += (brightness - currentBrightness.current) * Math.min(dt * 5, 1)
+    currentBrightness.current += (resolvedBrightness - currentBrightness.current) * Math.min(dt * 5, 1)
     const effBrightness = currentBrightness.current
 
     const coneMat = cone.material as THREE.PointsMaterial

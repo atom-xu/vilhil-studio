@@ -67,6 +67,14 @@ const PanelKeyConfigSchema = z.object({
   action: PanelActionSchema,
 })
 
+/** 窗帘层配置（curtain 子系统专用）
+ *  - 单层：[{ material: 'blackout' }]
+ *  - 双层：[{ material: 'sheer' }, { material: 'blackout' }]（内外层顺序）
+ *  - 可任意 N 层；运行时每层开合度存在 state.layerPositions[i] */
+const CurtainLayerSchema = z.object({
+  material: z.enum(['blackout', 'sheer']).default('blackout'),
+})
+
 export const DeviceParamsSchema = z.object({
   direction: z.number().min(0).max(360).optional(),
   elevation: z.number().min(-90).max(90).optional(),
@@ -74,8 +82,19 @@ export const DeviceParamsSchema = z.object({
   coverageAngle: z.number().optional(),
   beamAngle: z.number().optional(),
   curtainWidth: z.number().optional(),
+  /** 窗帘层配置（多层任意，每层独立材质） */
+  layers: z.array(CurtainLayerSchema).optional(),
+  /** 面板按键数量（面板子系统专用） */
+  buttonCount: z.number().int().min(1).max(8).optional(),
   wallId: z.string().optional(),
   wallT: z.number().min(0).max(1).optional(),
+  /**
+   * 墙挂设备所在的墙面（2D 放置时自动识别）
+   * - 'front' = 墙的左法线方向（墙 start→end 顺时针转 90°）
+   * - 'back'  = 墙的右法线方向
+   * 影响 3D 渲染时设备朝向 + 偏移到墙的哪一侧
+   */
+  wallSide: z.enum(['front', 'back']).optional(),
   openingId: z.string().optional(),
   ipAddress: z.string().optional(),
   macAddress: z.string().optional(),
