@@ -3,14 +3,19 @@
  *
  * @react-three/fiber augments JSX.IntrinsicElements globally via module
  * augmentation, but the augmentation doesn't reliably propagate during
- * composite tsc --build because bun resolves @react-three/fiber's peer
- * deps into variant directories where @types/three is unreachable.
+ * composite tsc --build in CI because bun resolves @react-three/fiber's
+ * peer deps into variant directories where @types/three is unreachable.
  *
  * This file replicates the module augmentation pattern R3F uses, declaring
  * the subset of three.js elements we actually use.
  *
  * The empty export makes this file a module, which is required for
  * `declare module` to augment existing modules rather than replace them.
+ *
+ * Keep this file in sync across:
+ *   packages/viewer/src/r3f.d.ts
+ *   packages/editor/src/r3f.d.ts
+ *   apps/editor/r3f.d.ts
  */
 
 export {}
@@ -31,6 +36,9 @@ interface ThreeJSXElements {
   bufferGeometry: any
   edgesGeometry: any
   ringGeometry: any
+  torusGeometry: any
+  tubeGeometry: any
+  latheGeometry: any
   // Meshes & lines
   mesh: any
   instancedMesh: any
@@ -48,6 +56,7 @@ interface ThreeJSXElements {
   meshDepthMaterial: any
   shadowMaterial: any
   lineBasicMaterial: any
+  lineBasicNodeMaterial: any
   lineDashedMaterial: any
   pointsMaterial: any
   shaderMaterial: any
@@ -72,7 +81,7 @@ interface ThreeJSXElements {
   lOD: any
   fog: any
   color: any
-  // Buffer attribute
+  // Buffer attributes
   bufferAttribute: any
   instancedBufferAttribute: any
   // Primitive (R3F-specific)

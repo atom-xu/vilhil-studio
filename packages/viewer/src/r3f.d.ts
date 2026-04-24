@@ -11,6 +11,11 @@
  *
  * The empty export makes this file a module, which is required for
  * `declare module` to augment existing modules rather than replace them.
+ *
+ * Keep this file in sync across:
+ *   packages/viewer/src/r3f.d.ts
+ *   packages/editor/src/r3f.d.ts
+ *   apps/editor/r3f.d.ts
  */
 
 export {}
@@ -19,6 +24,7 @@ interface ThreeJSXElements {
   // Containers
   group: any
   scene: any
+  object3D: any
   // Geometries
   boxGeometry: any
   planeGeometry: any
@@ -30,6 +36,9 @@ interface ThreeJSXElements {
   bufferGeometry: any
   edgesGeometry: any
   ringGeometry: any
+  torusGeometry: any
+  tubeGeometry: any
+  latheGeometry: any
   // Meshes & lines
   mesh: any
   instancedMesh: any
@@ -44,8 +53,10 @@ interface ThreeJSXElements {
   meshLambertMaterial: any
   meshPhysicalMaterial: any
   meshNormalMaterial: any
+  meshDepthMaterial: any
   shadowMaterial: any
   lineBasicMaterial: any
+  lineBasicNodeMaterial: any
   lineDashedMaterial: any
   pointsMaterial: any
   shaderMaterial: any
@@ -70,7 +81,7 @@ interface ThreeJSXElements {
   lOD: any
   fog: any
   color: any
-  // Buffer attribute
+  // Buffer attributes
   bufferAttribute: any
   instancedBufferAttribute: any
   // Primitive (R3F-specific)
