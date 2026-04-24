@@ -1,9 +1,7 @@
 /**
  * POST /api/project/save
  *
- * 保存项目快照到云端。
- * - 匿名用户：创建 owner_id 为 null 的项目
- * - 登录用户：项目关联到当前用户
+ * 保存项目快照到云端。必须登录后才能保存。
  */
 
 import { eq } from 'drizzle-orm'
@@ -17,14 +15,18 @@ const MAX_BODY_SIZE = 20 * 1024 * 1024 // 20MB
 
 export async function POST(request: Request) {
   try {
+    const session = await auth.api.getSession({
+      headers: request.headers,
+    })
+
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: '请先登录' }, { status: 401 })
+    }
+
     const contentLength = request.headers.get('content-length')
     if (contentLength && parseInt(contentLength) > MAX_BODY_SIZE) {
       return NextResponse.json({ error: '请求体过大' }, { status: 413 })
     }
-
-    const session = await auth.api.getSession({
-      headers: request.headers,
-    })
 
     const body = await request.json()
     const { name, data, projectId } = body as {
@@ -65,7 +67,7 @@ export async function POST(request: Request) {
     const [project] = await db
       .insert(projects)
       .values({
-        ownerId: session?.user?.id ?? null,
+        ownerId: session.user.id,
         name,
         slug,
         data,
