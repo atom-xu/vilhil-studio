@@ -7,7 +7,7 @@ import {
   spatialGridManager,
   useScene,
 } from '@pascal-app/core'
-import { InteractiveSystem, useViewer, Viewer } from '@pascal-app/viewer'
+import { DeviceRenderModeProvider, InteractiveSystem, useViewer, Viewer } from '@pascal-app/viewer'
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { ProposalLayout } from '../../components/proposal/proposal-layout'
 import { ViewerOverlay } from '../../components/viewer-overlay'
@@ -710,7 +710,9 @@ export default function Editor({
             />
           ) : null}
           <SelectionPersistenceManager enabled={hasLoadedInitialScene && !showLoader} />
-          <Viewer selectionManager={isFirstPersonMode ? 'default' : 'custom'}>{viewerSceneContent}</Viewer>
+          <DeviceRenderModeProvider mode={isPreviewMode ? 'demo' : 'base'}>
+            <Viewer selectionManager={isFirstPersonMode ? 'default' : 'custom'}>{viewerSceneContent}</Viewer>
+          </DeviceRenderModeProvider>
         </div>
       </div>
       {!isLoading && <ZoneLabelEditorSystem />}
