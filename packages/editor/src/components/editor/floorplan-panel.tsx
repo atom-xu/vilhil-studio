@@ -5,6 +5,7 @@ import {
   type AnyNodeId,
   type BuildingNode,
   calculateLevelMiters,
+  type DeviceNode,
   DoorNode,
   emitter,
   type GuideNode,
@@ -14,6 +15,7 @@ import {
   type Point2D,
   type SiteNode,
   SlabNode,
+  type Subsystem,
   useScene,
   type WallNode,
   WindowNode,
@@ -21,6 +23,7 @@ import {
   type ZoneNode as ZoneNodeType,
 } from '@pascal-app/core'
 import { useViewer } from '@pascal-app/viewer'
+import { getSubsystemColor, placeDevice } from '@vilhil/smarthome'
 import { CheckCircle2, Command } from 'lucide-react'
 import {
   memo,
@@ -2183,6 +2186,350 @@ function buildGridPath(
   return commands.join(' ')
 }
 
+/**
+ * 给墙面挂装设备计算：墙段上的投影点 + 沿墙距离 t + 侧别 + 最终落位点（偏移到墙外侧）
+ *
+ * 墙方向 d = (end - start) / |end - start|
+ * 左法线 nL = (-dz, dx) —— 把 d 顺时针转 90° 得到指向墙一侧的单位法向
+ * 右法线 = -nL
+ * 用 dot(click - proj, nL) 的符号判定 side
+ */
+function computeWallPlacement(
+  wall: WallNode,
+  clickPoint: WallPlanPoint,
+  deviceFaceOffset = 0.05,
+): {
+  projection: WallPlanPoint
+  position: WallPlanPoint
+  t: number
+  side: 'front' | 'back'
+} | null {
+  const [x1, z1] = wall.start
+  const [x2, z2] = wall.end
+  const dx = x2 - x1
+  const dz = z2 - z1
+  const lenSq = dx * dx + dz * dz
+  if (lenSq < 1e-9) return null
+  const len = Math.sqrt(lenSq)
+  const nLx = -dz / len // left normal X
+  const nLz = dx / len // left normal Z
+
+  // project click onto wall segment [0,1]
+  let t = ((clickPoint[0] - x1) * dx + (clickPoint[1] - z1) * dz) / lenSq
+  t = Math.max(0, Math.min(1, t))
+  const px = x1 + t * dx
+  const pz = z1 + t * dz
+
+  // side: dot( click - projection, leftNormal )
+  const ox = clickPoint[0] - px
+  const oz = clickPoint[1] - pz
+  const dotLeft = ox * nLx + oz * nLz
+  const side: 'front' | 'back' = dotLeft >= 0 ? 'front' : 'back'
+
+  // 偏移到墙外侧：墙厚/2 + 小额符号可见量（避免圆点压在墙线上）
+  const thickness = wall.thickness ?? 0.12
+  const offset = thickness / 2 + deviceFaceOffset
+  const sign = side === 'front' ? 1 : -1
+  return {
+    projection: [px, pz],
+    position: [px + nLx * offset * sign, pz + nLz * offset * sign],
+    t,
+    side,
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  天花板设备参考线系统（P1-P5）
+//
+//  用户拖动鼠标放置吸顶设备时，按优先级扫描各种参考：
+//    P1 墙端点（拐角） —— 30cm
+//    P2 墙中线（墙中点 + 法线延伸）—— 20cm
+//    P3 对边墙中线（平行墙对的中轴）—— 20cm（1C 实现）
+//    P4 房间中心轴 —— 20cm（1D 实现）
+//    P5 已放设备对齐 —— 10cm（1F 实现）
+//
+//  CeilingGuide 同时携带吸附后的坐标 + 视觉参考（用于 ghost 层画辅助线）
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * CeilingGuide —— 复用墙绘制同款 tracking 系统后的简化类型
+ *
+ * 全部参考线都由 `computeOrthogonalTracking` 或 `computeExtensionTracking` 生成：
+ *   - tracking-v：通过 anchor 的垂直参考线（cursor 的 X 吸到 anchor 的 X）
+ *   - tracking-h：通过 anchor 的水平参考线（cursor 的 Z 吸到 anchor 的 Z）
+ *   - extension：在某堵墙的无限延长线上
+ *
+ * 拐角 = 同时有 tracking-v 和 tracking-h（由两个 anchor 各给一条）
+ * 设备对齐 = anchor 是某个设备的位置
+ * 房间中轴 = anchor 是某个 zone 的 centroid
+ */
+type CeilingGuide =
+  | {
+      kind: 'tracking-v'
+      anchor: WallPlanPoint
+      /** 虚线从 anchor 画到 cursor 投影处；让用户看清对齐关系 */
+      from: WallPlanPoint
+      to: WallPlanPoint
+    }
+  | {
+      kind: 'tracking-h'
+      anchor: WallPlanPoint
+      from: WallPlanPoint
+      to: WallPlanPoint
+    }
+  | {
+      kind: 'extension'
+      from: WallPlanPoint
+      to: WallPlanPoint
+    }
+  | {
+      /**
+       * 等距参考（Keynote 式）：cursor 在两台设备中点 / 或"B 外侧等 AB 距"延续点
+       * 渲染两条等长线段 + 距离标注，视觉强调"两段一样"
+       */
+      kind: 'equidistant'
+      /** 两端 anchor（参考设备位置） */
+      a: WallPlanPoint
+      b: WallPlanPoint
+      /** cursor 落位点 —— 要么在 AB 中点，要么在"B 外 1 倍 AB"处 */
+      c: WallPlanPoint
+    }
+
+/**
+ * 天花板参考线吸附 —— 复用墙绘制工具的 tracking 系统
+ *
+ * 核心：`computeOrthogonalTracking` 对候选 anchor 做"正交追踪"：
+ *   - 鼠标 X 和某 anchor X 差 < tolerance → 吸附到 anchor 的 X（垂直参考线）
+ *   - 鼠标 Z 和某 anchor Z 差 < tolerance → 吸附到 anchor 的 Z（水平参考线）
+ *   - 两轴同时命中 → 落在两条线的交点
+ *
+ * 拐角吸附 = 同时命中同一 anchor 的 H 和 V
+ * 墙中线 / 对边 / 房间中心 / 设备对齐 = 把对应 anchor（墙中点 / zone 中心 / 设备位置）
+ * 喂进候选即可，无需五套专门算法
+ *
+ * 延长线追踪（`computeExtensionTracking`）作为备选：在墙的无限延长线上时吸附
+ */
+/**
+ * 等距参考（Keynote 式）
+ *
+ * 对任意有序设备对 (a, b)，检查两种等距关系：
+ *   1. 中点：cursor ≈ (a+b)/2 → 三点 a, cursor, b 等距（cursor 在中间）
+ *   2. 延续：cursor ≈ b + (b-a) → 三点 a, b, cursor 等距链（cursor 在右侧）
+ *
+ * 取距离鼠标最近的命中。
+ */
+function findEquidistantSnap(
+  cursor: WallPlanPoint,
+  devicePoints: WallPlanPoint[],
+  tolerance: number,
+): { snapPoint: WallPlanPoint; a: WallPlanPoint; b: WallPlanPoint } | null {
+  if (devicePoints.length < 2) return null
+  let best: {
+    snapPoint: WallPlanPoint
+    a: WallPlanPoint
+    b: WallPlanPoint
+    dist: number
+  } | null = null
+  const tolSq = tolerance * tolerance
+
+  for (let i = 0; i < devicePoints.length; i++) {
+    for (let j = 0; j < devicePoints.length; j++) {
+      if (i === j) continue
+      const a = devicePoints[i]!
+      const b = devicePoints[j]!
+
+      // 中点（只在 i<j 时检查以避免重复）
+      if (i < j) {
+        const mid: WallPlanPoint = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]
+        const dx = cursor[0] - mid[0]
+        const dz = cursor[1] - mid[1]
+        const dsq = dx * dx + dz * dz
+        if (dsq <= tolSq && (!best || dsq < best.dist)) {
+          best = { snapPoint: mid, a, b, dist: dsq }
+        }
+      }
+
+      // 延续：cursor 在 B 外侧 1 倍 AB 距处（"a --- b --- cursor"，等距链）
+      const ext: WallPlanPoint = [b[0] + (b[0] - a[0]), b[1] + (b[1] - a[1])]
+      const dx = cursor[0] - ext[0]
+      const dz = cursor[1] - ext[1]
+      const dsq = dx * dx + dz * dz
+      if (dsq <= tolSq && (!best || dsq < best.dist)) {
+        best = { snapPoint: ext, a, b, dist: dsq }
+      }
+    }
+  }
+  if (!best) return null
+  return { snapPoint: best.snapPoint, a: best.a, b: best.b }
+}
+
+function computeCeilingSnap(
+  point: WallPlanPoint,
+  walls: WallNode[],
+  zones: ZoneNodeType[],
+  devices: DeviceNode[],
+  openings: OpeningNode[] = [],
+  ignoreId: string | null = null,
+): { snapPoint: WallPlanPoint; guides: CeilingGuide[] } {
+  const TOLERANCE = 0.05 // 5cm —— 和墙工具默认相当
+
+  // ── 第 0 步：等距参考优先（Keynote 杀手级：两设备中点 / 等距链延续） ──
+  // 明确的用户意图信号："我就要放在两台之间 / 延续等距"
+  const devicePoints: WallPlanPoint[] = devices
+    .filter((d) => !ignoreId || d.id !== ignoreId)
+    .map((d) => [d.position[0], d.position[2]] as WallPlanPoint)
+  const equi = findEquidistantSnap(point, devicePoints, TOLERANCE)
+  if (equi) {
+    return {
+      snapPoint: equi.snapPoint,
+      guides: [{ kind: 'equidistant', a: equi.a, b: equi.b, c: equi.snapPoint }],
+    }
+  }
+
+  // 收集候选锚点：
+  //   1) 墙端点（tracking-candidates，限制在 8m 内）
+  //   2) 无门窗墙的中点（"墙中线"语义）
+  //   3) zone 中心（"房间中心轴"语义）
+  //   4) 其他已放设备位置（"设备对齐"语义）
+  const candidates: WallPlanPoint[] = [
+    ...collectTrackingCandidates({ walls, cursor: point, distanceLimit: 8 }),
+  ]
+  for (const w of walls) {
+    if (openings.some((o) => o.wallId === w.id)) continue
+    candidates.push([(w.start[0] + w.end[0]) / 2, (w.start[1] + w.end[1]) / 2])
+  }
+  for (const z of zones) {
+    const poly = z.polygon as Array<[number, number]> | undefined
+    if (!poly || poly.length < 3) continue
+    let cx = 0, cz = 0
+    for (const [x, zz] of poly) { cx += x; cz += zz }
+    candidates.push([cx / poly.length, cz / poly.length])
+  }
+  for (const d of devices) {
+    if (ignoreId && d.id === ignoreId) continue
+    candidates.push([d.position[0], d.position[2]])
+  }
+
+  // 正交追踪：H + V 轴
+  const ortho = computeOrthogonalTracking({ cursor: point, candidates, tolerance: TOLERANCE })
+  if (ortho) {
+    const guides: CeilingGuide[] = []
+    if (ortho.verticalAnchor) {
+      guides.push({
+        kind: 'tracking-v',
+        anchor: ortho.verticalAnchor,
+        from: ortho.verticalAnchor,
+        to: ortho.snappedPoint,
+      })
+    }
+    if (ortho.horizontalAnchor) {
+      guides.push({
+        kind: 'tracking-h',
+        anchor: ortho.horizontalAnchor,
+        from: ortho.horizontalAnchor,
+        to: ortho.snappedPoint,
+      })
+    }
+    return { snapPoint: ortho.snappedPoint, guides }
+  }
+
+  // 延长线追踪（备选）：cursor 在某堵墙的无限延长线上
+  const ext = computeExtensionTracking({ cursor: point, walls, tolerance: TOLERANCE })
+  if (ext) {
+    return {
+      snapPoint: ext.snappedPoint,
+      guides: [{ kind: 'extension', from: ext.referencePoint, to: ext.snappedPoint }],
+    }
+  }
+
+  return { snapPoint: point, guides: [] }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  全时尺寸 —— 从 ghost 位置向 +X / -X / +Z / -Z 四个方向射线求最近墙
+//  类似 CAD dynamic input：放置时实时显示到最近墙的距离，不强迫吸附
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface WallDistance {
+  /** ghost 位置 */
+  from: WallPlanPoint
+  /** 命中点 */
+  to: WallPlanPoint
+  /** 距离（米） */
+  distance: number
+}
+
+/** 射线 origin → dir 与线段 p0 → p1 求交，返回 t 和命中点（t < 0 无交） */
+function raySegmentHit(
+  originX: number,
+  originZ: number,
+  dirX: number,
+  dirZ: number,
+  p0X: number,
+  p0Z: number,
+  p1X: number,
+  p1Z: number,
+): { t: number; hitX: number; hitZ: number } | null {
+  const ex = p1X - p0X
+  const ez = p1Z - p0Z
+  // 线性方程：
+  //   origin + t * dir = p0 + s * (p1 - p0)
+  // 矩阵：[dirX  -ex] [t]   [p0X - originX]
+  //       [dirZ  -ez] [s] = [p0Z - originZ]
+  const det = dirX * -ez - dirZ * -ex
+  if (Math.abs(det) < 1e-9) return null // 平行
+  const rhsX = p0X - originX
+  const rhsZ = p0Z - originZ
+  const t = (-ez * rhsX + ex * rhsZ) / det
+  const s = (dirX * rhsZ - dirZ * rhsX) / det
+  if (t < 1e-6) return null // 反方向或太近（忽略自身位置处）
+  if (s < 0 || s > 1) return null // 不在段内
+  return {
+    t,
+    hitX: originX + t * dirX,
+    hitZ: originZ + t * dirZ,
+  }
+}
+
+/**
+ * 从 point 向 +X / -X / +Z / -Z 四个轴方向射线，各方向返回最近墙命中
+ * 超过 maxRange（默认 15m）不返回，避免过长的标注线
+ */
+function computeWallDistancesFourWay(
+  point: WallPlanPoint,
+  walls: WallNode[],
+  maxRange = 15,
+): WallDistance[] {
+  const dirs: Array<[number, number]> = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ]
+  const result: WallDistance[] = []
+  for (const [dx, dz] of dirs) {
+    let nearest: { t: number; hit: WallPlanPoint } | null = null
+    for (const w of walls) {
+      const hit = raySegmentHit(
+        point[0], point[1], dx, dz,
+        w.start[0], w.start[1], w.end[0], w.end[1],
+      )
+      if (!hit || hit.t > maxRange) continue
+      if (nearest && hit.t >= nearest.t) continue
+      nearest = { t: hit.t, hit: [hit.hitX, hit.hitZ] }
+    }
+    if (nearest) {
+      result.push({
+        from: point,
+        to: nearest.hit,
+        distance: nearest.t,
+      })
+    }
+  }
+  return result
+}
+
 function findClosestWallPoint(
   point: WallPlanPoint,
   walls: WallNode[],
@@ -3874,6 +4221,709 @@ function FloorplanCompass({
   )
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  FloorplanDeviceLayer —— 2D 平面上的设备符号层
+//
+//  职责：为当前楼层所有设备渲染 SVG 小圆点（按 subsystem 上色）
+//  位置：device.position[0] = x（plan），device.position[2] = z（plan）
+//  尺寸：半径 0.15m（和 0.5m 网格比例约 3:10，视觉不抢戏）
+//
+//  Step 1 最简实现：只画圆点 + 外圈光晕。后续（Step 2-4）再补预览/吸附/
+//  朝向/覆盖范围。不做交互事件（选中后续走 handleBackgroundClick）。
+// ═══════════════════════════════════════════════════════════════════════════
+function FloorplanDeviceLayer({
+  devices,
+  worldUnitsPerPixel,
+  selectedIdSet,
+  onDeviceSelect,
+  onDeviceDragStart,
+  onDeviceDelete,
+  isDeleteMode,
+}: {
+  devices: DeviceNode[]
+  worldUnitsPerPixel: number
+  selectedIdSet: ReadonlySet<string>
+  onDeviceSelect: (deviceId: string, event: ReactMouseEvent<SVGElement>) => void
+  /**
+   * 设备被按下时调用 —— 父组件用这个启动 drag 流程（在 SVG 级接管 pointermove / pointerup）
+   */
+  onDeviceDragStart: (deviceId: string, event: ReactPointerEvent<SVGCircleElement>) => void
+  /** 删除模式下点击调用 */
+  onDeviceDelete: (deviceId: string, event: ReactMouseEvent<SVGElement>) => void
+  /** 当前是否处于删除模式（cursor 变成 × + click 走删除路径） */
+  isDeleteMode: boolean
+}) {
+  if (devices.length === 0) return null
+
+  // 半径随缩放略微自适应：远看小圆点不消失，近看不过大
+  const r = Math.max(0.08, Math.min(0.2, worldUnitsPerPixel * 6))
+  const haloR = r * 1.8
+  const strokeW = Math.max(0.01, worldUnitsPerPixel * 0.8)
+
+  // 命中半径放大：小圆点点击不容易，用一个更大的透明圆做 hit target
+  const hitR = r * 3
+
+  return (
+    <g>
+      {devices.map((d) => {
+        // SVG 坐标 = -world（floorplan 用 toSvgX/toSvgY 做负号翻转）
+        const cx = -d.position[0]
+        const cy = -d.position[2]
+        const color = getSubsystemColor(d.subsystem)
+        const isSelected = selectedIdSet.has(d.id)
+        const handleSelect = (
+          e:
+            | ReactMouseEvent<SVGGElement>
+            | ReactPointerEvent<SVGCircleElement>
+            | ReactPointerEvent<SVGGElement>,
+        ) => {
+          e.stopPropagation()
+          if (isDeleteMode) {
+            onDeviceDelete(d.id, e as ReactMouseEvent<SVGElement>)
+          } else {
+            onDeviceSelect(d.id, e as ReactMouseEvent<SVGElement>)
+          }
+        }
+        return (
+          <g key={d.id} style={{ cursor: isDeleteMode ? 'not-allowed' : 'pointer' }}>
+            {/* 视觉：光晕 + 实心 */}
+            <circle
+              cx={cx}
+              cy={cy}
+              r={haloR}
+              fill={color}
+              opacity={0.18}
+              pointerEvents="none"
+            />
+            <circle
+              cx={cx}
+              cy={cy}
+              r={r}
+              fill={color}
+              stroke="#fff"
+              strokeWidth={strokeW}
+              opacity={0.95}
+              pointerEvents="none"
+            />
+            {/* 选中态：外层蓝环（不响应事件） */}
+            {isSelected && (
+              <circle
+                cx={cx}
+                cy={cy}
+                r={r * 2.1}
+                fill="none"
+                stroke="#006AFF"
+                strokeWidth={strokeW * 2}
+                opacity={0.9}
+                pointerEvents="none"
+              />
+            )}
+            {/* 摄像头方向指示扇形 —— 始终显示（和 3D 演示页保持视觉一致）
+                未选中：subsystem 橙色（安防色）；选中：蓝色（匹配选中态蓝环）
+                纯视觉，不交互；方向调节由"follow mode"接管 */}
+            {d.subsystem === 'security' &&
+              (d.renderType === 'dome' || d.renderType === 'camera-bullet') && (
+                <FloorplanCameraDirectionSector
+                  centerSvg={[cx, cy]}
+                  directionDeg={(d.params?.direction as number | undefined) ?? 0}
+                  innerR={r * 1.15}
+                  outerR={r * 2.0}
+                  color={isSelected ? '#006AFF' : color}
+                />
+              )}
+            {/* 命中目标：透明大圆
+                - 删除模式：只响应 click（走删除）
+                - 选择模式：onPointerDown 启动 drag，onClick 纯点击选中
+             */}
+            <circle
+              cx={cx}
+              cy={cy}
+              r={hitR}
+              fill="transparent"
+              onPointerDown={(e) => {
+                if (e.button !== 0) return
+                if (isDeleteMode) return // 删除模式不启动 drag
+                e.stopPropagation()
+                onDeviceDragStart(d.id, e)
+              }}
+              onClick={handleSelect}
+            />
+          </g>
+        )
+      })}
+    </g>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  FloorplanDeviceGhost —— 设备工具激活时的鼠标预览
+//
+//  见到鼠标跟着一个半透明圆点 + 虚线外圈就知道"现在点一下会放设备"
+// ═══════════════════════════════════════════════════════════════════════════
+/** 参考线层 —— 独立于 ghost，放置预览和拖动移动都能用 */
+function FloorplanCeilingGuidesLayer({
+  guides,
+  worldUnitsPerPixel,
+}: {
+  guides: CeilingGuide[]
+  worldUnitsPerPixel: number
+}) {
+  if (guides.length === 0) return null
+  return (
+    <g pointerEvents="none">
+      {guides.map((g, i) => (
+        <FloorplanCeilingGuideVisual
+          key={`${g.kind}-${i}`}
+          guide={g}
+          worldUnitsPerPixel={worldUnitsPerPixel}
+        />
+      ))}
+    </g>
+  )
+}
+
+/** 全时尺寸层 —— 4 向墙距离标线 + 数字（CAD dynamic input 风格）
+ *
+ * 样式：和墙体尺寸完全一致（灰色文字 + halo），无高亮无变色
+ * "对齐"的视觉反馈由参考线（橙色虚线）提供，数字只负责精准阅读
+ */
+function FloorplanWallDistancesLayer({
+  distances,
+  unit,
+  worldUnitsPerPixel,
+  palette,
+}: {
+  distances: WallDistance[]
+  unit: 'metric' | 'imperial'
+  worldUnitsPerPixel: number
+  palette: FloorplanPalette
+}) {
+  if (distances.length === 0) return null
+  const strokeW = Math.max(0.006, worldUnitsPerPixel * 0.6)
+  const dash = Math.max(0.06, worldUnitsPerPixel * 3)
+  const fontSize = FLOORPLAN_MEASUREMENT_LABEL_FONT_SIZE
+  const haloW = FLOORPLAN_MEASUREMENT_LABEL_STROKE_WIDTH
+  const fill = palette.measurementStroke
+
+  return (
+    <g pointerEvents="none">
+      {distances.map((d, i) => {
+        const fx = -d.from[0]
+        const fy = -d.from[1]
+        const tx = -d.to[0]
+        const ty = -d.to[1]
+        const mx = (fx + tx) / 2
+        const my = (fy + ty) / 2
+        const label = formatMeasurement(d.distance, unit)
+        return (
+          <g key={i}>
+            <line
+              x1={fx} y1={fy} x2={tx} y2={ty}
+              stroke={fill}
+              strokeWidth={strokeW}
+              strokeDasharray={`${dash} ${dash * 0.5}`}
+              opacity={0.4}
+            />
+            <circle cx={tx} cy={ty} r={strokeW * 1.5} fill={fill} opacity={0.55} />
+            <text
+              x={mx} y={my}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+              fontSize={fontSize}
+              fontWeight={600}
+              paintOrder="stroke"
+              stroke={palette.surface}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={haloW}
+              fill={fill}
+              style={{ userSelect: 'none' }}
+            >
+              {label}
+            </text>
+          </g>
+        )
+      })}
+    </g>
+  )
+}
+
+/** Ghost —— 仅放置预览期间的半透明圆点 */
+function FloorplanDeviceGhost({
+  point,
+  subsystem,
+  worldUnitsPerPixel,
+}: {
+  point: WallPlanPoint | null
+  subsystem: string | null
+  worldUnitsPerPixel: number
+}) {
+  if (!point || !subsystem) return null
+  const r = Math.max(0.08, Math.min(0.2, worldUnitsPerPixel * 6))
+  const haloR = r * 2.2
+  const strokeW = Math.max(0.015, worldUnitsPerPixel * 1.1)
+  const dashLen = Math.max(0.08, worldUnitsPerPixel * 4)
+  const cx = -point[0]
+  const cy = -point[1]
+  const color = getSubsystemColor(subsystem as Subsystem)
+
+  return (
+    <g pointerEvents="none">
+      <circle cx={cx} cy={cy} r={haloR} fill={color} opacity={0.1} />
+      <circle cx={cx} cy={cy} r={r} fill={color} opacity={0.5} stroke="#fff" strokeWidth={strokeW} />
+      <circle cx={cx} cy={cy} r={haloR} fill="none" stroke={color}
+        strokeWidth={strokeW} strokeDasharray={`${dashLen} ${dashLen * 0.6}`} opacity={0.8} />
+    </g>
+  )
+}
+
+/** 单条 ceiling guide 的视觉渲染 —— 全部用统一强调色（Keynote 式），避免多色混乱
+ *
+ * 不同参考类型用"形状"区分，不用"颜色"区分：
+ *   - corner → × 十字
+ *   - device-align → 点到点的虚线（对齐到另一台设备）
+ *   - wall-midline / between-walls / room-axis → 跨房间的虚线轴
+ */
+const GUIDE_ACCENT = '#f97316' // orange-500，足够醒目又不刺眼
+
+function FloorplanCeilingGuideVisual({
+  guide,
+  worldUnitsPerPixel,
+}: {
+  guide: CeilingGuide
+  worldUnitsPerPixel: number
+}) {
+  // 等距参考：画两条线段 a-c 和 c-b，两段同长，各自标注距离
+  if (guide.kind === 'equidistant') {
+    const dist = Math.hypot(guide.a[0] - guide.c[0], guide.a[1] - guide.c[1])
+    const label = dist >= 0.1 ? formatMeasurement(dist, 'metric') : undefined
+    return (
+      <g>
+        <FloorplanGuideLine
+          from={guide.a}
+          to={guide.c}
+          color={GUIDE_ACCENT}
+          worldUnitsPerPixel={worldUnitsPerPixel}
+          label={label}
+        />
+        <FloorplanGuideLine
+          from={guide.c}
+          to={guide.b}
+          color={GUIDE_ACCENT}
+          worldUnitsPerPixel={worldUnitsPerPixel}
+          label={label}
+        />
+        <FloorplanGuideAnchorDot
+          anchor={guide.a}
+          color={GUIDE_ACCENT}
+          worldUnitsPerPixel={worldUnitsPerPixel}
+        />
+        <FloorplanGuideAnchorDot
+          anchor={guide.b}
+          color={GUIDE_ACCENT}
+          worldUnitsPerPixel={worldUnitsPerPixel}
+        />
+      </g>
+    )
+  }
+
+  // tracking-v / tracking-h / extension：从 anchor 到 cursor 的虚线
+  const dist = Math.hypot(guide.from[0] - guide.to[0], guide.from[1] - guide.to[1])
+  const label = dist >= 0.1 ? formatMeasurement(dist, 'metric') : undefined
+  return (
+    <g>
+      <FloorplanGuideLine
+        from={guide.from}
+        to={guide.to}
+        color={GUIDE_ACCENT}
+        worldUnitsPerPixel={worldUnitsPerPixel}
+        label={label}
+      />
+      {(guide.kind === 'tracking-v' || guide.kind === 'tracking-h') && (
+        <FloorplanGuideAnchorDot
+          anchor={guide.anchor}
+          color={GUIDE_ACCENT}
+          worldUnitsPerPixel={worldUnitsPerPixel}
+        />
+      )}
+    </g>
+  )
+}
+
+/** 摄像头旋转指示扇形 —— 纯视觉，不交互
+ *
+ * 方向调节交互由上层 "follow mode" 接管：选中摄像头后鼠标自动追方向，任意位置单击确认
+ * 这个扇形只负责实时显示当前朝向（跟着 params.direction 更新）
+ *
+ * 形状：环形扇形 90° 宽，嵌在内点（内圈 r × 1.15）和蓝选中环（外圈 r × 2.0）之间
+ */
+// ═══════════════════════════════════════════════════════════════════════════
+//  WiFi 热力图 —— UniFi 风格物理模型
+//
+//  模型：RSSI(d) = Ptx + Gt - FSPL(d) - ΣWallLoss
+//    Ptx        发射功率（dBm）
+//    Gt         天线增益（dBi）
+//    FSPL(d)    室内路径损耗 L0(freq) + 10n·log10(d)，n = 路径损耗指数
+//    WallLoss   每面墙衰减（dB），按墙种类不同
+//
+//  对齐 UniFi：颜色梯度按信号强度分带
+//    ≥ -55 dBm  → Great (深绿)
+//    ≥ -65      → Good (浅绿)
+//    ≥ -75      → Fair (黄)
+//    ≥ -85      → Poor (橙)
+//    < -85      → None (淡红/透明)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** 每种墙类型在 2.4 GHz / 5 GHz 的单面衰减（dB）
+ *  参考 Cisco/UniFi 室内 RF 规划文档典型值
+ */
+const WALL_ATTENUATION_DB: Record<string, { at2_4: number; at5: number }> = {
+  exterior:       { at2_4: 12, at5: 18 }, // 240mm 外墙（混凝土/砖）
+  'load-bearing': { at2_4: 15, at5: 22 }, // 200mm 承重（钢筋混凝土）
+  interior:       { at2_4: 6,  at5: 10 }, // 120mm 内墙
+  partition:      { at2_4: 4,  at5: 7  }, // 100mm 隔墙
+  light:          { at2_4: 3,  at5: 5  }, // 80mm 轻质
+  // 兜底：未知类型按内墙处理
+  default:        { at2_4: 6,  at5: 10 },
+}
+
+/** 1m 自由空间路径损耗 L(1m) —— 按频率 */
+const FSPL_AT_1M: Record<'2.4' | '5', number> = {
+  '2.4': 40, // ≈ 40.05 dB
+  '5':   46, // ≈ 46.45 dB
+}
+
+interface WifiApParams {
+  txPower: number       // dBm
+  antennaGain: number   // dBi
+  freq: '2.4' | '5'
+  pathLossExp: number   // indoor n（2 = 自由空间，3-4 = 多障碍室内）
+}
+
+const DEFAULT_WIFI: WifiApParams = {
+  txPower: 20,
+  antennaGain: 3,
+  freq: '5',
+  pathLossExp: 2.8,
+}
+
+/** 提取单个 AP 的 WiFi 参数（优先读 params.custom.wifi，否则用默认） */
+function getWifiParams(device: DeviceNode): WifiApParams {
+  const custom = (device.params?.custom as { wifi?: Partial<WifiApParams> } | undefined)?.wifi
+  return {
+    txPower: custom?.txPower ?? DEFAULT_WIFI.txPower,
+    antennaGain: custom?.antennaGain ?? DEFAULT_WIFI.antennaGain,
+    freq: custom?.freq ?? DEFAULT_WIFI.freq,
+    pathLossExp: custom?.pathLossExp ?? DEFAULT_WIFI.pathLossExp,
+  }
+}
+
+/** 两线段是否严格相交（共享端点不算）—— CCW 算法 */
+function segmentsIntersect(
+  ax: number, ay: number, bx: number, by: number,
+  cx: number, cy: number, dx: number, dy: number,
+): boolean {
+  const ccw = (px: number, py: number, qx: number, qy: number, rx: number, ry: number) =>
+    (qx - px) * (ry - py) - (rx - px) * (qy - py)
+  const d1 = ccw(cx, cy, dx, dy, ax, ay)
+  const d2 = ccw(cx, cy, dx, dy, bx, by)
+  const d3 = ccw(ax, ay, bx, by, cx, cy)
+  const d4 = ccw(ax, ay, bx, by, dx, dy)
+  return (
+    ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
+    ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))
+  )
+}
+
+/** 计算 AP 到 point 的 RSSI（dBm）—— 考虑 FSPL + 墙衰减 */
+function computeRssiAtPoint(
+  apX: number, apZ: number,
+  wifi: WifiApParams,
+  px: number, pz: number,
+  walls: WallNode[],
+): number {
+  const dx = px - apX
+  const dz = pz - apZ
+  const d = Math.sqrt(dx * dx + dz * dz)
+  // 近 AP（<0.5m）饱和 —— 避免 log10(小) 奇异
+  if (d < 0.5) return wifi.txPower + wifi.antennaGain - 20
+
+  const fspl = FSPL_AT_1M[wifi.freq] + 10 * wifi.pathLossExp * Math.log10(d)
+
+  // 穿墙衰减
+  let wallLoss = 0
+  for (const w of walls) {
+    const hit = segmentsIntersect(
+      apX, apZ, px, pz,
+      w.start[0], w.start[1], w.end[0], w.end[1],
+    )
+    if (!hit) continue
+    const wallType = ((w.metadata as any)?.wallType as string | undefined) ?? 'default'
+    const att = WALL_ATTENUATION_DB[wallType] ?? WALL_ATTENUATION_DB.default!
+    wallLoss += wifi.freq === '5' ? att.at5 : att.at2_4
+  }
+
+  return wifi.txPower + wifi.antennaGain - fspl - wallLoss
+}
+
+/** RSSI → 颜色 + alpha（UniFi 分带） */
+function rssiToColorBand(rssi: number): { color: string; alpha: number } | null {
+  if (rssi >= -55) return { color: '#16a34a', alpha: 0.55 } // Great  deep green
+  if (rssi >= -65) return { color: '#65a30d', alpha: 0.50 } // Good   lime
+  if (rssi >= -75) return { color: '#ca8a04', alpha: 0.45 } // Fair   amber
+  if (rssi >= -85) return { color: '#ea580c', alpha: 0.40 } // Poor   orange
+  if (rssi >= -95) return { color: '#dc2626', alpha: 0.30 } // VeryPoor red
+  return null // 透明
+}
+
+/** WiFi 热力图层 —— 按 AP 物理模型计算 + 渲染
+ *
+ * 性能：按 bbox × cellSize 构栅格，单 cell 一次跨所有 AP + 所有墙测算
+ * 用 useMemo 按 (aps, walls, bbox) 缓存，移动鼠标不重算
+ */
+function FloorplanWifiHeatmapLayer({
+  aps,
+  walls,
+  worldUnitsPerPixel,
+  /** 0.5m 一个 cell，兼顾精度和性能（20m 户型 = 40×40 = 1600 cells） */
+  cellSize = 0.5,
+}: {
+  aps: DeviceNode[]
+  walls: WallNode[]
+  worldUnitsPerPixel: number
+  cellSize?: number
+}) {
+  const grid = useMemo(() => {
+    if (aps.length === 0 || walls.length === 0) return null
+
+    // bbox = 墙 + AP 范围，各向外扩 5m 给衰减到无信号的地方留白
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity
+    for (const w of walls) {
+      minX = Math.min(minX, w.start[0], w.end[0])
+      maxX = Math.max(maxX, w.start[0], w.end[0])
+      minZ = Math.min(minZ, w.start[1], w.end[1])
+      maxZ = Math.max(maxZ, w.start[1], w.end[1])
+    }
+    for (const ap of aps) {
+      minX = Math.min(minX, ap.position[0])
+      maxX = Math.max(maxX, ap.position[0])
+      minZ = Math.min(minZ, ap.position[2])
+      maxZ = Math.max(maxZ, ap.position[2])
+    }
+    const margin = 5
+    minX -= margin; maxX += margin; minZ -= margin; maxZ += margin
+    const cols = Math.ceil((maxX - minX) / cellSize)
+    const rows = Math.ceil((maxZ - minZ) / cellSize)
+
+    // Pre-extract AP params
+    const apData = aps.map((ap) => ({
+      x: ap.position[0],
+      z: ap.position[2],
+      wifi: getWifiParams(ap),
+    }))
+
+    type Cell = { worldX: number; worldZ: number; rssi: number }
+    const cells: Cell[] = []
+    for (let j = 0; j < rows; j++) {
+      const cz = minZ + (j + 0.5) * cellSize
+      for (let i = 0; i < cols; i++) {
+        const cx = minX + (i + 0.5) * cellSize
+        let maxR = -Infinity
+        for (const ap of apData) {
+          const r = computeRssiAtPoint(ap.x, ap.z, ap.wifi, cx, cz, walls)
+          if (r > maxR) maxR = r
+        }
+        cells.push({ worldX: cx, worldZ: cz, rssi: maxR })
+      }
+    }
+
+    return { cells, cellSize, bbox: { minX, minZ, maxX, maxZ } }
+  }, [aps, walls, cellSize])
+
+  if (!grid) return null
+
+  return (
+    <g pointerEvents="none">
+      {grid.cells.map((cell, i) => {
+        const band = rssiToColorBand(cell.rssi)
+        if (!band) return null
+        // cell 在 world [worldX - cellSize/2, worldX + cellSize/2] 区间
+        // SVG: x = -(worldX + cellSize/2), y = -(worldZ + cellSize/2)
+        const svgX = -(cell.worldX + grid.cellSize / 2)
+        const svgY = -(cell.worldZ + grid.cellSize / 2)
+        return (
+          <rect
+            key={i}
+            x={svgX}
+            y={svgY}
+            width={grid.cellSize}
+            height={grid.cellSize}
+            fill={band.color}
+            opacity={band.alpha}
+          />
+        )
+      })}
+    </g>
+  )
+}
+
+function FloorplanCameraDirectionSector({
+  centerSvg,
+  directionDeg,
+  innerR,
+  outerR,
+  color,
+}: {
+  centerSvg: [number, number]
+  directionDeg: number
+  innerR: number
+  outerR: number
+  color: string
+}) {
+  const [cx, cy] = centerSvg
+  // SVG 空间的可视角度 = world direction 的点反射（SVG = -world，差 180°）
+  const svgAngleRad = (directionDeg * Math.PI) / 180 + Math.PI
+  const span = Math.PI / 2
+  const a0 = svgAngleRad - span / 2
+  const a1 = svgAngleRad + span / 2
+
+  const x0i = cx + Math.cos(a0) * innerR
+  const y0i = cy + Math.sin(a0) * innerR
+  const x0o = cx + Math.cos(a0) * outerR
+  const y0o = cy + Math.sin(a0) * outerR
+  const x1i = cx + Math.cos(a1) * innerR
+  const y1i = cy + Math.sin(a1) * innerR
+  const x1o = cx + Math.cos(a1) * outerR
+  const y1o = cy + Math.sin(a1) * outerR
+
+  const path = [
+    `M ${x0i} ${y0i}`,
+    `L ${x0o} ${y0o}`,
+    `A ${outerR} ${outerR} 0 0 1 ${x1o} ${y1o}`,
+    `L ${x1i} ${y1i}`,
+    `A ${innerR} ${innerR} 0 0 0 ${x0i} ${y0i}`,
+    'Z',
+  ].join(' ')
+
+  return (
+    <path
+      d={path}
+      fill={color}
+      fillOpacity={0.55}
+      stroke={color}
+      strokeWidth={Math.max(0.01, innerR * 0.08)}
+      strokeOpacity={0.9}
+      pointerEvents="none"
+    />
+  )
+}
+
+/** 锚点小圆 —— 对齐参考来源点的醒目标记（小空心圆） */
+function FloorplanGuideAnchorDot({
+  anchor,
+  color,
+  worldUnitsPerPixel,
+}: {
+  anchor: WallPlanPoint
+  color: string
+  worldUnitsPerPixel: number
+}) {
+  const r = Math.max(0.04, worldUnitsPerPixel * 3)
+  const strokeW = Math.max(0.012, worldUnitsPerPixel * 0.9)
+  return (
+    <circle
+      cx={-anchor[0]}
+      cy={-anchor[1]}
+      r={r}
+      fill="none"
+      stroke={color}
+      strokeWidth={strokeW}
+      opacity={0.85}
+    />
+  )
+}
+
+/** 墙中线 / 房间中心轴 / 对边墙中线 / 设备对齐等"直线型"参考的虚线渲染
+ *
+ * 可选 label：在线的中点显示一段距离数字（用于"两台设备间距"等语义）
+ */
+function FloorplanGuideLine({
+  from,
+  to,
+  color,
+  worldUnitsPerPixel,
+  label,
+}: {
+  from: WallPlanPoint
+  to: WallPlanPoint
+  color: string
+  worldUnitsPerPixel: number
+  label?: string
+}) {
+  const strokeW = Math.max(0.012, worldUnitsPerPixel * 0.9)
+  const dash = Math.max(0.08, worldUnitsPerPixel * 4)
+  const x1 = -from[0]
+  const y1 = -from[1]
+  const x2 = -to[0]
+  const y2 = -to[1]
+  return (
+    <g>
+      <line
+        x1={x1} y1={y1} x2={x2} y2={y2}
+        stroke={color}
+        strokeWidth={strokeW}
+        strokeDasharray={`${dash} ${dash * 0.6}`}
+        opacity={0.75}
+      />
+      {label && (
+        <text
+          x={(x1 + x2) / 2}
+          y={(y1 + y2) / 2}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fontFamily="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+          fontSize={FLOORPLAN_MEASUREMENT_LABEL_FONT_SIZE}
+          fontWeight={600}
+          paintOrder="stroke"
+          stroke="#ffffff"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={FLOORPLAN_MEASUREMENT_LABEL_STROKE_WIDTH}
+          fill={color}
+          style={{ userSelect: 'none' }}
+        >
+          {label}
+        </text>
+      )}
+    </g>
+  )
+}
+
+/** 拐角吸附指示：在锚点画一个 × 十字 —— 醒目、不抢 ghost */
+function FloorplanGuideCornerMark({
+  anchor,
+  color,
+  worldUnitsPerPixel,
+}: {
+  anchor: WallPlanPoint
+  color: string
+  worldUnitsPerPixel: number
+}) {
+  const ax = -anchor[0]
+  const ay = -anchor[1]
+  const armLen = Math.max(0.15, worldUnitsPerPixel * 8)
+  const strokeW = Math.max(0.02, worldUnitsPerPixel * 1.5)
+  return (
+    <g pointerEvents="none">
+      <line x1={ax - armLen} y1={ay - armLen} x2={ax + armLen} y2={ay + armLen}
+        stroke={color} strokeWidth={strokeW} strokeLinecap="round" opacity={0.9} />
+      <line x1={ax - armLen} y1={ay + armLen} x2={ax + armLen} y2={ay - armLen}
+        stroke={color} strokeWidth={strokeW} strokeLinecap="round" opacity={0.9} />
+    </g>
+  )
+}
+
 export function FloorplanPanel() {
   const viewportHostRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
@@ -4070,6 +5120,42 @@ export function FloorplanPanel() {
         .filter((node): node is ZoneNodeType => node?.type === 'zone')
     }),
   )
+  /**
+   * 当前楼层的设备节点 —— 供 2D 符号层使用
+   *
+   * 直接扫 nodes 里 parentId === levelId 的 device —— 比 level.children 更鲁棒：
+   * 3D DeviceTool 走 placeDevice 也设置 parentId=levelId，但不同路径下 children
+   * 数组是否同步写入存在个别历史/遗留偏差；按 parentId 扫描能覆盖所有路径。
+   */
+  const levelDevices = useScene(
+    useShallow((state) => {
+      if (!levelId) return [] as DeviceNode[]
+      const out: DeviceNode[] = []
+      for (const n of Object.values(state.nodes)) {
+        if (n?.type === 'device' && n.parentId === levelId) out.push(n as DeviceNode)
+      }
+      return out
+    }),
+  )
+
+  /** AP / 路由/ 交换机 —— 参与 WiFi 热力图计算的网络设备
+   *  renderType 匹配 catalog 现有命名（subtype = ceiling / wall / router）+ 旧别名
+   */
+  const apDevices = useMemo(
+    () =>
+      levelDevices.filter((d) => {
+        if (d.subsystem !== 'network') return false
+        const rt = d.renderType
+        return (
+          rt === 'ceiling' ||
+          rt === 'wall' ||
+          rt === 'router' ||
+          rt === 'ap-ceiling' ||
+          rt === 'ap-wall'
+        )
+      }),
+    [levelDevices],
+  )
 
   const [draftStart, setDraftStart] = useState<WallPlanPoint | null>(null)
   const [draftEnd, setDraftEnd] = useState<WallPlanPoint | null>(null)
@@ -4092,6 +5178,33 @@ export function FloorplanPanel() {
   const [guideTransformDraft, setGuideTransformDraft] = useState<GuideTransformDraft | null>(null)
   const [cursorPoint, setCursorPoint] = useState<WallPlanPoint | null>(null)
   const [floorplanCursorPosition, setFloorplanCursorPosition] = useState<SvgPoint | null>(null)
+  // 设备工具激活时的预览位置
+  // - point：ghost 应该显示的位置（已经 apply 过 mountType 吸附 + 侧别偏移 / 天花板参考线吸附）
+  // - wallSnap：墙挂设备命中墙时的 wallId + t + side
+  // - ceilingGuides：天花板设备命中的**所有**参考线（数组，可能同时 0/1/2 条），Keynote 风多轴吸附
+  // - wallDistances：从 ghost 向 +X/-X/+Z/-Z 射线的最近墙距离（CAD 风全时尺寸，纯显示，不参与吸附）
+  const [devicePlacementPreview, setDevicePlacementPreview] = useState<{
+    point: WallPlanPoint
+    wallSnap: { wallId: string; t: number; side: 'front' | 'back' } | null
+    ceilingGuides: CeilingGuide[]
+    wallDistances: WallDistance[]
+  } | null>(null)
+  /**
+   * 设备拖动态 —— 用户按下已放置设备的 hit circle 开始拖动
+   * - id: 被拖设备节点 id
+   * - pointerId: capture 的 pointer，用于 release
+   * - startPoint: 按下瞬间的 plan 坐标，用于判断是不是真正发生了位移（避免轻微抖动被当成拖动）
+   * - dragged: 是否已经真正产生位移（决定是否要在 pointerup 时 commit 位置变更）
+   */
+  const deviceDragRef = useRef<{
+    id: string
+    pointerId: number
+    startPoint: WallPlanPoint
+    dragged: boolean
+  } | null>(null)
+  // 设备目录的响应式订阅（handleBackgroundClick 用 getState 拿即时值；预览和 UI 指示器需要重渲染触发）
+  const selectedDevice = useEditor((s) => s.selectedDevice)
+  const setSelectedDevice = useEditor((s) => s.setSelectedDevice)
   const [wallEndpointDraft, setWallEndpointDraft] = useState<WallEndpointDraft | null>(null)
   const [hoveredOpeningId, setHoveredOpeningId] = useState<OpeningNode['id'] | null>(null)
   const [hoveredWallId, setHoveredWallId] = useState<WallNode['id'] | null>(null)
@@ -4125,6 +5238,15 @@ export function FloorplanPanel() {
   const alignSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
+    return () => {
+      if (alignSuccessTimerRef.current) {
+        clearTimeout(alignSuccessTimerRef.current)
+        alignSuccessTimerRef.current = null
+      }
+    }
+  }, [])
+
+  useEffect(() => {
     if (structureLayer === 'zones' && floorplanSelectionTool === 'marquee') {
       setFloorplanSelectionTool('click')
     }
@@ -4132,6 +5254,33 @@ export function FloorplanPanel() {
 
   useEffect(() => {
     setIsMacPlatform(navigator.platform.toUpperCase().includes('MAC'))
+  }, [])
+
+  // ── Esc 退出建造模式 —— 回到 select 模式 ──
+  // 注意：不清 selectedDevice，因为 DeviceCatalog 有 auto-select effect 会立即补回来（会形成
+  // 互相 setState 的无限循环）；改用 mode 门控 ghost / 放置（下面在 UI 层判断 mode === 'build'）
+  useEffect(() => {
+    if (mode !== 'build') return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMode('select')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [mode, setMode])
+
+  // ── Esc 也能退出摄像头 follow 模式 ──────────────────────────────────────────
+  // 直接操作 ref + sfx，避免依赖 exitFollowMode（它在下面才声明）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && rotationFollowRef.current !== null) {
+        rotationFollowRef.current = null
+        sfxEmitter.emit('sfx:item-rotate')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
   }, [])
 
   const sitePolygonEntry = useMemo(() => {
@@ -5195,6 +6344,147 @@ export function FloorplanPanel() {
     },
     [getSvgPointFromClientPoint],
   )
+
+  // ── 2D 设备拖动 —— 让用户在 select 模式下抓设备圆点拖到新位置 ──────────────────
+  // 放在 getPlanPointFromClientPoint 之后，因为 dragMove 依赖它
+  const handleDeviceDragStart = useCallback(
+    (deviceId: string, event: ReactPointerEvent<SVGCircleElement>) => {
+      if (useEditor.getState().mode === 'build') return
+      const pt = getPlanPointFromClientPoint(event.clientX, event.clientY)
+      if (!pt) return
+      deviceDragRef.current = {
+        id: deviceId,
+        pointerId: event.pointerId,
+        startPoint: pt,
+        dragged: false,
+      }
+      event.currentTarget.setPointerCapture(event.pointerId)
+      setSelectedReferenceId(null)
+      setSelection({ selectedIds: [deviceId] })
+    },
+    [getPlanPointFromClientPoint, setSelection, setSelectedReferenceId],
+  )
+
+  const handleDeviceDragMove = useCallback(
+    (event: ReactPointerEvent<SVGSVGElement>) => {
+      const drag = deviceDragRef.current
+      if (!drag || drag.pointerId !== event.pointerId) return
+      const pt = getPlanPointFromClientPoint(event.clientX, event.clientY)
+      if (!pt) return
+
+      const dx = pt[0] - drag.startPoint[0]
+      const dz = pt[1] - drag.startPoint[1]
+      const moveThreshold = floorplanWorldUnitsPerPixel * 3
+      if (!drag.dragged && Math.hypot(dx, dz) < moveThreshold) return
+      drag.dragged = true
+
+      const deviceNode = useScene.getState().nodes[drag.id as AnyNodeId] as DeviceNode | undefined
+      if (!deviceNode) return
+      const mt = deviceNode.mountType
+      const isWallMount = mt === 'wall' || mt === 'wall_switch'
+
+      let newX = pt[0]
+      let newZ = pt[1]
+      const patch: Partial<DeviceNode> = {}
+
+      if (isWallMount) {
+        const hit = findClosestWallPoint(pt, walls, 1.0)
+        if (hit) {
+          const placement = computeWallPlacement(hit.wall, pt)
+          if (placement) {
+            newX = placement.position[0]
+            newZ = placement.position[1]
+            patch.params = {
+              ...(deviceNode.params ?? {}),
+              wallId: hit.wall.id,
+              wallT: placement.t,
+              wallSide: placement.side,
+            } as any
+          }
+        }
+        // 墙挂拖动也显示 4 向距离（不显示天花板引导线）
+        setDevicePlacementPreview({
+          point: [newX, newZ],
+          wallSnap: null,
+          ceilingGuides: [],
+          wallDistances: computeWallDistancesFourWay([newX, newZ], walls),
+        })
+      } else {
+        // 吸顶/地面类拖动时跑 Keynote 多轴参考（忽略自身，避免 snap 到自己）+ 全时尺寸
+        const snap = computeCeilingSnap(pt, walls, zones, levelDevices, openings, drag.id)
+        newX = snap.snapPoint[0]
+        newZ = snap.snapPoint[1]
+        setDevicePlacementPreview({
+          point: snap.snapPoint,
+          wallSnap: null,
+          ceilingGuides: snap.guides,
+          wallDistances: computeWallDistancesFourWay(snap.snapPoint, walls),
+        })
+      }
+
+      patch.position = [newX, deviceNode.position[1], newZ]
+      updateNode(drag.id as AnyNodeId, patch as any)
+    },
+    [
+      getPlanPointFromClientPoint,
+      updateNode,
+      walls,
+      zones,
+      levelDevices,
+      openings,
+      floorplanWorldUnitsPerPixel,
+    ],
+  )
+
+  const handleDeviceDragEnd = useCallback(
+    (event: ReactPointerEvent<SVGSVGElement>) => {
+      const drag = deviceDragRef.current
+      if (!drag || drag.pointerId !== event.pointerId) return
+      try {
+        event.currentTarget.releasePointerCapture(event.pointerId)
+      } catch {
+        /* already released */
+      }
+      if (drag.dragged) {
+        sfxEmitter.emit('sfx:item-place')
+      }
+      deviceDragRef.current = null
+      // 清掉拖动时显示的参考线
+      setDevicePlacementPreview(null)
+    },
+    [],
+  )
+
+  // ── 摄像头"跟鼠标调方向"模式 ─────────────────────────────────────────────
+  // 用户选中摄像头后，鼠标移动自动更新 params.direction；任意位置单击确认退出
+  const rotationFollowRef = useRef<string | null>(null)
+
+  const handleCameraFollowMove = useCallback(
+    (event: ReactPointerEvent<SVGSVGElement>) => {
+      const deviceId = rotationFollowRef.current
+      if (!deviceId) return
+      const deviceNode = useScene.getState().nodes[deviceId as AnyNodeId] as DeviceNode | undefined
+      if (!deviceNode) return
+      const pt = getPlanPointFromClientPoint(event.clientX, event.clientY)
+      if (!pt) return
+      const dx = deviceNode.position[0]
+      const dz = deviceNode.position[2]
+      const worldAngleRad = Math.atan2(pt[1] - dz, pt[0] - dx)
+      const directionDeg = (worldAngleRad * 180) / Math.PI
+      updateNode(deviceId as AnyNodeId, {
+        params: { ...(deviceNode.params ?? {}), direction: directionDeg },
+      } as any)
+    },
+    [getPlanPointFromClientPoint, updateNode],
+  )
+
+  const exitFollowMode = useCallback(() => {
+    if (rotationFollowRef.current !== null) {
+      rotationFollowRef.current = null
+      sfxEmitter.emit('sfx:item-rotate')
+    }
+  }, [])
+
   useEffect(() => {
     siteBoundaryDraftRef.current = siteBoundaryDraft
   }, [siteBoundaryDraft])
@@ -6502,6 +7792,13 @@ export function FloorplanPanel() {
       const cal = useEditor.getState().calibration
       if (cal?.active) return
 
+      // 摄像头 follow 模式：背景任意位置单击 = 确认方向，退出 follow；
+      // 且不往下走（不清选中、不放新设备），把这次点击"消费"掉
+      if (rotationFollowRef.current !== null) {
+        exitFollowMode()
+        return
+      }
+
       if (isPolygonBuildActive && event.detail >= 2) {
         return
       }
@@ -6543,6 +7840,34 @@ export function FloorplanPanel() {
           handleSlabPlacementPoint(snappedPoint)
         }
         return
+      }
+
+      // ── 2D 设备放置 —— 只在 build 模式下允许 ──
+      // 用当前 devicePlacementPreview（移动过程中已 apply 好吸附 + 侧别）作为真值
+      {
+        const editorState = useEditor.getState()
+        const selectedDevice = editorState.selectedDevice
+        const isBuildMode = editorState.mode === 'build'
+        const currentLevelId = useViewer.getState().selection.levelId
+        if (isBuildMode && selectedDevice && currentLevelId) {
+          const y = selectedDevice.defaultH ?? 0
+          // 优先用 preview（含墙挂侧别等元数据）；没有 preview 就 fallback 到 raw click
+          const placement = devicePlacementPreview ?? { point: planPoint, wallSnap: null }
+          const params: Record<string, unknown> = {}
+          if (placement.wallSnap) {
+            params.wallId = placement.wallSnap.wallId
+            params.wallT = placement.wallSnap.t
+            params.wallSide = placement.wallSnap.side
+          }
+          placeDevice(
+            currentLevelId,
+            selectedDevice.catalogId,
+            [placement.point[0], y, placement.point[1]],
+            params as Partial<import('@pascal-app/core').DeviceParams>,
+          )
+          sfxEmitter.emit('sfx:item-place')
+          return
+        }
       }
 
       if (canSelectFloorplanZones) {
@@ -6842,6 +8167,41 @@ export function FloorplanPanel() {
       const halfLength =
         Math.hypot(targetWall.end[0] - targetWall.start[0], targetWall.end[1] - targetWall.start[1]) / 2
       const localY = isOpeningPlacementActive ? floorplanOpeningLocalY : 0
+
+      // ── 2D 设备放置（墙挂设备）—— 精确识别点击位置 + 墙侧别 ─────────────
+      // 对于 wall / wall_switch 等墙挂类型，优先走这里；识别用户点在墙哪一侧，
+      // 再把设备落位到对应侧（绑 wallId/wallT/wallSide）
+      {
+        const editorState = useEditor.getState()
+        const selectedDevice = editorState.selectedDevice
+        const isBuildMode = editorState.mode === 'build'
+        const currentLevelId = useViewer.getState().selection.levelId
+        const mountType = selectedDevice?.mountType ?? ''
+        const isWallMount = mountType === 'wall' || mountType === 'wall_switch'
+        if (isBuildMode && selectedDevice && currentLevelId && isWallMount) {
+          // 从原始 event 取点击 plan 坐标（不再用 wall center）
+          const clickPt = getPlanPointFromClientPoint(event.clientX, event.clientY)
+          if (clickPt) {
+            const placement = computeWallPlacement(targetWall, clickPt)
+            if (placement) {
+              const y = selectedDevice.defaultH ?? 1.3
+              placeDevice(
+                currentLevelId,
+                selectedDevice.catalogId,
+                [placement.position[0], y, placement.position[1]],
+                {
+                  wallId: targetWall.id,
+                  wallT: placement.t,
+                  wallSide: placement.side,
+                },
+              )
+              sfxEmitter.emit('sfx:item-place')
+              event.stopPropagation()
+              return
+            }
+          }
+        }
+      }
 
       setSelectedReferenceId(null)
       emitter.emit('wall:click', {
@@ -7516,6 +8876,17 @@ export function FloorplanPanel() {
 
   const handleSvgPointerMove = useCallback(
     (event: ReactPointerEvent<SVGSVGElement>) => {
+      // 设备拖动优先级最高
+      if (deviceDragRef.current) {
+        handleDeviceDragMove(event)
+        return
+      }
+      // 摄像头方向 follow 模式：选中摄像头后鼠标自动跟方向
+      if (rotationFollowRef.current) {
+        handleCameraFollowMove(event)
+        // 不 return：让下面的参考线 / 指示器也能跑（如果需要）；但 follow 优先于 ghost preview
+      }
+
       if (
         activeFloorplanCursorIndicator &&
         !panStateRef.current &&
@@ -7534,6 +8905,59 @@ export function FloorplanPanel() {
         setFloorplanCursorPosition(null)
       }
 
+      // 设备工具激活时（且处于 build 模式），按 mountType 计算预览位置：
+      //   - wall / wall_switch → 吸附到最近的墙边（1m 吸附半径）+ 识别侧别（front/back）
+      //   - ceiling / floor / 其他 → 自由放置（raw plan point，不做网格吸附）
+      // 对齐 BDD §P1-1：每种 mountType 有对应放置策略
+      if (mode === 'build' && selectedDevice && !panStateRef.current) {
+        const pp = getPlanPointFromClientPoint(event.clientX, event.clientY)
+        if (pp) {
+          const mt = selectedDevice.mountType
+          const isWallMount = mt === 'wall' || mt === 'wall_switch'
+          const isCeilingMount =
+            mt === 'ceiling' || mt === 'ceiling_suspended' || mt === 'hidden'
+
+          if (isWallMount) {
+            const hit = findClosestWallPoint(pp, walls, 1.0)
+            let previewPoint = pp
+            let wallSnap: { wallId: string; t: number; side: 'front' | 'back' } | null = null
+            if (hit) {
+              const placement = computeWallPlacement(hit.wall, pp)
+              if (placement) {
+                previewPoint = placement.position
+                wallSnap = { wallId: hit.wall.id, t: placement.t, side: placement.side }
+              }
+            }
+            setDevicePlacementPreview({
+              point: previewPoint,
+              wallSnap,
+              ceilingGuides: [],
+              wallDistances: computeWallDistancesFourWay(previewPoint, walls),
+            })
+          } else if (isCeilingMount) {
+            // 天花板 —— 多轴同时吸附（Keynote 风），最多 2 条引导线同时显示
+            const result = computeCeilingSnap(pp, walls, zones, levelDevices, openings)
+            setDevicePlacementPreview({
+              point: result.snapPoint,
+              wallSnap: null,
+              ceilingGuides: result.guides,
+              wallDistances: computeWallDistancesFourWay(result.snapPoint, walls),
+            })
+          } else {
+            setDevicePlacementPreview({
+              point: pp,
+              wallSnap: null,
+              ceilingGuides: [],
+              wallDistances: computeWallDistancesFourWay(pp, walls),
+            })
+          }
+        } else {
+          setDevicePlacementPreview(null)
+        }
+      } else if (devicePlacementPreview !== null) {
+        setDevicePlacementPreview(null)
+      }
+
       handlePointerMove(event)
     },
     [
@@ -7542,6 +8966,16 @@ export function FloorplanPanel() {
       siteVertexDragState,
       slabVertexDragState,
       zoneVertexDragState,
+      selectedDevice,
+      mode,
+      getPlanPointFromClientPoint,
+      devicePlacementPreview,
+      walls,
+      zones,
+      levelDevices,
+      openings,
+      handleDeviceDragMove,
+      handleCameraFollowMove,
     ],
   )
 
@@ -8056,11 +9490,17 @@ export function FloorplanPanel() {
             }}
             onContextMenu={(event) => event.preventDefault()}
             onDoubleClick={isMarqueeSelectionToolActive ? undefined : handleBackgroundDoubleClick}
-            onPointerCancel={endPanning}
+            onPointerCancel={(e) => {
+              handleDeviceDragEnd(e)
+              endPanning(e)
+            }}
             onPointerDown={handlePointerDown}
             onPointerLeave={handleSvgPointerLeave}
             onPointerMove={handleSvgPointerMove}
-            onPointerUp={endPanning}
+            onPointerUp={(e) => {
+              handleDeviceDragEnd(e)
+              endPanning(e)
+            }}
             ref={svgRef}
             style={{ cursor: calibrationActive || levelAlignmentActive ? 'crosshair' : EDITOR_CURSOR }}
             viewBox={`${viewBox.minX} ${viewBox.minY} ${viewBox.width} ${viewBox.height}`}
@@ -8126,6 +9566,13 @@ export function FloorplanPanel() {
               zonePolygons={visibleZonePolygons}
             />
 
+            {/* WiFi 热力图 —— 画在墙/楼板之上、设备图层之下（半透明，墙仍可见） */}
+            <FloorplanWifiHeatmapLayer
+              aps={apDevices}
+              walls={walls}
+              worldUnitsPerPixel={floorplanWorldUnitsPerPixel}
+            />
+
             <FloorplanPolygonHandleLayer
               hoveredHandleId={hoveredSiteHandleId}
               midpointHandles={siteMidpointHandles}
@@ -8165,6 +9612,62 @@ export function FloorplanPanel() {
                 y={viewBox.minY}
               />
             )}
+
+            {/* 设备 2D 符号层 + 预览 ghost —— 放在 marquee rect 之后，
+                保证任何模式下（包括框选）设备都能被点选（SVG 后渲染 = 视觉/事件在上） */}
+            <FloorplanDeviceLayer
+              devices={levelDevices}
+              worldUnitsPerPixel={floorplanWorldUnitsPerPixel}
+              selectedIdSet={selectedIdSet}
+              onDeviceSelect={(deviceId) => {
+                // follow-mode 交互：点击摄像头 → 进入 follow；再点同一摄像头 → 退出 follow（确认方向）
+                const node = useScene.getState().nodes[deviceId as AnyNodeId] as
+                  | DeviceNode
+                  | undefined
+                const isCamera =
+                  node?.subsystem === 'security' &&
+                  (node.renderType === 'dome' || node.renderType === 'camera-bullet')
+
+                if (rotationFollowRef.current === deviceId) {
+                  // 再点一次同一摄像头：确认退出
+                  exitFollowMode()
+                  return
+                }
+
+                // 常规选中
+                setSelectedReferenceId(null)
+                setSelection({ selectedIds: [deviceId] })
+                // 摄像头才进入 follow
+                rotationFollowRef.current = isCamera ? deviceId : null
+              }}
+              onDeviceDragStart={handleDeviceDragStart}
+              onDeviceDelete={(deviceId) => {
+                sfxEmitter.emit('sfx:item-delete')
+                deleteNode(deviceId as AnyNodeId)
+                setSelection({ selectedIds: [] })
+              }}
+              isDeleteMode={mode === 'delete'}
+            />
+            {/* 参考线层 —— 放置预览 OR 拖动移动 都可见；与 ghost 独立 */}
+            <FloorplanCeilingGuidesLayer
+              guides={devicePlacementPreview?.ceilingGuides ?? []}
+              worldUnitsPerPixel={floorplanWorldUnitsPerPixel}
+            />
+            {/* 全时 4 向墙距离 —— 样式和墙尺寸一致（恒定灰色） */}
+            <FloorplanWallDistancesLayer
+              distances={devicePlacementPreview?.wallDistances ?? []}
+              unit={unit}
+              worldUnitsPerPixel={floorplanWorldUnitsPerPixel}
+              palette={palette}
+            />
+            {/* Ghost 圆点 —— 仅在 build 模式放置预览时显示 */}
+            <FloorplanDeviceGhost
+              point={mode === 'build' ? (devicePlacementPreview?.point ?? null) : null}
+              subsystem={
+                mode === 'build' && selectedDevice ? (selectedDevice.subsystem ?? null) : null
+              }
+              worldUnitsPerPixel={floorplanWorldUnitsPerPixel}
+            />
 
             {visibleSvgMarqueeBounds && (
               <rect

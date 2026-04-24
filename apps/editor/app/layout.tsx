@@ -1,4 +1,5 @@
-import { Agentation } from 'agentation'
+// 临时禁用 agentation — 诊断 dev server 内存爆炸（Cowork 2026-04-22）。恢复时取消本行和 body 里 <Agentation /> 的注释。
+// import { Agentation } from 'agentation'
 import { GeistPixelSquare } from 'geist/font/pixel'
 import { Barlow, Instrument_Serif, Inter, JetBrains_Mono } from 'next/font/google'
 import localFont from 'next/font/local'
@@ -57,7 +58,7 @@ export default function RootLayout({
       </head>
       <body className="font-sans">
         {children}
-        {process.env.NODE_ENV === 'development' && <Agentation />}
+        {/* {process.env.NODE_ENV === 'development' && <Agentation />} */}
       </body>
     </html>
   )

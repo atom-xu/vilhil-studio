@@ -156,6 +156,11 @@ type EditorState = {
   // First-person walkthrough mode (street view)
   isFirstPersonMode: boolean
   setFirstPersonMode: (enabled: boolean) => void
+  /**
+   * 进入 First-person 前的 viewMode，退出时恢复。
+   * 内部 state（下划线前缀）—— 不持久化，不进 PersistedEditorUiState。
+   */
+  _viewModeBeforeFirstPerson: ViewMode | null
   activeSidebarPanel: string
   setActiveSidebarPanel: (id: string) => void
   floorplanPaneRatio: number
