@@ -1,61 +1,65 @@
-# Pascal Editor
+# VilHil Studio
 
-A 3D building editor built with React Three Fiber and WebGPU.
+A smart home solution workspace built on [Pascal Editor](https://github.com/pascalorg/editor) — design, configure, and present IoT device layouts in an interactive 3D building editor powered by React Three Fiber and WebGPU.
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![npm @pascal-app/core](https://img.shields.io/npm/v/@pascal-app/core?label=%40pascal-app%2Fcore)](https://www.npmjs.com/package/@pascal-app/core)
-[![npm @pascal-app/viewer](https://img.shields.io/npm/v/@pascal-app/viewer?label=%40pascal-app%2Fviewer)](https://www.npmjs.com/package/@pascal-app/viewer)
-[![Discord](https://img.shields.io/badge/Discord-Join%20Server-5865F2?logo=discord&logoColor=white)](https://discord.gg/SaBRA9t2)
-[![X (Twitter)](https://img.shields.io/badge/follow-%40pascal__app-black?logo=x&logoColor=white)](https://x.com/pascal_app)
 
-https://github.com/user-attachments/assets/8b50e7cf-cebe-4579-9cf3-8786b35f7b6b
+> **Fork of [`pascalorg/editor`](https://github.com/pascalorg/editor).** Upstream changes are merged periodically. VilHil-specific packages (`@vilhil/smarthome`, `apps/editor`) are not published to npm.
 
-## VilHil UI Docs (CN)
+## What is VilHil Studio?
 
-- Unified UI standard (SSOT): [`docs/UI-STANDARD.md`](./docs/UI-STANDARD.md)
-- Start here (non-technical): [`docs/UI-START-HERE.md`](./docs/UI-START-HERE.md)
-- UI design library standard: [`docs/UI-DESIGN-LIB-STANDARD.md`](./docs/UI-DESIGN-LIB-STANDARD.md)
-- UI component library standard: [`docs/UI-COMPONENT-LIBRARY.md`](./docs/UI-COMPONENT-LIBRARY.md)
-- UI logic architecture standard: [`docs/UI-LOGIC-STANDARD.md`](./docs/UI-LOGIC-STANDARD.md)
-- UI style consolidation plan: [`docs/UI-STYLE-CONSOLIDATION-PLAN.md`](./docs/UI-STYLE-CONSOLIDATION-PLAN.md)
-- Navigation architecture: [`docs/NAVIGATION-ARCHITECTURE.md`](./docs/NAVIGATION-ARCHITECTURE.md)
-- BDD requirements: [`docs/BDD-REQUIREMENTS.md`](./docs/BDD-REQUIREMENTS.md)
-- Claude collaboration standard: [`CLAUDE.md`](./CLAUDE.md)
+1. **Design mode** — architects place structural elements (walls, slabs, rooms) and smart devices (lighting, HVAC, security, networking) in 3D space.
+2. **Proposal mode** — clients experience the layout interactively, toggle scenes, and visualise device coverage overlays (Wi-Fi heatmap, air flow, camera scan cones).
+3. A single 3D scene powers both modes.
 
+---
 
+## VilHil Docs (CN)
+
+| Document | Description |
+|----------|-------------|
+| [`docs/UI-START-HERE.md`](./docs/UI-START-HERE.md) | Start here (non-technical) |
+| [`docs/UI-STANDARD.md`](./docs/UI-STANDARD.md) | Unified UI standard (SSOT) |
+| [`docs/NAVIGATION-ARCHITECTURE.md`](./docs/NAVIGATION-ARCHITECTURE.md) | Routing & navigation |
+| [`docs/BDD-REQUIREMENTS.md`](./docs/BDD-REQUIREMENTS.md) | BDD acceptance criteria |
+| [`docs/STATE-FLOW.md`](./docs/STATE-FLOW.md) | State layer responsibilities |
+| [`docs/DEVICE-SPEC-BRIEF.md`](./docs/DEVICE-SPEC-BRIEF.md) | Smart device product catalog |
+| [`CLAUDE.md`](./CLAUDE.md) | AI collaboration standard |
+
+---
 
 ## Repository Architecture
 
-This is a Turborepo monorepo with three main packages:
+Turborepo monorepo. Three core packages plus the Next.js app:
 
 ```
-editor-v2/
+vilhil-studio/
 ├── apps/
-│   └── editor/          # Next.js application
+│   └── editor/              # Next.js 16 application (editor + proposal UI)
 ├── packages/
-│   ├── core/            # Schema definitions, state management, systems
-│   └── viewer/          # 3D rendering components
+│   ├── core/                # @pascal-app/core — schemas, scene state, geometry systems
+│   ├── viewer/              # @pascal-app/viewer — React Three Fiber 3D rendering
+│   ├── smarthome/           # @vilhil/smarthome — device catalog, tools, scene helpers
+│   └── editor/              # @pascal-app/editor — shared editor UI components
+└── tooling/                 # TypeScript config, ESLint config
 ```
 
-### Separation of Concerns
+### Package Responsibilities
 
 | Package | Responsibility |
 |---------|---------------|
-| **@pascal-app/core** | Node schemas, scene state (Zustand), systems (geometry generation), spatial queries, event bus |
-| **@pascal-app/viewer** | 3D rendering via React Three Fiber, default camera/controls, post-processing |
-| **apps/editor** | UI components, tools, custom behaviors, editor-specific systems |
-
-The **viewer** renders the scene with sensible defaults. The **editor** extends it with interactive tools, selection management, and editing capabilities.
+| **@pascal-app/core** | Node schemas (Zod), scene state (Zustand + Zundo), geometry systems, spatial queries, event bus |
+| **@pascal-app/viewer** | 3D rendering via React Three Fiber, camera/controls, post-processing (WebGPU SSGI + outlines) |
+| **@vilhil/smarthome** | Smart device catalog, device animation system, scene tools, subsystem grouping |
+| **apps/editor** | UI panels, tools, auth, cloud project persistence, proposal/presentation mode |
 
 ### Stores
 
-Each package has its own Zustand store for managing state:
-
 | Store | Package | Responsibility |
 |-------|---------|----------------|
-| `useScene` | `@pascal-app/core` | Scene data: nodes, root IDs, dirty nodes, CRUD operations. Persisted to IndexedDB with undo/redo via Zundo. |
-| `useViewer` | `@pascal-app/viewer` | Viewer state: current selection (building/level/zone IDs), level display mode (stacked/exploded/solo), camera mode. |
-| `useEditor` | `apps/editor` | Editor state: active tool, structure layer visibility, panel states, editor-specific preferences. |
+| `useScene` | `@pascal-app/core` | Scene data: nodes, root IDs, dirty nodes, CRUD. Persisted to IndexedDB with undo/redo (Zundo). |
+| `useViewer` | `@pascal-app/viewer` | Viewer state: selection (building/level/zone), level display mode, camera mode, outliner. |
+| `useEditor` | `apps/editor` | Editor state: active tool, panel states, focused device, editor preferences. |
 
 **Access patterns:**
 
@@ -69,6 +73,8 @@ const activeTool = useEditor((state) => state.tool)
 const node = useScene.getState().nodes[id]
 useViewer.getState().setSelection({ levelId: 'level_123' })
 ```
+
+**Hard rule:** device runtime state (on/off, brightness, temperature) lives in `useScene`. UI-only preferences (panel open, highlight mode) live in `useEditor`. Never mix them.
 
 ---
 
@@ -100,17 +106,16 @@ Site
         ├── Ceiling → Item (lights)
         ├── Roof
         ├── Zone
+        ├── Device          ← VilHil addition (smart home devices)
         ├── Scan (3D reference)
         └── Guide (2D reference)
 ```
 
-Nodes are stored in a **flat dictionary** (`Record<id, Node>`), not a nested tree. Parent-child relationships are defined via `parentId` and `children` arrays.
+Nodes are stored in a **flat dictionary** (`Record<id, Node>`), not a nested tree.
 
 ---
 
-### Scene State (Zustand Store)
-
-The scene is managed by a Zustand store in `@pascal-app/core`:
+### Scene State
 
 ```typescript
 useScene.getState() = {
@@ -124,164 +129,78 @@ useScene.getState() = {
 }
 ```
 
-**Middleware:**
-- **Persist** - Saves to IndexedDB (excludes transient nodes)
-- **Temporal** (Zundo) - Undo/redo with 50-step history
+**Middleware:** Persist (IndexedDB, excludes transient nodes) + Temporal (Zundo, 50-step undo/redo).
 
 ---
 
 ### Scene Registry
 
-The registry maps node IDs to their Three.js objects for fast lookup:
+Maps node IDs → Three.js objects for fast lookup without scene graph traversal:
 
 ```typescript
 sceneRegistry = {
-  nodes: Map<id, Object3D>,    // ID → 3D object
-  byType: {
-    wall: Set<id>,
-    item: Set<id>,
-    zone: Set<id>,
-    // ...
-  }
+  nodes: Map<id, Object3D>,
+  byType: { wall: Set<id>, item: Set<id>, device: Set<id>, ... }
 }
 ```
 
-Renderers register their refs using the `useRegistry` hook:
-
-```tsx
-const ref = useRef<Mesh>(null!)
-useRegistry(node.id, 'wall', ref)
-```
-
-This allows systems to access 3D objects directly without traversing the scene graph.
+Renderers register via `useRegistry(node.id, 'wall', ref)`.
 
 ---
 
 ### Node Renderers
-
-Renderers are React components that create Three.js objects for each node type:
 
 ```
 SceneRenderer
 └── NodeRenderer (dispatches by type)
     ├── BuildingRenderer
     ├── LevelRenderer
-    ├── WallRenderer
-    ├── SlabRenderer
-    ├── ZoneRenderer
-    ├── ItemRenderer
-    └── ...
-```
-
-**Pattern:**
-1. Renderer creates a placeholder mesh/group
-2. Registers it with `useRegistry`
-3. Systems update geometry based on node data
-
-Example (simplified):
-```tsx
-const WallRenderer = ({ node }) => {
-  const ref = useRef<Mesh>(null!)
-  useRegistry(node.id, 'wall', ref)
-
-  return (
-    <mesh ref={ref}>
-      <boxGeometry args={[0, 0, 0]} />  {/* Replaced by WallSystem */}
-      <meshStandardMaterial />
-      {node.children.map(id => <NodeRenderer key={id} nodeId={id} />)}
-    </mesh>
-  )
-}
+    ├── WallRenderer / SlabRenderer / ZoneRenderer / ItemRenderer
+    └── DeviceRenderer          ← VilHil addition
+        ├── DeviceGeometry      (category-based 3D model)
+        ├── DeviceEffects       (runtime state overlays)
+        ├── DeviceRenderMode    (editor vs proposal display)
+        └── Animations/         (HVAC airflow, light cone, WiFi heatmap, curtain, …)
 ```
 
 ---
 
 ### Systems
 
-Systems are React components that run in the render loop (`useFrame`) to update geometry and transforms. They process **dirty nodes** marked by the store.
-
-**Core Systems (in `@pascal-app/core`):**
+**Core Systems (`@pascal-app/core`):**
 
 | System | Responsibility |
 |--------|---------------|
-| `WallSystem` | Generates wall geometry with mitering and CSG cutouts for doors/windows |
-| `SlabSystem` | Generates floor geometry from polygons |
-| `CeilingSystem` | Generates ceiling geometry |
-| `RoofSystem` | Generates roof geometry |
-| `ItemSystem` | Positions items on walls, ceilings, or floors (slab elevation) |
+| `WallSystem` | Wall geometry with mitering + CSG cutouts |
+| `SlabSystem` | Floor geometry from polygons |
+| `CeilingSystem` | Ceiling geometry |
+| `RoofSystem` | Roof geometry |
+| `ItemSystem` | Positions items on walls/ceilings/floors |
 
-**Viewer Systems (in `@pascal-app/viewer`):**
+**Viewer Systems (`@pascal-app/viewer`):**
 
 | System | Responsibility |
 |--------|---------------|
-| `LevelSystem` | Handles level visibility and vertical positioning (stacked/exploded/solo modes) |
-| `ScanSystem` | Controls 3D scan visibility |
-| `GuideSystem` | Controls guide image visibility |
-
-**Processing Pattern:**
-```typescript
-useFrame(() => {
-  for (const id of dirtyNodes) {
-    const obj = sceneRegistry.nodes.get(id)
-    const node = useScene.getState().nodes[id]
-
-    // Update geometry, transforms, etc.
-    updateGeometry(obj, node)
-
-    dirtyNodes.delete(id)
-  }
-})
-```
-
----
-
-### Dirty Nodes
-
-When a node changes, it's marked as **dirty** in `useScene.getState().dirtyNodes`. Systems check this set each frame and only recompute geometry for dirty nodes.
-
-```typescript
-// Automatic: createNode, updateNode, deleteNode mark nodes dirty
-useScene.getState().updateNode(wallId, { thickness: 0.2 })
-// → wallId added to dirtyNodes
-// → WallSystem regenerates geometry next frame
-// → wallId removed from dirtyNodes
-```
-
-**Manual marking:**
-```typescript
-useScene.getState().dirtyNodes.add(wallId)
-```
+| `LevelSystem` | Level visibility + vertical positioning (stacked/exploded/solo) |
+| `ScanSystem` | 3D scan visibility |
+| `GuideSystem` | Guide image visibility |
 
 ---
 
 ### Event Bus
 
-Inter-component communication uses a typed event emitter (mitt):
-
 ```typescript
-// Node events
 emitter.on('wall:click', (event) => { ... })
-emitter.on('item:enter', (event) => { ... })
-emitter.on('zone:context-menu', (event) => { ... })
-
-// Grid events (background)
+emitter.on('device:click', (event) => { ... })
 emitter.on('grid:click', (event) => { ... })
 
-// Event payload
-NodeEvent {
-  node: AnyNode
-  position: [x, y, z]
-  localPosition: [x, y, z]
-  normal?: [x, y, z]
-  stopPropagation: () => void
-}
+// NodeEvent payload
+{ node, position, localPosition, normal?, stopPropagation }
 ```
 
 ---
 
 ### Spatial Grid Manager
-
-Handles collision detection and placement validation:
 
 ```typescript
 spatialGridManager.canPlaceOnFloor(levelId, position, dimensions, rotation)
@@ -289,119 +208,61 @@ spatialGridManager.canPlaceOnWall(wallId, t, height, dimensions)
 spatialGridManager.getSlabElevationAt(levelId, x, z)
 ```
 
-Used by item placement tools to validate positions and calculate slab elevations.
-
----
-
-## Editor Architecture
-
-The editor extends the viewer with:
-
-### Tools
-
-Tools are activated via the toolbar and handle user input for specific operations:
-
-- **SelectTool** - Selection and manipulation
-- **WallTool** - Draw walls
-- **ZoneTool** - Create zones
-- **ItemTool** - Place furniture/fixtures
-- **SlabTool** - Create floor slabs
-
-### Selection Manager
-
-The editor uses a custom selection manager with hierarchical navigation:
-
-```
-Site → Building → Level → Zone → Items
-```
-
-Each depth level has its own selection strategy for hover/click behavior.
-
-### Editor-Specific Systems
-
-- `ZoneSystem` - Controls zone visibility based on level mode
-- Custom camera controls with node focusing
-
 ---
 
 ## Data Flow
 
 ```
-User Action (click, drag)
+User Action (click, drag, scene trigger)
        ↓
-Tool Handler
+Tool Handler  /  Scene Command
        ↓
 useScene.createNode() / updateNode()
        ↓
-Node added/updated in store
-Node marked dirty
+Node added/updated — marked dirty
        ↓
-React re-renders NodeRenderer
-useRegistry() registers 3D object
+React re-renders NodeRenderer → useRegistry() registers 3D object
        ↓
-System detects dirty node (useFrame)
-Updates geometry via sceneRegistry
-Clears dirty flag
+System detects dirty node (useFrame) → updates geometry → clears dirty flag
+```
+
+**VilHil extension:**
+```
+UI (proposal panel)
+  → smarthome tool function (packages/smarthome/src/tools/)
+    → useScene.updateNode()
+      → DeviceRenderer reads new state → animation updates
 ```
 
 ---
 
 ## Technology Stack
 
-- **React 19** + **Next.js 16**
-- **Three.js** (WebGPU renderer)
-- **React Three Fiber** + **Drei**
-- **Zustand** (state management)
+- **React 19** + **Next.js 16** (Turbopack dev)
+- **Three.js** (WebGPU renderer) + **React Three Fiber** + **Drei**
+- **Zustand** + **Zundo** (state + undo/redo)
 - **Zod** (schema validation)
-- **Zundo** (undo/redo)
+- **Better Auth** (email/password, session management)
+- **Drizzle ORM** + **PostgreSQL** via Supabase (cloud project persistence)
 - **three-bvh-csg** (Boolean geometry operations)
-- **Turborepo** (monorepo management)
-- **Bun** (package manager)
+- **Turborepo** + **Bun** (monorepo)
 
 ---
 
 ## Getting Started
 
-### Development
-
-Run the development server from the **root directory** to enable hot reload for all packages:
+See **[SETUP.md](./SETUP.md)** for full setup instructions including environment variables.
 
 ```bash
 # Install dependencies
 bun install
 
-# Run development server (builds packages + starts editor with watch mode)
+# Start development server
 bun dev
-
-# This will:
-# 1. Build @pascal-app/core and @pascal-app/viewer
-# 2. Start watching both packages for changes
-# 3. Start the Next.js editor dev server
-# Open http://localhost:3000
+# → http://localhost:3000
 ```
 
-**Important:** Always run `bun dev` from the root directory to ensure the package watchers are running. This enables hot reload when you edit files in `packages/core/src/` or `packages/viewer/src/`.
-
-### Building for Production
-
-```bash
-# Build all packages
-turbo build
-
-# Build specific package
-turbo build --filter=@pascal-app/core
-```
-
-### Publishing Packages
-
-```bash
-# Build packages
-turbo build --filter=@pascal-app/core --filter=@pascal-app/viewer
-
-# Publish to npm
-npm publish --workspace=@pascal-app/core --access public
-npm publish --workspace=@pascal-app/viewer --access public
-```
+`bun dev` runs Turbopack (Next.js) only. Packages are compiled from source via `transpilePackages` — no separate tsc watch processes needed.
 
 ---
 
@@ -409,14 +270,16 @@ npm publish --workspace=@pascal-app/viewer --access public
 
 | Path | Description |
 |------|-------------|
-| `packages/core/src/schema/` | Node type definitions (Zod schemas) |
+| `packages/core/src/schema/` | Node type definitions (Zod) |
 | `packages/core/src/store/use-scene.ts` | Scene state store |
-| `packages/core/src/hooks/scene-registry/` | 3D object registry |
 | `packages/core/src/systems/` | Geometry generation systems |
 | `packages/viewer/src/components/renderers/` | Node renderers |
-| `packages/viewer/src/components/viewer/` | Main Viewer component |
-| `apps/editor/components/tools/` | Editor tools |
-| `apps/editor/store/` | Editor-specific state |
+| `packages/viewer/src/components/viewer/` | Main Viewer component + post-processing |
+| `packages/smarthome/src/device-catalog.ts` | Smart device product catalog |
+| `packages/smarthome/src/tools/` | Scene manipulation tool functions |
+| `packages/viewer/src/components/renderers/device/` | Device renderer + animations |
+| `apps/editor/app/` | Next.js pages (editor, proposal-demo, auth, API routes) |
+| `apps/editor/app/api/` | Server-side API (project save/load, auth) |
 
 ---
 
@@ -424,7 +287,4 @@ npm publish --workspace=@pascal-app/viewer --access public
 
 <a href="https://github.com/Aymericr"><img src="https://avatars.githubusercontent.com/u/4444492?v=4" width="60" height="60" alt="Aymeric Rabot" style="border-radius:50%"></a>
 <a href="https://github.com/wass08"><img src="https://avatars.githubusercontent.com/u/6551176?v=4" width="60" height="60" alt="Wassim Samad" style="border-radius:50%"></a>
-
----
-
-<a href="https://trendshift.io/repositories/23831" target="_blank"><img src="https://trendshift.io/api/badge/repositories/23831" alt="pascalorg/editor | Trendshift" width="250" height="55"/></a>
+<a href="https://github.com/atom-xu"><img src="https://avatars.githubusercontent.com/u/atom-xu?v=4" width="60" height="60" alt="atom-xu" style="border-radius:50%" onerror="this.style.display='none'"></a>
