@@ -52,6 +52,7 @@ const PostProcessingPasses = () => {
   const renderPipelineRef = useRef<RenderPipeline | null>(null)
   const hasPipelineErrorRef = useRef(false)
   const retryCountRef = useRef(0)
+  const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [isInitialized, setIsInitialized] = useState(false)
 
   // Background color uniform — updated every frame via lerp, read by the TSL pipeline.
@@ -311,7 +312,11 @@ const PostProcessingPasses = () => {
         console.warn(
           `[viewer] Scheduling post-processing rebuild (attempt ${retryCountRef.current}/${MAX_PIPELINE_RETRIES})`,
         )
-        setTimeout(requestPipelineRebuild, RETRY_DELAY_MS)
+        if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current)
+        retryTimeoutRef.current = setTimeout(() => {
+          retryTimeoutRef.current = null
+          requestPipelineRebuild()
+        }, RETRY_DELAY_MS)
       } else {
         console.error(
           '[viewer] Post-processing retries exhausted. Rendering without post FX for this session.',

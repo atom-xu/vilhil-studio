@@ -18,7 +18,6 @@
   ],
   "scripts": {
     "build": "bunx tsc --build",
-    "dev": "bunx tsc --build --watch",
     "prepublishOnly": "npm run build"
   },
   "peerDependencies": {

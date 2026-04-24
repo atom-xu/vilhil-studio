@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  transpilePackages: ['three', 'three-bvh-csg', '@pascal-app/viewer', '@pascal-app/core', '@pascal-app/editor', '@vilhil/smarthome'],
+  transpilePackages: ['@pascal-app/viewer', '@pascal-app/core', '@pascal-app/editor', '@vilhil/smarthome'],
   experimental: {
     serverActions: {
       bodySizeLimit: '100mb',
@@ -23,13 +23,6 @@ const nextConfig: NextConfig = {
         hostname: '**',
       },
     ],
-  },
-  turbopack: {
-    resolveAlias: {
-      '@react-three/fiber': './node_modules/@react-three/fiber',
-      '@react-three/drei': './node_modules/@react-three/drei',
-      'three-bvh-csg': './node_modules/three-bvh-csg',
-    },
   },
 }
 
