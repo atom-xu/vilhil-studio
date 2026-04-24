@@ -4667,37 +4667,80 @@ function computeRssiAtPoint(
   return wifi.txPower + wifi.antennaGain - fspl - wallLoss
 }
 
-/** RSSI → 颜色 + alpha（UniFi 分带） */
-function rssiToColorBand(rssi: number): { color: string; alpha: number } | null {
-  if (rssi >= -55) return { color: '#16a34a', alpha: 0.55 } // Great  deep green
-  if (rssi >= -65) return { color: '#65a30d', alpha: 0.50 } // Good   lime
-  if (rssi >= -75) return { color: '#ca8a04', alpha: 0.45 } // Fair   amber
-  if (rssi >= -85) return { color: '#ea580c', alpha: 0.40 } // Poor   orange
-  if (rssi >= -95) return { color: '#dc2626', alpha: 0.30 } // VeryPoor red
-  return null // 透明
+/** RSSI → RGBA 平滑梯度（线性插值，和 UniFi 一样柔和过渡）
+ *
+ * 关键色停点（从强到弱）：
+ *   -40 dBm  → 深绿   (22,163,74, 180)
+ *   -55      → 绿     (22,163,74, 150)
+ *   -65      → 黄绿   (101,163,13, 140)
+ *   -75      → 琥珀   (202,138,4, 120)
+ *   -85      → 橙     (234,88,12, 100)
+ *   -95      → 红     (220,38,38, 70)
+ *   -105     → 透明   (0,0,0, 0)
+ *
+ * 相邻停点之间线性混色 —— 消除"马赛克色带"
+ */
+const RSSI_STOPS: Array<{ rssi: number; rgba: [number, number, number, number] }> = [
+  { rssi: -40, rgba: [22, 163, 74, 180] },
+  { rssi: -55, rgba: [22, 163, 74, 150] },
+  { rssi: -65, rgba: [101, 163, 13, 140] },
+  { rssi: -75, rgba: [202, 138, 4, 120] },
+  { rssi: -85, rgba: [234, 88, 12, 100] },
+  { rssi: -95, rgba: [220, 38, 38, 70] },
+  { rssi: -105, rgba: [0, 0, 0, 0] },
+]
+
+function rssiToRgba(rssi: number): [number, number, number, number] {
+  // 饱和两端
+  if (rssi >= RSSI_STOPS[0]!.rssi) return RSSI_STOPS[0]!.rgba
+  const last = RSSI_STOPS[RSSI_STOPS.length - 1]!
+  if (rssi <= last.rssi) return last.rgba
+  // 找相邻停点
+  for (let i = 0; i < RSSI_STOPS.length - 1; i++) {
+    const hi = RSSI_STOPS[i]!
+    const lo = RSSI_STOPS[i + 1]!
+    if (rssi <= hi.rssi && rssi >= lo.rssi) {
+      const t = (rssi - lo.rssi) / (hi.rssi - lo.rssi) // 0..1
+      return [
+        Math.round(lo.rgba[0] + t * (hi.rgba[0] - lo.rgba[0])),
+        Math.round(lo.rgba[1] + t * (hi.rgba[1] - lo.rgba[1])),
+        Math.round(lo.rgba[2] + t * (hi.rgba[2] - lo.rgba[2])),
+        Math.round(lo.rgba[3] + t * (hi.rgba[3] - lo.rgba[3])),
+      ]
+    }
+  }
+  return last.rgba
 }
 
-/** WiFi 热力图层 —— 按 AP 物理模型计算 + 渲染
+/** WiFi 热力图层 —— 按 AP 物理模型计算 + Canvas 栅格化成 <image>
  *
- * 性能：按 bbox × cellSize 构栅格，单 cell 一次跨所有 AP + 所有墙测算
- * 用 useMemo 按 (aps, walls, bbox) 缓存，移动鼠标不重算
+ * 比 rect-per-cell 方案：
+ *   - 单 DOM 元素（<image>），不再是 1600+ 个 rect
+ *   - 平滑梯度（线性 RGBA 插值），无马赛克色带
+ *   - 10 px/m 默认分辨率（典型户型 ~200×200 = 4 万像素）
+ *
+ * 画布像素 (0,0) 对应 world (maxX, maxZ) 方向：这样 <image> 放到
+ *   SVG (x = -maxX, y = -maxZ)，尺寸 worldW × worldH，
+ *   pixel (0,0) 直接对齐 world max 角；从而 SVG 翻转坐标自然吻合
+ *
+ * useMemo：只在 aps/walls 变化时重算；typical 20m × 15m 户型 + 3 AP + 20 墙
+ * 单次耗时约 30-80ms，鼠标操作/滚轮缩放不触发
  */
 function FloorplanWifiHeatmapLayer({
   aps,
   walls,
-  worldUnitsPerPixel,
-  /** 0.5m 一个 cell，兼顾精度和性能（20m 户型 = 40×40 = 1600 cells） */
-  cellSize = 0.5,
+  /** 每米多少像素，精度↔性能 trade-off（默认 10 px/m 足够平滑） */
+  pixelsPerMeter = 10,
 }: {
   aps: DeviceNode[]
   walls: WallNode[]
-  worldUnitsPerPixel: number
-  cellSize?: number
+  pixelsPerMeter?: number
 }) {
-  const grid = useMemo(() => {
+  const bitmap = useMemo(() => {
     if (aps.length === 0 || walls.length === 0) return null
+    if (typeof document === 'undefined') return null // SSR 兼容
 
-    // bbox = 墙 + AP 范围，各向外扩 5m 给衰减到无信号的地方留白
+    // bbox = 墙 + AP 范围，外扩 5m 给衰减到无信号的地方留白
     let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity
     for (const w of walls) {
       minX = Math.min(minX, w.start[0], w.end[0])
@@ -4713,8 +4756,20 @@ function FloorplanWifiHeatmapLayer({
     }
     const margin = 5
     minX -= margin; maxX += margin; minZ -= margin; maxZ += margin
-    const cols = Math.ceil((maxX - minX) / cellSize)
-    const rows = Math.ceil((maxZ - minZ) / cellSize)
+    const worldW = maxX - minX
+    const worldH = maxZ - minZ
+    if (worldW <= 0 || worldH <= 0) return null
+
+    const pxW = Math.max(1, Math.ceil(worldW * pixelsPerMeter))
+    const pxH = Math.max(1, Math.ceil(worldH * pixelsPerMeter))
+
+    const canvas = document.createElement('canvas')
+    canvas.width = pxW
+    canvas.height = pxH
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+    const imgData = ctx.createImageData(pxW, pxH)
+    const data = imgData.data
 
     // Pre-extract AP params
     const apData = aps.map((ap) => ({
@@ -4723,48 +4778,49 @@ function FloorplanWifiHeatmapLayer({
       wifi: getWifiParams(ap),
     }))
 
-    type Cell = { worldX: number; worldZ: number; rssi: number }
-    const cells: Cell[] = []
-    for (let j = 0; j < rows; j++) {
-      const cz = minZ + (j + 0.5) * cellSize
-      for (let i = 0; i < cols; i++) {
-        const cx = minX + (i + 0.5) * cellSize
+    // 画布 pixel (0,0) 对应 world 最大角 (maxX, maxZ)，沿 i+ / j+ 递减到 (minX, minZ)
+    // 这样 <image x=-maxX y=-maxZ width=worldW height=worldH> 就和 SVG 坐标系自然对齐
+    for (let j = 0; j < pxH; j++) {
+      const wz = maxZ - (j + 0.5) / pixelsPerMeter
+      for (let i = 0; i < pxW; i++) {
+        const wx = maxX - (i + 0.5) / pixelsPerMeter
         let maxR = -Infinity
         for (const ap of apData) {
-          const r = computeRssiAtPoint(ap.x, ap.z, ap.wifi, cx, cz, walls)
+          const r = computeRssiAtPoint(ap.x, ap.z, ap.wifi, wx, wz, walls)
           if (r > maxR) maxR = r
         }
-        cells.push({ worldX: cx, worldZ: cz, rssi: maxR })
+        const rgba = rssiToRgba(maxR)
+        const idx = (j * pxW + i) * 4
+        data[idx] = rgba[0]
+        data[idx + 1] = rgba[1]
+        data[idx + 2] = rgba[2]
+        data[idx + 3] = rgba[3]
       }
     }
+    ctx.putImageData(imgData, 0, 0)
 
-    return { cells, cellSize, bbox: { minX, minZ, maxX, maxZ } }
-  }, [aps, walls, cellSize])
+    return {
+      url: canvas.toDataURL('image/png'),
+      svgX: -maxX,
+      svgY: -maxZ,
+      svgW: worldW,
+      svgH: worldH,
+    }
+  }, [aps, walls, pixelsPerMeter])
 
-  if (!grid) return null
+  if (!bitmap) return null
 
   return (
-    <g pointerEvents="none">
-      {grid.cells.map((cell, i) => {
-        const band = rssiToColorBand(cell.rssi)
-        if (!band) return null
-        // cell 在 world [worldX - cellSize/2, worldX + cellSize/2] 区间
-        // SVG: x = -(worldX + cellSize/2), y = -(worldZ + cellSize/2)
-        const svgX = -(cell.worldX + grid.cellSize / 2)
-        const svgY = -(cell.worldZ + grid.cellSize / 2)
-        return (
-          <rect
-            key={i}
-            x={svgX}
-            y={svgY}
-            width={grid.cellSize}
-            height={grid.cellSize}
-            fill={band.color}
-            opacity={band.alpha}
-          />
-        )
-      })}
-    </g>
+    <image
+      x={bitmap.svgX}
+      y={bitmap.svgY}
+      width={bitmap.svgW}
+      height={bitmap.svgH}
+      href={bitmap.url}
+      preserveAspectRatio="none"
+      pointerEvents="none"
+      style={{ imageRendering: 'auto' }}
+    />
   )
 }
 
@@ -9566,12 +9622,9 @@ export function FloorplanPanel() {
               zonePolygons={visibleZonePolygons}
             />
 
-            {/* WiFi 热力图 —— 画在墙/楼板之上、设备图层之下（半透明，墙仍可见） */}
-            <FloorplanWifiHeatmapLayer
-              aps={apDevices}
-              walls={walls}
-              worldUnitsPerPixel={floorplanWorldUnitsPerPixel}
-            />
+            {/* WiFi 热力图 —— canvas 栅格化成 <image>，平滑无马赛克
+                画在墙/楼板之下（SVG z 序靠前），墙线显示在热力之上 */}
+            <FloorplanWifiHeatmapLayer aps={apDevices} walls={walls} />
 
             <FloorplanPolygonHandleLayer
               hoveredHandleId={hoveredSiteHandleId}
