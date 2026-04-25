@@ -49,14 +49,13 @@ export const DeviceEffects = ({ node, isFocusedBySubsystem }: DeviceEffectsProps
     isFocusedBySubsystem ??
     (selectedSubsystem === null || selectedSubsystem === node.subsystem)
 
-  // 直接从 store 订阅 —— 与 DeviceRenderer 同一数据源（相同 selector 形状）
-  const deviceState = useScene((state) => {
+  // 合并为单一订阅，避免两次 selector 遍历（每次 store 变化只触发一次重渲染）
+  const { deviceState, deviceParams } = useScene((state) => {
     const devNode = state.nodes[node.id] as DeviceNode | undefined
-    return devNode?.state as Record<string, unknown> | undefined
-  })
-  const deviceParams = useScene((state) => {
-    const devNode = state.nodes[node.id] as DeviceNode | undefined
-    return devNode?.params
+    return {
+      deviceState: devNode?.state as Record<string, unknown> | undefined,
+      deviceParams: devNode?.params,
+    }
   })
 
   const isOn = (deviceState?.on as boolean) ?? false

@@ -11,10 +11,13 @@ export const PerfMonitor = () => {
   const elapsed = useRef(0)
   const lastMs = useRef(0)
 
-  useFrame(({ gl, clock }) => {
+  useFrame(({ gl, clock }, delta) => {
     frameCount.current++
     const now = clock.elapsedTime
     const dt = now - elapsed.current
+
+    // 记录本帧实际耗时（来自 useFrame 的 delta，不能再调 clock.getDelta()）
+    lastMs.current = Math.round(delta * 1000 * 10) / 10
 
     if (dt >= SAMPLE_INTERVAL) {
       const fps = Math.round(frameCount.current / dt)
@@ -28,8 +31,6 @@ export const PerfMonitor = () => {
       frameCount.current = 0
       elapsed.current = now
     }
-
-    lastMs.current = Math.round(clock.getDelta() * 1000 * 10) / 10
   })
 
   return (

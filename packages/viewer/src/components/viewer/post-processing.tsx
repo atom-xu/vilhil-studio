@@ -186,7 +186,7 @@ const PostProcessingPasses = () => {
         const aoAsRgb = vec4(giTexture.a, giTexture.a, giTexture.a, float(1))
         const denoisePass = denoise(aoAsRgb, scenePassDepth, sceneNormal, camera)
         denoisePass.index.value = 0
-        denoisePass.radius.value = 4
+        denoisePass.radius.value = 2 // 从 4 降到 2，减少降噪采样开销，AO 质量略降但肉眼差异很小
 
         const gi = giPass.rgb
         const ao = (denoisePass as any).r

@@ -228,12 +228,12 @@ export const HvacRibbonFlow = ({ position, rotationY = 0, mode = 'cold', intensi
   const cloudTextureRef = useRef<THREE.CanvasTexture>(cloudTexture)
 
   // ─── 每帧更新 ribbon + cloud ──────────────────────────────────
-  useFrame(({ clock }) => {
+  useFrame(({ clock }, delta) => {
     const t = clock.getElapsedTime()
 
-    // 强度插值
+    // 强度插值（使用 useFrame 提供的 delta，不能再调 clock.getDelta()）
     const targetInt = mode === 'off' ? 0 : intensity
-    const dt = Math.min(clock.getDelta?.() ?? 1 / 60, 1 / 20)
+    const dt = Math.min(delta, 1 / 20)
     currentIntensity.current += (targetInt - currentIntensity.current) * Math.min(dt * 4, 1)
     const eff = currentIntensity.current
     material.uniforms.uIntensity!.value = eff
