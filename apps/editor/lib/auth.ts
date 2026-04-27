@@ -22,6 +22,15 @@ export const auth = betterAuth({
       console.log(`[Email Verification] To: ${user.email}, URL: ${url}`)
     },
   },
+  advanced: {
+    cookiePrefix: 'vilhil',
+    defaultCookieAttributes: {
+      // production 必须 HTTPS；开发环境保持 false 避免 localhost 报错
+      secure: process.env.NODE_ENV === 'production',
+      httpOnly: true,
+      sameSite: 'lax',
+    },
+  },
   plugins: [admin()],
 })
 

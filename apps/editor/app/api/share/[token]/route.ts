@@ -12,10 +12,16 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { projects, shareLinks } from '@/lib/schema'
 import { verifyPassword } from '@/lib/password-hash'
+import { getClientIp, rateLimit, rateLimitedResponse } from '@/lib/rate-limit'
 
 export async function POST(request: Request, { params }: { params: Promise<{ token: string }> }) {
   try {
+    // 防暴力破解：同一 IP 对同一 token，1 分钟内最多 10 次尝试
     const { token } = await params
+    const ip = getClientIp(request)
+    const rl = rateLimit(`share-token:${ip}:${token}`, 10, 60_000)
+    if (!rl.success) return rateLimitedResponse(rl.retryAfterMs)
+
     const body = (await request.json().catch(() => ({}))) as { password?: string }
     const providedPassword = body.password || ''
 

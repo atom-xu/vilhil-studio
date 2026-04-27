@@ -17,12 +17,14 @@
     "@pascal-app/viewer": "*",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
+    "@react-three/postprocessing": "^3.0.4",
     "@tailwindcss/postcss": "^4.2.1",
     "@vilhil/smarthome": "*",
     "better-auth": "^1.6.5",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.2",
     "geist": "^1.7.0",
+    "lucide-react": "^0.562.0",
     "nanoid": "^5.1.9",
     "next": "16.2.1",
     "pdfjs-dist": "^5.6.205",
@@ -33,7 +35,8 @@
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.1",
     "three": "^0.183.1",
-    "three-bvh-csg": "^0.0.18"
+    "three-bvh-csg": "^0.0.18",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@better-auth/cli": "^1.4.21",

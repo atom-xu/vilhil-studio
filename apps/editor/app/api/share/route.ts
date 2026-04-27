@@ -10,15 +10,35 @@
 import { eq } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { projects, shareLinks } from '@/lib/schema'
 import { hashPassword } from '@/lib/password-hash'
+import { getClientIp, rateLimit, rateLimitedResponse } from '@/lib/rate-limit'
 
 const MAX_BODY_SIZE = 20 * 1024 * 1024 // 20MB
 
+/** 创建分享链接请求 schema */
+const CreateShareBody = z.object({
+  name: z.string().min(1).max(200),
+  data: z.object({
+    nodes: z.record(z.string(), z.unknown()),
+    rootNodeIds: z.array(z.string()),
+  }),
+  projectId: z.string().uuid().optional(),
+  permission: z.enum(['view', 'operate']).default('view'),
+  expiresInDays: z.number().int().min(1).max(365).nullable().optional(),
+  password: z.string().max(100).optional(),
+})
+
 export async function POST(request: Request) {
   try {
+    // 防止匿名刷接口：同一 IP 5 分钟内最多创建 20 个分享链接
+    const ip = getClientIp(request)
+    const rl = rateLimit(`share-create:${ip}`, 20, 5 * 60_000)
+    if (!rl.success) return rateLimitedResponse(rl.retryAfterMs)
+
     const contentLength = request.headers.get('content-length')
     if (contentLength && parseInt(contentLength) > MAX_BODY_SIZE) {
       return NextResponse.json({ error: '请求体过大' }, { status: 413 })
@@ -26,26 +46,12 @@ export async function POST(request: Request) {
 
     const session = await auth.api.getSession({ headers: request.headers })
 
-    const body = await request.json()
-    const {
-      name,
-      data,
-      projectId,
-      permission = 'view',
-      expiresInDays,
-      password,
-    } = body as {
-      name: string
-      data: { nodes: Record<string, unknown>; rootNodeIds: string[] }
-      projectId?: string
-      permission?: 'view' | 'operate'
-      expiresInDays?: number | null
-      password?: string
+    const raw = await request.json()
+    const parsed = CreateShareBody.safeParse(raw)
+    if (!parsed.success) {
+      return NextResponse.json({ error: '请求格式错误', details: parsed.error.flatten() }, { status: 400 })
     }
-
-    if (!name || !data) {
-      return NextResponse.json({ error: '缺少必要字段' }, { status: 400 })
-    }
+    const { name, data, projectId, permission, expiresInDays, password } = parsed.data
 
     let targetProjectId: string
 

@@ -7,11 +7,22 @@
 import { eq } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { projects } from '@/lib/schema'
 
 const MAX_BODY_SIZE = 20 * 1024 * 1024 // 20MB
+
+/** 请求体 schema */
+const SaveBody = z.object({
+  name: z.string().min(1).max(200),
+  data: z.object({
+    nodes: z.record(z.string(), z.unknown()),
+    rootNodeIds: z.array(z.string()),
+  }),
+  projectId: z.string().uuid().optional(),
+})
 
 export async function POST(request: Request) {
   try {
@@ -28,22 +39,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '请求体过大' }, { status: 413 })
     }
 
-    const body = await request.json()
-    const { name, data, projectId } = body as {
-      name: string
-      data: { nodes: Record<string, unknown>; rootNodeIds: string[] }
-      projectId?: string
+    const raw = await request.json()
+    const parsed = SaveBody.safeParse(raw)
+    if (!parsed.success) {
+      return NextResponse.json({ error: '请求格式错误', details: parsed.error.flatten() }, { status: 400 })
     }
-
-    if (!name || !data) {
-      return NextResponse.json({ error: '缺少必要字段' }, { status: 400 })
-    }
+    const { name, data, projectId } = parsed.data
 
     // 生成唯一 slug
     const slug = `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${nanoid(6)}`
 
     // 如果提供了 projectId 且用户已登录，尝试更新现有项目
-    if (projectId && session?.user?.id) {
+    if (projectId && session.user.id) {
       const existing = await db.query.projects.findFirst({
         where: (p, { eq, and }) => and(eq(p.id, projectId), eq(p.ownerId, session.user.id)),
       })
