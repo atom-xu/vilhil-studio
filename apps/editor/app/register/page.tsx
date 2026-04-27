@@ -39,26 +39,26 @@ function RegisterForm() {
   }
 
   return (
-    <div className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-8 shadow-sm">
-      <h1 className="mb-1 text-2xl font-semibold text-neutral-900">注册 VilHil</h1>
-      <p className="mb-6 text-sm text-neutral-500">
+    <div className="w-full max-w-sm vh-panel p-8">
+      <h1 className="mb-1 text-2xl font-semibold text-foreground">注册 VilHil</h1>
+      <p className="mb-6 text-sm text-muted-foreground">
         {redirectTo !== '/' ? `注册后继续访问 ${redirectTo}` : '创建账号，管理您的智能方案'}
       </p>
 
       {error && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-600">
+        <div className="mb-4 rounded-[var(--ui-radius-control)] border border-destructive/20 bg-destructive/10 px-4 py-2 text-sm text-destructive">
           {error}
         </div>
       )}
 
       <form className="space-y-4" onSubmit={handleSubmit}>
         <div>
-          <label className="mb-1 block text-sm font-medium text-neutral-700" htmlFor="name">
+          <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="name">
             昵称
           </label>
           <input
             autoComplete="name"
-            className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none transition focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900"
+            className="w-full rounded-[var(--ui-radius-control)] border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary focus:ring-1 focus:ring-[var(--ui-focus-ring)]"
             id="name"
             onChange={(e) => setName(e.target.value)}
             placeholder="设计师小王"
@@ -68,13 +68,13 @@ function RegisterForm() {
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-neutral-700" htmlFor="email">
+          <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="email">
             邮箱
           </label>
           <input
             required
             autoComplete="email"
-            className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none transition focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900"
+            className="w-full rounded-[var(--ui-radius-control)] border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary focus:ring-1 focus:ring-[var(--ui-focus-ring)]"
             id="email"
             onChange={(e) => setEmail(e.target.value)}
             placeholder="designer@example.com"
@@ -84,13 +84,13 @@ function RegisterForm() {
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium text-neutral-700" htmlFor="password">
+          <label className="mb-1 block text-sm font-medium text-foreground" htmlFor="password">
             密码
           </label>
           <input
             required
             autoComplete="new-password"
-            className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none transition focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900"
+            className="w-full rounded-[var(--ui-radius-control)] border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary focus:ring-1 focus:ring-[var(--ui-focus-ring)]"
             id="password"
             minLength={8}
             onChange={(e) => setPassword(e.target.value)}
@@ -101,7 +101,7 @@ function RegisterForm() {
         </div>
 
         <button
-          className="w-full rounded-lg bg-neutral-900 py-2.5 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:opacity-50"
+          className="w-full vh-btn vh-btn-primary py-2.5"
           disabled={loading}
           type="submit"
         >
@@ -109,9 +109,9 @@ function RegisterForm() {
         </button>
       </form>
 
-      <p className="mt-6 text-center text-sm text-neutral-500">
+      <p className="mt-6 text-center text-sm text-muted-foreground">
         已有账号？{' '}
-        <Link className="font-medium text-neutral-900 underline underline-offset-2" href="/login">
+        <Link className="font-medium text-foreground underline underline-offset-2" href="/login">
           直接登录
         </Link>
       </p>
@@ -121,12 +121,12 @@ function RegisterForm() {
 
 export default function RegisterPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-neutral-50">
+    <div className="flex min-h-screen items-center justify-center bg-background">
       <Suspense
         fallback={
-          <div className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-8 shadow-sm">
-            <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-900" />
-            <p className="text-center text-sm text-neutral-500">加载中…</p>
+          <div className="w-full max-w-sm vh-panel p-8">
+            <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-border border-t-foreground" />
+            <p className="text-center text-sm text-muted-foreground">加载中…</p>
           </div>
         }
       >

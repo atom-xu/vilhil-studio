@@ -3,7 +3,9 @@
 import { useScene } from '@pascal-app/core'
 import { useSearchParams } from 'next/navigation'
 import { useEffect } from 'react'
+import { setCurrentProject } from '@/lib/current-project'
 import { fetchProject } from '@/lib/project-api'
+import { toast } from '@/lib/toast'
 
 export function ProjectLoader() {
   const searchParams = useSearchParams()
@@ -22,12 +24,13 @@ export function ProjectLoader() {
           rootNodeIds: string[]
         }
         useScene.getState().setScene(nodes, rootNodeIds as any)
-        // 清理 URL 参数，避免刷新时重复加载
+        setCurrentProject({ id: result.project.id, name: result.project.name })
         window.history.replaceState({}, '', window.location.pathname)
       })
       .catch((err) => {
+        if (cancelled) return
         console.error('[Load Project]', err)
-        alert(`项目加载失败：${err.message}`)
+        toast(`项目加载失败：${err.message}`, 'error')
       })
 
     return () => {

@@ -4,6 +4,7 @@ import { GeistPixelSquare } from 'geist/font/pixel'
 import { Barlow, Instrument_Serif, Inter, JetBrains_Mono } from 'next/font/google'
 import localFont from 'next/font/local'
 import Script from 'next/script'
+import { Toaster } from '@/components/toaster'
 import './globals.css'
 
 const geistSans = localFont({
@@ -58,6 +59,7 @@ export default function RootLayout({
       </head>
       <body className="font-sans">
         {children}
+        <Toaster />
         {/* {process.env.NODE_ENV === 'development' && <Agentation />} */}
       </body>
     </html>

@@ -60,10 +60,10 @@ export default function SharePage() {
 
   if (loading) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-neutral-50">
+      <div className="flex h-screen w-screen items-center justify-center bg-background">
         <div className="text-center">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-900" />
-          <p className="text-sm text-neutral-500">正在加载方案…</p>
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-border border-t-foreground" />
+          <p className="text-sm text-muted-foreground">正在加载方案…</p>
         </div>
       </div>
     )
@@ -71,13 +71,13 @@ export default function SharePage() {
 
   if (needsPassword) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-neutral-50">
-        <div className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-8 shadow-sm">
-          <h1 className="mb-1 text-xl font-semibold text-neutral-900">访问受保护</h1>
-          <p className="mb-6 text-sm text-neutral-500">此方案需要输入访问密码</p>
+      <div className="flex h-screen w-screen items-center justify-center bg-background">
+        <div className="w-full max-w-sm vh-panel p-8">
+          <h1 className="mb-1 text-xl font-semibold text-foreground">访问受保护</h1>
+          <p className="mb-6 text-sm text-muted-foreground">此方案需要输入访问密码</p>
 
           {error && (
-            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-600">
+            <div className="mb-4 rounded-[var(--ui-radius-control)] border border-destructive/20 bg-destructive/10 px-4 py-2 text-sm text-destructive">
               {error}
             </div>
           )}
@@ -91,14 +91,14 @@ export default function SharePage() {
           >
             <input
               autoFocus
-              className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none transition focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900"
+              className="w-full rounded-[var(--ui-radius-control)] border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition focus:border-primary focus:ring-1 focus:ring-[var(--ui-focus-ring)]"
               onChange={(e) => setPasswordInput(e.target.value)}
               placeholder="请输入访问密码"
               type="password"
               value={passwordInput}
             />
             <button
-              className="w-full rounded-lg bg-neutral-900 py-2.5 text-sm font-medium text-white transition hover:bg-neutral-800"
+              className="w-full vh-btn vh-btn-primary py-2.5"
               type="submit"
             >
               确认访问
@@ -111,10 +111,10 @@ export default function SharePage() {
 
   if (error) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-neutral-50">
+      <div className="flex h-screen w-screen items-center justify-center bg-background">
         <div className="text-center">
-          <p className="text-lg font-medium text-neutral-900">{error}</p>
-          <p className="mt-2 text-sm text-neutral-500">链接可能已过期或不存在</p>
+          <p className="text-lg font-medium text-foreground">{error}</p>
+          <p className="mt-2 text-sm text-muted-foreground">链接可能已过期或不存在</p>
         </div>
       </div>
     )

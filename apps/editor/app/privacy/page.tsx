@@ -3,7 +3,7 @@ import Link from 'next/link'
 
 export const metadata: Metadata = {
   title: 'Privacy Policy',
-  description: 'Privacy Policy for Pascal Editor and the Pascal platform.',
+  description: 'Privacy Policy for VilHil Studio.',
 }
 
 export default function PrivacyPage() {
@@ -39,8 +39,8 @@ export default function PrivacyPage() {
           <section className="mb-8 space-y-4">
             <h2 className="font-semibold text-xl">1. Introduction</h2>
             <p className="text-foreground/90 leading-relaxed">
-              Pascal Group Inc. (&quot;we,&quot; &quot;us,&quot; or &quot;our&quot;) operates the
-              Pascal Editor and Platform at pascal.app. This Privacy Policy explains how we collect,
+              VilHil Studio (&quot;we,&quot; &quot;us,&quot; or &quot;our&quot;) operates the
+              VilHil Studio at studio.vilhil.cn. This Privacy Policy explains how we collect,
               use, and protect your information when you use our services.
             </p>
           </section>
@@ -148,9 +148,9 @@ export default function PrivacyPage() {
               To exercise any of these rights, please contact us at{' '}
               <a
                 className="text-foreground underline hover:text-foreground/80"
-                href="mailto:support@pascal.app"
+                href="mailto:support@vilhil.cn"
               >
-                support@pascal.app
+                support@vilhil.cn
               </a>
               .
             </p>
@@ -190,9 +190,9 @@ export default function PrivacyPage() {
               contact us at{' '}
               <a
                 className="text-foreground underline hover:text-foreground/80"
-                href="mailto:support@pascal.app"
+                href="mailto:support@vilhil.cn"
               >
-                support@pascal.app
+                support@vilhil.cn
               </a>
               .
             </p>

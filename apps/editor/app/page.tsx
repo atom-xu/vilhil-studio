@@ -4,7 +4,10 @@ import { generateId, saveAsset, useScene } from '@pascal-app/core'
 import { Editor, useEditor, ViewerToolbarLeft, ViewerToolbarRight } from '@pascal-app/editor'
 import { useViewer } from '@pascal-app/viewer'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
-import { Suspense, useCallback, useEffect, useState } from 'react'
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { useSession } from '@/lib/auth-client'
+import { getCurrentProject, setCurrentProject, useCurrentProject } from '@/lib/current-project'
+import { saveProjectToCloud } from '@/lib/project-api'
 import { UserNavbar } from '@/components/user-navbar'
 import { DevBridge } from './dev-bridge'
 import { PdfPagePicker } from './pdf-page-picker'
@@ -147,13 +150,50 @@ export default function Home() {
 }
 
 function HomeContent() {
+  // ── 登录态 & 当前项目 ────────────────────────────────────────────
+  const { data: session } = useSession()
+  const currentProject = useCurrentProject()
 
-  // 多页 PDF 选择器状态
+  // Ref 避免 onSave 闭包过期（autosave debounce 期间 session/project 可能变）
+  const sessionRef = useRef(session)
+  const currentProjectRef = useRef(currentProject)
+  useEffect(() => { sessionRef.current = session }, [session])
+  useEffect(() => { currentProjectRef.current = currentProject }, [currentProject])
+
+  // ── 云端自动保存回调（传给 Editor.onSave）────────────────────────
+  const handleSave = useCallback(async (scene: { nodes: Record<string, unknown>; rootNodeIds: string[] }) => {
+    if (!sessionRef.current?.user) return // 未登录只走 localStorage
+
+    const project = getCurrentProject()
+    try {
+      const result = await saveProjectToCloud(
+        project?.name ?? '未命名项目',
+        { nodes: scene.nodes, rootNodeIds: scene.rootNodeIds },
+        project?.id,
+      )
+      // 首次保存后记录云端项目 ID，后续更新同一项目
+      if (!project?.id) {
+        setCurrentProject({ id: result.project.id, name: project?.name ?? '未命名项目' })
+      }
+    } catch (err: any) {
+      const msg = String(err?.message ?? '')
+      if (msg.includes('请先登录') || msg.includes('401')) {
+        // session 已过期，跳转登录
+        window.location.href = `/login?redirect=${encodeURIComponent(window.location.pathname)}`
+        return
+      }
+      console.error('[autosave cloud]', err)
+    }
+  }, []) // 稳定引用，通过 ref 读取最新值
+
+  // ── 多页 PDF 选择器状态 ──────────────────────────────────────────
   const [pdfPicker, setPdfPicker] = useState<{
     pdf: PDFDocumentProxy
     numPages: number
     levelId: string
   } | null>(null)
+
+  const effectiveProjectId = currentProject?.id ?? 'local-editor'
 
   const onUploadAsset = useCallback(
     async (_projectId: string, levelId: string, file: File, type: 'scan' | 'guide') => {
@@ -232,9 +272,10 @@ function HomeContent() {
       <DevBridge />
       <Editor
         layoutVersion="v2"
-        projectId="local-editor"
+        projectId={effectiveProjectId}
+        onSave={handleSave}
         sitePanelProps={{
-          projectId: 'local-editor',
+          projectId: effectiveProjectId,
           onUploadAsset,
         }}
         navbarSlot={<UserNavbar />}

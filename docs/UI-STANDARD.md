@@ -5,7 +5,7 @@
 
 ## 1. 视觉基线
 
-1. 品牌主色：`#2D7FF9`
+1. 品牌主色：`#006FFF`（CSS token `--primary`）
 2. 中性色：使用 `background/foreground/muted/accent/border` 语义色，不写随机十六进制
 3. 面板风格：统一玻璃化轻阴影（`bg-background/95 + border-border/40 + backdrop-blur-xl + shadow-lg`）
 4. 禁止新增“页面私有主题色”作为主交互色

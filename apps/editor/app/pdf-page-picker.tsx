@@ -10,17 +10,21 @@ interface PdfPagePickerProps {
   onClose: () => void
 }
 
-/**
- * 多页 PDF 页面选择器弹窗
- *
- * 渐进加载缩略图，点击选择页面后渲染全分辨率
- */
 export function PdfPagePicker({ pdf, numPages, onSelect, onClose }: PdfPagePickerProps) {
   const [thumbs, setThumbs] = useState<(string | null)[]>(() => Array(numPages).fill(null))
   const [rendering, setRendering] = useState<number | null>(null)
   const cancelledRef = useRef(false)
 
-  // 渐进加载缩略图
+  // Escape key to close
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
+
+  // progressive thumbnail loading
   useEffect(() => {
     cancelledRef.current = false
     ;(async () => {
@@ -30,15 +34,13 @@ export function PdfPagePicker({ pdf, numPages, onSelect, onClose }: PdfPagePicke
           const page = await pdf.getPage(i)
           const vp = page.getViewport({ scale: 1 })
           const dpr = window.devicePixelRatio || 1
-          const targetWidth = 300 * dpr
-          const scale = targetWidth / vp.width
+          const scale = (300 * dpr) / vp.width
           const viewport = page.getViewport({ scale })
 
           const canvas = document.createElement('canvas')
           canvas.width = viewport.width
           canvas.height = viewport.height
-          const ctx = canvas.getContext('2d')!
-          await page.render({ canvasContext: ctx, viewport }).promise
+          await page.render({ canvasContext: canvas.getContext('2d')!, viewport }).promise
 
           if (cancelledRef.current) break
           const dataUrl = canvas.toDataURL('image/jpeg', 0.7)
@@ -52,10 +54,12 @@ export function PdfPagePicker({ pdf, numPages, onSelect, onClose }: PdfPagePicke
         }
       }
     })()
-    return () => { cancelledRef.current = true }
+    return () => {
+      cancelledRef.current = true
+    }
   }, [pdf, numPages])
 
-  const handleSelect = async (pageNum: number) => {
+  async function handleSelect(pageNum: number) {
     setRendering(pageNum)
     try {
       const page = await pdf.getPage(pageNum)
@@ -66,8 +70,7 @@ export function PdfPagePicker({ pdf, numPages, onSelect, onClose }: PdfPagePicke
       const canvas = document.createElement('canvas')
       canvas.width = viewport.width
       canvas.height = viewport.height
-      const ctx = canvas.getContext('2d')!
-      await page.render({ canvasContext: ctx, viewport }).promise
+      await page.render({ canvasContext: canvas.getContext('2d')!, viewport }).promise
 
       onSelect({
         dataUrl: canvas.toDataURL('image/png'),
@@ -82,34 +85,37 @@ export function PdfPagePicker({ pdf, numPages, onSelect, onClose }: PdfPagePicke
 
   return (
     <div
+      aria-modal="true"
+      aria-label="选择 PDF 页面"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      role="dialog"
       onClick={onClose}
     >
       <div
         className="relative max-h-[80vh] w-full max-w-2xl overflow-hidden rounded-2xl border border-border/40 bg-background shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* 头部 */}
         <div className="flex items-center justify-between border-b border-border/40 px-5 py-3">
-          <span className="font-medium text-foreground text-sm">
+          <span className="text-sm font-medium text-foreground">
             选择页面（共 {numPages} 页）
           </span>
-          <button variant="ghost"
+          <button
+            aria-label="关闭"
             className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
             onClick={onClose}
             type="button"
           >
-            <span className="text-lg leading-none">&times;</span>
+            <span aria-hidden="true" className="text-lg leading-none">&times;</span>
           </button>
         </div>
 
-        {/* 缩略图网格 */}
         <div className="grid max-h-[65vh] grid-cols-3 gap-3 overflow-y-auto p-4">
           {thumbs.map((thumb, i) => {
             const pageNum = i + 1
             const isRendering = rendering === pageNum
             return (
-              <button variant="ghost"
+              <button
+                aria-label={`选择第 ${pageNum} 页`}
                 className="group relative flex flex-col items-center gap-1.5 rounded-lg border border-border/30 p-2 transition-all hover:border-primary/50 hover:bg-accent/30 disabled:opacity-50"
                 disabled={rendering !== null}
                 key={pageNum}
@@ -119,13 +125,13 @@ export function PdfPagePicker({ pdf, numPages, onSelect, onClose }: PdfPagePicke
                 <div className="relative aspect-[3/4] w-full overflow-hidden rounded bg-accent/20">
                   {thumb ? (
                     <img
-                      alt={`第 ${pageNum} 页`}
+                      alt={`第 ${pageNum} 页预览`}
                       className="h-full w-full object-contain"
                       draggable={false}
                       src={thumb}
                     />
                   ) : (
-                    <div className="flex h-full w-full items-center justify-center">
+                    <div aria-label="加载中" className="flex h-full w-full items-center justify-center">
                       <div className="h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground" />
                     </div>
                   )}

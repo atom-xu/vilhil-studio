@@ -37,33 +37,33 @@ function VerifyForm() {
   }, [token, router])
 
   return (
-    <div className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-8 shadow-sm text-center">
-      <h1 className="mb-2 text-2xl font-semibold text-neutral-900">邮箱验证</h1>
+    <div className="w-full max-w-sm vh-panel p-8 text-center">
+      <h1 className="mb-2 text-2xl font-semibold text-foreground">邮箱验证</h1>
 
       {status === 'loading' && (
         <>
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-900" />
-          <p className="text-sm text-neutral-500">{message}</p>
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-border border-t-foreground" />
+          <p className="text-sm text-muted-foreground">{message}</p>
         </>
       )}
 
       {status === 'success' && (
         <>
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100 text-green-600 text-xl">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary text-xl">
             ✓
           </div>
-          <p className="text-sm text-green-600">{message}</p>
+          <p className="text-sm text-primary">{message}</p>
         </>
       )}
 
       {status === 'error' && (
         <>
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-red-600 text-xl">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 text-destructive text-xl">
             ✕
           </div>
-          <p className="text-sm text-red-600">{message}</p>
+          <p className="text-sm text-destructive">{message}</p>
           <button
-            className="mt-4 rounded-lg bg-neutral-900 px-4 py-2 text-sm text-white transition hover:bg-neutral-800"
+            className="mt-4 vh-btn vh-btn-primary px-4 py-2 text-sm"
             onClick={() => router.push('/login')}
             type="button"
           >
@@ -77,12 +77,12 @@ function VerifyForm() {
 
 export default function VerifyEmailPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-neutral-50">
+    <div className="flex min-h-screen items-center justify-center bg-background">
       <Suspense
         fallback={
-          <div className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-8 shadow-sm text-center">
-            <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-neutral-300 border-t-neutral-900" />
-            <p className="text-sm text-neutral-500">加载中…</p>
+          <div className="w-full max-w-sm vh-panel p-8 text-center">
+            <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-border border-t-foreground" />
+            <p className="text-sm text-muted-foreground">加载中…</p>
           </div>
         }
       >

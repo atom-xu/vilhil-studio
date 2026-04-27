@@ -3,7 +3,7 @@ import Link from 'next/link'
 
 export const metadata: Metadata = {
   title: 'Terms of Service',
-  description: 'Terms of Service for Pascal Editor and the Pascal platform.',
+  description: 'Terms of Service for VilHil Studio.',
 }
 
 export default function TermsPage() {
@@ -39,8 +39,8 @@ export default function TermsPage() {
           <section className="mb-8 space-y-4">
             <h2 className="font-semibold text-xl">1. Introduction</h2>
             <p className="text-foreground/90 leading-relaxed">
-              Welcome to Pascal Editor (&quot;Editor&quot;) and the Pascal platform at pascal.app
-              (&quot;Platform&quot;), operated by Pascal Group Inc. (&quot;we,&quot; &quot;us,&quot;
+              Welcome to VilHil Studio at studio.vilhil.cn
+              (&quot;Platform&quot;), operated by VilHil Studio (&quot;we,&quot; &quot;us,&quot;
               or &quot;our&quot;). By accessing or using our services, you agree to these Terms of
               Service.
             </p>
@@ -54,9 +54,9 @@ export default function TermsPage() {
               software in accordance with the MIT License terms.
             </p>
             <p className="text-foreground/90 leading-relaxed">
-              The Pascal platform (pascal.app) and its associated services, including user accounts,
+              The VilHil Studio (studio.vilhil.cn) and its associated services, including user accounts,
               cloud storage, and project hosting, are proprietary services owned and operated by
-              Pascal Group Inc. These Terms govern your use of the Platform.
+              VilHil Studio These Terms govern your use of the Platform.
             </p>
           </section>
 
@@ -105,7 +105,7 @@ export default function TermsPage() {
           <section className="mb-8 space-y-4">
             <h2 className="font-semibold text-xl">6. Platform Ownership</h2>
             <p className="text-foreground/90 leading-relaxed">
-              The Platform, including its design, features, and proprietary code, is owned by Pascal
+              The Platform, including its design, features, and proprietary code, is owned by VilHil Studio
               Group Inc. and protected by intellectual property laws. While the Editor source code
               is open-source under the MIT License, the Platform services, branding, and
               infrastructure remain our proprietary property.
@@ -120,9 +120,9 @@ export default function TermsPage() {
               may also delete your account at any time by contacting us at{' '}
               <a
                 className="text-foreground underline hover:text-foreground/80"
-                href="mailto:support@pascal.app"
+                href="mailto:support@vilhil.cn"
               >
-                support@pascal.app
+                support@vilhil.cn
               </a>
               .
             </p>
@@ -166,9 +166,9 @@ export default function TermsPage() {
               If you have questions about these Terms, please contact us at{' '}
               <a
                 className="text-foreground underline hover:text-foreground/80"
-                href="mailto:support@pascal.app"
+                href="mailto:support@vilhil.cn"
               >
-                support@pascal.app
+                support@vilhil.cn
               </a>
               .
             </p>
