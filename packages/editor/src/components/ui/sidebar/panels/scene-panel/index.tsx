@@ -316,9 +316,10 @@ function SceneCard({ scene, devices }: SceneCardProps) {
   }, [scene.id])
 
   const effectMap = useMemo(() => {
+    // 仅索引"单灯类" effect（有 deviceId、无 circuitId）
     const m = new Map<string, { state: Record<string, unknown> }>()
     for (const e of effects) {
-      m.set(e.deviceId, { state: e.state })
+      if (e.deviceId && !e.circuitId) m.set(e.deviceId, { state: e.state })
     }
     return m
   }, [effects])

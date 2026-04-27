@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 
-export type RenderPresetKey = 'opslab' | 'balanced' | 'showcase' | 'smooth' | 'night'
+export type RenderPresetKey = 'opslab' | 'balanced' | 'showcase' | 'smooth' | 'night' | 'mist-warm-contrast'
 
 export type RenderTheme = {
   envPresetDay: 'apartment' | 'city' | 'studio' | 'warehouse'
@@ -12,6 +12,8 @@ export type RenderTheme = {
   sunColorDay: string
   sunColorNight: string
   wallColor: string
+  furnitureColorDay: string
+  furnitureColorNight: string
   windowColor: string
   doorColor: string
   capColorA: string
@@ -29,6 +31,15 @@ export type RenderTheme = {
   panelBgNight: string
   panelBorderDay: string
   panelBorderNight: string
+  wallRoughness?: number
+  wallMetalness?: number
+  wallEnvMapIntensity?: number
+  wallOpacity?: number
+  wallMirrorRoughness?: number
+  wallMirrorMetalness?: number
+  furnitureRoughness?: number
+  furnitureMetalness?: number
+  furnitureInteractiveColor?: string
 }
 
 export type RenderPreset = {
@@ -54,14 +65,16 @@ export const RENDER_PRESETS: Record<RenderPresetKey, RenderPreset> = {
     key: 'opslab',
     label: 'OpenSpark',
     description: '白蓝孪生',
-    toneMapping: THREE.ACESFilmicToneMapping,
-    exposure: 1.02,
-    envDay: 0.7,
-    envNight: 0.2,
-    hemiDay: 0.58,
-    hemiNight: 0.35,
-    sunDay: 1.65,
-    sunNight: 0.16,
+    toneMapping: THREE.AgXToneMapping,
+    // 白天基线收敛 —— 之前 sun/env/hemi 叠加 + 半透墙让光透到室内地板，
+    // global 视图下整层都被烧白。降到下面这套值，墙地家具能看出材质感而非纯白。
+    exposure: 0.62,
+    envDay: 0.30,
+    envNight: 0.18,
+    hemiDay: 0.22,
+    hemiNight: 0.30,
+    sunDay: 0.55,
+    sunNight: 0.14,
     shadowMapSize: 1024,
     shadowRadiusDay: 2,
     shadowRadiusNight: 7,
@@ -75,14 +88,16 @@ export const RENDER_PRESETS: Record<RenderPresetKey, RenderPreset> = {
       sunColorDay: '#ffffff',
       sunColorNight: '#8fc3ff',
       wallColor: '#e9eff8',
+      furnitureColorDay: '#c0bdb6',
+      furnitureColorNight: '#9aa6b8',
       windowColor: '#7fb7ff',
       doorColor: '#b8cce6',
       capColorA: '#2e87e8',
       capColorB: '#93c4ff',
       capOpacity: 0.5,
-      padColorDay: '#d3e1f2',
+      padColorDay: '#c8cacc',
       padColorNight: '#2b3a55',
-      padEmissiveDay: '#bbd4ef',
+      padEmissiveDay: '#bcbec0',
       padEmissiveNight: '#6da7ea',
       bgColorDay: '#e3e9f3',
       bgColorNight: '#0c1422',
@@ -98,13 +113,13 @@ export const RENDER_PRESETS: Record<RenderPresetKey, RenderPreset> = {
     key: 'balanced',
     label: '平衡',
     description: '居住演示',
-    toneMapping: THREE.ACESFilmicToneMapping,
-    exposure: 1.0,
-    envDay: 0.65,
+    toneMapping: THREE.AgXToneMapping,
+    exposure: 0.88,
+    envDay: 0.52,
     envNight: 0.15,
-    hemiDay: 0.55,
+    hemiDay: 0.45,
     hemiNight: 0.4,
-    sunDay: 1.8,
+    sunDay: 1.2,
     sunNight: 0.15,
     shadowMapSize: 1024,
     shadowRadiusDay: 2,
@@ -119,6 +134,8 @@ export const RENDER_PRESETS: Record<RenderPresetKey, RenderPreset> = {
       sunColorDay: '#fff4e0',
       sunColorNight: '#7bb8e8',
       wallColor: '#ccc4b8',
+      furnitureColorDay: '#c4beb4',
+      furnitureColorNight: '#9da8b8',
       windowColor: '#b8d0e8',
       doorColor: '#c8bfb0',
       capColorA: '#006FFF',
@@ -144,13 +161,13 @@ export const RENDER_PRESETS: Record<RenderPresetKey, RenderPreset> = {
     key: 'showcase',
     label: '命令中心',
     description: '数字孪生驾驶舱',
-    toneMapping: THREE.ACESFilmicToneMapping,
-    exposure: 1.14,
-    envDay: 1.08,
+    toneMapping: THREE.AgXToneMapping,
+    exposure: 0.96,
+    envDay: 0.75,
     envNight: 0.3,
-    hemiDay: 0.44,
+    hemiDay: 0.38,
     hemiNight: 0.3,
-    sunDay: 2.6,
+    sunDay: 1.7,
     sunNight: 0.24,
     shadowMapSize: 1024,
     shadowRadiusDay: 4,
@@ -165,6 +182,8 @@ export const RENDER_PRESETS: Record<RenderPresetKey, RenderPreset> = {
       sunColorDay: '#f7fbff',
       sunColorNight: '#6ad8ff',
       wallColor: '#9eb5cc',
+      furnitureColorDay: '#b6c6d3',
+      furnitureColorNight: '#7f97ac',
       windowColor: '#5ed2ff',
       doorColor: '#84a0bb',
       capColorA: '#14ccff',
@@ -189,12 +208,12 @@ export const RENDER_PRESETS: Record<RenderPresetKey, RenderPreset> = {
     label: '巡检轻量',
     description: '移动交互优先',
     toneMapping: THREE.NeutralToneMapping,
-    exposure: 0.95,
-    envDay: 0.36,
+    exposure: 0.82,
+    envDay: 0.3,
     envNight: 0.14,
-    hemiDay: 0.66,
+    hemiDay: 0.52,
     hemiNight: 0.45,
-    sunDay: 1.16,
+    sunDay: 0.9,
     sunNight: 0.12,
     shadowMapSize: 1024,
     shadowRadiusDay: 1,
@@ -209,6 +228,8 @@ export const RENDER_PRESETS: Record<RenderPresetKey, RenderPreset> = {
       sunColorDay: '#fff5df',
       sunColorNight: '#8ba5c0',
       wallColor: '#cfd1d3',
+      furnitureColorDay: '#c9c9c6',
+      furnitureColorNight: '#8d95a2',
       windowColor: '#c2d0de',
       doorColor: '#c4bdb2',
       capColorA: '#9fb1c8',
@@ -232,13 +253,13 @@ export const RENDER_PRESETS: Record<RenderPresetKey, RenderPreset> = {
     key: 'night',
     label: '夜间运维',
     description: '告警与监控',
-    toneMapping: THREE.ACESFilmicToneMapping,
-    exposure: 0.8,
-    envDay: 0.58,
+    toneMapping: THREE.AgXToneMapping,
+    exposure: 0.72,
+    envDay: 0.44,
     envNight: 0.42,
-    hemiDay: 0.36,
+    hemiDay: 0.28,
     hemiNight: 0.24,
-    sunDay: 1.52,
+    sunDay: 1.05,
     sunNight: 0.34,
     shadowMapSize: 1024,
     shadowRadiusDay: 3,
@@ -253,6 +274,8 @@ export const RENDER_PRESETS: Record<RenderPresetKey, RenderPreset> = {
       sunColorDay: '#efe6ff',
       sunColorNight: '#e773ff',
       wallColor: '#b39fc0',
+      furnitureColorDay: '#baa7c7',
+      furnitureColorNight: '#7e6f95',
       windowColor: '#8d72c8',
       doorColor: '#87759a',
       capColorA: '#8e44ff',
@@ -272,18 +295,67 @@ export const RENDER_PRESETS: Record<RenderPresetKey, RenderPreset> = {
       panelBorderNight: 'rgba(245,130,255,0.54)',
     },
   },
+  'mist-warm-contrast': {
+    key: 'mist-warm-contrast',
+    label: '晨雾暖层',
+    description: '适合白天展示的数字孪生户型风格：墙体冷透、家具偏暖、背景更淡、边线更亮，拉开建筑/家居/背景层次。',
+    toneMapping: THREE.AgXToneMapping,
+    exposure: 1.04,
+    envDay: 0.92,
+    envNight: 0.26,
+    hemiDay: 0.58,
+    hemiNight: 0.14,
+    sunDay: 1.12,
+    sunNight: 0.22,
+    shadowMapSize: 2048,
+    shadowRadiusDay: 2.4,
+    shadowRadiusNight: 1.2,
+    theme: {
+      // 当前 drei 预设不支持 softStudio/softNight，映射到最接近的 studio/night
+      envPresetDay: 'studio',
+      envPresetNight: 'night',
+      skyDay: '#F6F9FE',
+      skyNight: '#11192B',
+      groundDay: '#EEF3FA',
+      groundNight: '#151D30',
+      sunColorDay: '#FFF6E8',
+      sunColorNight: '#C9D8FF',
+      wallColor: '#EAF2FB',
+      furnitureColorDay: '#D9D2C7',
+      furnitureColorNight: '#92A3BE',
+      windowColor: '#EFF7FF',
+      doorColor: '#D8C4A6',
+      capColorA: '#7FAEFF',
+      capColorB: '#AFCBFF',
+      capOpacity: 0.90,
+      padColorDay: '#F3EFE8',
+      padColorNight: '#2B3344',
+      padEmissiveDay: '#F7F1E4',
+      padEmissiveNight: '#425A86',
+      bgColorDay: '#F7F9FD',
+      bgColorNight: '#0E1422',
+      overlayDay: 'rgba(127, 174, 255, 0.08)',
+      overlayNight: 'rgba(127, 174, 255, 0.14)',
+      panelBgDay: 'rgba(255, 255, 255, 0.86)',
+      panelBgNight: 'rgba(20, 28, 44, 0.86)',
+      panelBorderDay: 'rgba(127, 174, 255, 0.20)',
+      panelBorderNight: 'rgba(127, 174, 255, 0.28)',
+    },
+  },
 }
 
 export function parsePresetKey(value: string | null): RenderPresetKey {
-  if (value === 'opslab' || value === 'showcase' || value === 'smooth' || value === 'night' || value === 'balanced') return value
+  if (value === 'opslab' || value === 'showcase' || value === 'smooth' || value === 'night' || value === 'balanced' || value === 'mist-warm-contrast') return value
   return 'opslab'
 }
 
-export function getDemoChromePalette(isNight: boolean) {
+export function getDemoChromePalette(isNight: boolean, preset?: RenderPreset) {
+  const bg = preset ? (isNight ? preset.theme.panelBgNight : preset.theme.panelBgDay) : (isNight ? '#0E1C33' : '#FFFFFF')
+  const border = preset ? (isNight ? preset.theme.panelBorderNight : preset.theme.panelBorderDay) : (isNight ? '#274A73' : '#D7E5F7')
   return isNight
     ? {
-        bg: '#0E1C33',
-        border: '#274A73',
+        bg,
+        border,
         text: '#E8F2FF',
         text2: '#B8CCE7',
         text3: '#8FA9CA',
@@ -294,8 +366,8 @@ export function getDemoChromePalette(isNight: boolean) {
         hover: 'rgba(114,172,255,0.12)',
       }
     : {
-        bg: '#FFFFFF',
-        border: '#D7E5F7',
+        bg,
+        border,
         text: '#0E223D',
         text2: '#37557F',
         text3: '#6D87A9',

@@ -140,6 +140,10 @@ export const DeviceRenderer = ({ node }: { node: DeviceNode }) => {
               renderType={node.renderType}
               size={deviceDef?.size}
               subsystem={node.subsystem}
+              // 灯带（lightType=line）需要 path 和 emissionDirection 才能渲染折线管几何
+              path={(node.params as any)?.path as Array<[number, number]> | undefined}
+              centroidWorld={[node.position[0], node.position[2]]}
+              emissionDirection={(node.params as any)?.emissionDirection}
               visualState={{
                 on: isOn,
                 brightness: (deviceState?.brightness as number) ?? 100,

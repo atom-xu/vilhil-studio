@@ -12,8 +12,10 @@ import { MaterialPicker } from '../controls/material-picker'
 import { MetricControl } from '../controls/metric-control'
 import { PanelSection } from '../controls/panel-section'
 import { Button } from '../primitives/button'
+import { SegmentedControl } from '../controls/segmented-control'
 import { SliderControl } from '../controls/slider-control'
 import { ToggleControl } from '../controls/toggle-control'
+import { WINDOW_PRESETS, getWindowPreset, type WindowPresetId } from '../../tools/window/window-presets'
 import { PanelWrapper } from './panel-wrapper'
 import { PresetsPopover } from './presets/presets-popover'
 
@@ -67,6 +69,30 @@ export function WindowPanel() {
     if (node.parentId) useScene.getState().dirtyNodes.add(node.parentId as AnyNodeId)
     setSelection({ selectedIds: [] })
   }, [selectedId, node, deleteNode, setSelection])
+
+  /**
+   * 切窗户类型 —— 只调"垂直规格"（高度 + 窗台高），**保留用户画的宽度**。
+   *
+   * 宽度是设计师在墙上画的决定（"这块墙开多宽"），不能被 preset 默认值覆盖。
+   * 你画了个 5m 宽的落地窗，切到普通窗时应该是"5m 宽 1.2m 高、窗台 0.9m"，
+   * 不是缩成 1.2m 宽。
+   *
+   * position[1] = 窗中心在墙上的 Y 坐标（wall-local）。
+   * preset 的 sillHeight = 窗底距地面，所以 centerY = sillHeight + height/2。
+   */
+  const handleChangePreset = useCallback(
+    (presetId: WindowPresetId) => {
+      if (!node) return
+      const p = getWindowPreset(presetId)
+      const centerY = p.sillHeight + p.height / 2
+      handleUpdate({
+        height: p.height,
+        position: [node.position[0], centerY, node.position[2]],
+        presetId,
+      })
+    },
+    [node, handleUpdate],
+  )
 
   const handleDuplicate = useCallback(() => {
     if (!node?.parentId) return
@@ -241,6 +267,17 @@ export function WindowPanel() {
             onClick={handleFlip}
           />
         </div>
+      </PanelSection>
+
+      <PanelSection title="窗户类型">
+        <SegmentedControl
+          value={(node.presetId as WindowPresetId | undefined) ?? 'standard'}
+          onChange={(v) => handleChangePreset(v as WindowPresetId)}
+          options={WINDOW_PRESETS.map((p) => ({ label: p.label, value: p.id }))}
+        />
+        <p className="px-1 pt-1 text-[10px] text-muted-foreground">
+          切换类型自动套对应宽 / 高 / 窗台高，再用下面滑块微调
+        </p>
       </PanelSection>
 
       <PanelSection title="尺寸">

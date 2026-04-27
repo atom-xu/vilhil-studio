@@ -16,6 +16,7 @@ export {
   type HeatmapAP,
 } from './components/renderers/device/animations'
 export { ASSETS_CDN_URL, resolveAssetUrl, resolveCdnUrl } from './lib/asset-url'
+export { colorTempToColor, colorTempToWarmth } from './lib/color-temp'
 export { SCENE_LAYER, ZONE_LAYER } from './lib/layers'
 export {
   clearMaterialCache,

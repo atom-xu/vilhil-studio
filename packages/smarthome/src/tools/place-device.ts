@@ -9,6 +9,16 @@ import { DeviceNode, generateId, useScene } from '@pascal-app/core'
 import type { DeviceParams } from '@pascal-app/core'
 import { getDeviceDefinition } from '../device-catalog'
 
+/** 各 catalogId 对应的灯带发光朝向预设。
+ *  画线工具放灯带时如果没显式传 emissionDirection，按这里的默认走。
+ */
+const STRIP_EMISSION_DEFAULTS: Record<string, 'down' | 'up' | 'wall' | 'omni'> = {
+  'LIGHT-STRIP': 'omni',
+  'LIGHT-STRIP-WASH-WALL': 'wall',
+  'LIGHT-STRIP-COVE': 'up',
+  'LIGHT-STRIP-SKIRTING': 'down',
+}
+
 export function placeDevice(
   levelId: string,
   catalogId: string,
@@ -22,6 +32,15 @@ export function placeDevice(
 
   const id = generateId('device')
 
+  // 灯带（lightType = 'line'）走画线流程：position 是 path 中点，
+  // params.path 必填。如果调用方没传，写一个 zero-length 兜底。
+  const isLightStrip = def.lightType === 'line'
+  const stripDefaults: Partial<DeviceParams> = isLightStrip
+    ? {
+        emissionDirection: STRIP_EMISSION_DEFAULTS[catalogId] ?? 'omni',
+      }
+    : {}
+
   const node = DeviceNode.parse({
     id,
     parentId: levelId,
@@ -34,6 +53,7 @@ export function placeDevice(
     params: {
       beamAngle: 30,
       coverageRadius: def.coverageRadius,
+      ...stripDefaults,
       ...params,
     },
     // 灯光设备默认开启，便于设计师立即看到效果

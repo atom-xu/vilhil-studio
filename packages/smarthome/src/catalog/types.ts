@@ -31,4 +31,13 @@ export interface DeviceDefinition {
   requiresOpening?: 'door' | 'window'
   /** 完整产品元数据（资产库 SSOT） */
   productMeta?: SmartProduct
+  /**
+   * 不在 catalog UI 选择器里出现，但仍保留在 lookup 表里。
+   *
+   * 用途：合并产品时，老的 catalogId（比如 LIGHT-STRIP-WASH-WALL）已经被 LIGHT-STRIP +
+   * `params.emissionDirection='wall'` 替代，但旧数据里还引用着原 catalogId —— 设备节点
+   * 的 productId 在加载时还要能 resolve 到 DeviceDefinition（拿到 size / mountType 等）。
+   * 隐藏避免选择器里"看着像两种产品"，但不破坏老数据。
+   */
+  hiddenFromCatalog?: boolean
 }

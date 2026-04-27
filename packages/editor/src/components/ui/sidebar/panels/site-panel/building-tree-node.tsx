@@ -1,4 +1,4 @@
-import { type BuildingNode, LevelNode, useScene } from '@pascal-app/core'
+import { type BuildingNode, type LevelNode as LevelNodeT, LevelNode, useScene } from '@pascal-app/core'
 import { useViewer } from '@pascal-app/viewer'
 import { Building2, Plus } from 'lucide-react'
 import { useState } from 'react'
@@ -28,10 +28,40 @@ export function BuildingTreeNode({ node, depth, isLast }: BuildingTreeNodeProps)
     setSelection({ buildingId: node.id })
   }
 
+  const nodes = useScene((state) => state.nodes)
+
+  // 楼层子节点按 `level` 倒序（高楼层在上）—— 和 FloatingLevelSelector 对齐。
+  // 非楼层子节点（scan 等）保持原插入顺序、拼在楼层后面。
+  type ChildId = (typeof node.children)[number]
+  const sortedChildren = (() => {
+    const levelChildren: { id: ChildId; level: number }[] = []
+    const others: ChildId[] = []
+    for (const childId of node.children) {
+      const child = nodes[childId]
+      if (child?.type === 'level') {
+        levelChildren.push({ id: childId, level: (child as LevelNodeT).level })
+      } else {
+        others.push(childId)
+      }
+    }
+    levelChildren.sort((a, b) => b.level - a.level)
+    return [...levelChildren.map((x) => x.id), ...others]
+  })()
+
   const handleAddLevel = (e: React.MouseEvent) => {
     e.stopPropagation()
+    // 新楼层的 level 值 = 现有所有楼层里最大的 level + 1
+    // 不能用 children.length —— 如果中间删过一层再加回来，会和残留的 level 冲突，
+    // 导致排序歧义（两个 level 值相同时 sort 不稳定，FloatingLevelSelector 交换顺序失效）。
+    let maxLevel = -1
+    for (const childId of node.children) {
+      const child = nodes[childId]
+      if (child?.type === 'level') {
+        maxLevel = Math.max(maxLevel, (child as LevelNodeT).level)
+      }
+    }
     const newLevel = LevelNode.parse({
-      level: node.children.length,
+      level: maxLevel + 1,
       children: [],
       parentId: node.id,
     })
@@ -68,10 +98,10 @@ export function BuildingTreeNode({ node, depth, isLast }: BuildingTreeNodeProps)
       onDoubleClick={() => focusTreeNode(node.id)}
       onToggle={() => setExpanded(!expanded)}
     >
-      {node.children.map((childId, index) => (
+      {sortedChildren.map((childId, index) => (
         <TreeNode
           depth={depth + 1}
-          isLast={index === node.children.length - 1}
+          isLast={index === sortedChildren.length - 1}
           key={childId}
           nodeId={childId}
         />

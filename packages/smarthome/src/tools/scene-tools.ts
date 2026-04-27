@@ -9,6 +9,19 @@
 import { generateId, SceneNode, useScene } from '@pascal-app/core'
 import type { AnyNode, SceneEffect, SceneNodeType } from '@pascal-app/core'
 import { setDeviceState } from './set-device-params'
+import { listCircuitMembers } from './circuit-tools'
+
+/**
+ * 把一条 SceneEffect 解析为它实际要影响的 deviceId 列表。
+ * - circuitId 非空 → 该回路所有成员
+ * - 否则 → 单个 deviceId（包成单元素数组；undefined 时返回空数组，调用方跳过）
+ */
+function resolveEffectTargets(effect: SceneEffect): string[] {
+  if (effect.circuitId) {
+    return listCircuitMembers(effect.circuitId).map((d) => d.id)
+  }
+  return effect.deviceId ? [effect.deviceId] : []
+}
 
 let activeSceneRunToken: symbol | null = null
 let activeRunEndTimer: ReturnType<typeof setTimeout> | null = null
@@ -133,7 +146,10 @@ export function addSceneEffect(
   const node = nodes[sceneId as AnyNode['id']] as SceneNodeType | undefined
   if (!node || node.type !== 'scene') return
 
-  const existing = node.effects.findIndex((e) => e.deviceId === deviceId)
+  // 同一个 deviceId 已经有 effect 就更新，没有就追加
+  const existing = node.effects.findIndex(
+    (e) => e.deviceId === deviceId && !e.circuitId,
+  )
   let newEffects: SceneEffect[]
 
   if (existing === -1) {
@@ -148,7 +164,38 @@ export function addSceneEffect(
 }
 
 /**
- * removeSceneEffect — 从场景中移除某个设备的效果
+ * addSceneCircuitEffect — 为场景添加"整条回路"的效果
+ *
+ * 和 `addSceneEffect` 平行：前者绑单灯、这个绑回路。运行时（applyScene）会按
+ * 当前回路成员展开应用 state；之后回路里加灯/减灯，**不需要改场景配置**。
+ */
+export function addSceneCircuitEffect(
+  sceneId: string,
+  circuitId: string,
+  state: Record<string, unknown>,
+  delay = 0,
+  duration = 0,
+): void {
+  const { nodes, updateNode } = useScene.getState()
+  const node = nodes[sceneId as AnyNode['id']] as SceneNodeType | undefined
+  if (!node || node.type !== 'scene') return
+
+  const existing = node.effects.findIndex((e) => e.circuitId === circuitId)
+  let newEffects: SceneEffect[]
+
+  if (existing === -1) {
+    newEffects = [...node.effects, { circuitId, state, delay, duration }]
+  } else {
+    newEffects = node.effects.map((e, i) =>
+      i === existing ? { ...e, state: { ...e.state, ...state }, delay, duration } : e,
+    )
+  }
+
+  updateNode(sceneId as AnyNode['id'], { effects: newEffects } as Partial<AnyNode>)
+}
+
+/**
+ * removeSceneEffect — 从场景中移除某个设备的效果（按 deviceId 匹配，不动 circuit 类）
  */
 export function removeSceneEffect(sceneId: string, deviceId: string): void {
   const { nodes, updateNode } = useScene.getState()
@@ -156,7 +203,18 @@ export function removeSceneEffect(sceneId: string, deviceId: string): void {
   if (!node || node.type !== 'scene') return
 
   updateNode(sceneId as AnyNode['id'], {
-    effects: node.effects.filter((e) => e.deviceId !== deviceId),
+    effects: node.effects.filter((e) => !(e.deviceId === deviceId && !e.circuitId)),
+  } as Partial<AnyNode>)
+}
+
+/** removeSceneCircuitEffect — 移除场景里某条回路的效果（按 circuitId 匹配） */
+export function removeSceneCircuitEffect(sceneId: string, circuitId: string): void {
+  const { nodes, updateNode } = useScene.getState()
+  const node = nodes[sceneId as AnyNode['id']] as SceneNodeType | undefined
+  if (!node || node.type !== 'scene') return
+
+  updateNode(sceneId as AnyNode['id'], {
+    effects: node.effects.filter((e) => e.circuitId !== circuitId),
   } as Partial<AnyNode>)
 }
 
@@ -201,13 +259,20 @@ export function applyScene(sceneId: string): number {
   let count = 0
 
   for (const effect of sceneNode.effects) {
-    const deviceNode = nodes[effect.deviceId as AnyNode['id']]
-    if (!deviceNode || deviceNode.type !== 'device') continue
+    // 解析目标：单灯 → 1 条；回路 → N 条（每盏灯共享同一个 delay/duration/state）
+    const targetIds = resolveEffectTargets(effect)
+    if (targetIds.length === 0) continue
 
     elapsedMs += Math.max(0, (effect.delay ?? 0) * 1000)
     maxEndMs = Math.max(maxEndMs, elapsedMs + Math.max(0, (effect.duration ?? 0) * 1000))
-    scheduleEffect(effect, elapsedMs, runToken)
-    count++
+
+    for (const tid of targetIds) {
+      const deviceNode = nodes[tid as AnyNode['id']]
+      if (!deviceNode || deviceNode.type !== 'device') continue
+      // 内部 schedule / 动画系统按 deviceId 字段读取，所以合成一条只带 deviceId 的局部 effect
+      scheduleEffect({ ...effect, deviceId: tid, circuitId: undefined }, elapsedMs, runToken)
+      count++
+    }
   }
 
   if (count === 0) {

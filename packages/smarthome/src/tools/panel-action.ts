@@ -13,14 +13,21 @@ import type { AnyNode, DeviceNode } from '@pascal-app/core'
 import { toggleDevice } from './toggle-device'
 import { setDeviceState } from './set-device-params'
 import { applyScene } from './scene-tools'
+import { listCircuitMembers } from './circuit-tools'
 
 // ═══════════════════════════════════════════════════════════════
 // 类型定义
 // ═══════════════════════════════════════════════════════════════
 
+/**
+ * toggle / set 的目标既可以是回路（circuitId，推荐）也可以是具体设备列表（deviceIds，向后兼容）。
+ *
+ * 解析优先级：`circuitId` 非空 → 查回路里所有灯；否则用 `deviceIds`。
+ * 这样面板按键绑回路后，回路里增减灯，面板配置不用改。
+ */
 export type PanelAction =
-  | { type: 'toggle'; deviceIds: string[] }
-  | { type: 'set'; deviceIds: string[]; state: Record<string, unknown> }
+  | { type: 'toggle'; circuitId?: string; deviceIds: string[] }
+  | { type: 'set'; circuitId?: string; deviceIds: string[]; state: Record<string, unknown> }
   | { type: 'scene'; sceneId: string }
 
 export interface PanelKeyConfig {
@@ -104,19 +111,34 @@ export function setPanelKeyConfig(
 
 // ─── 内部执行器 ─────────────────────────────────────────────────
 
+/**
+ * 把 toggle/set action 解析为实际要操作的设备 id 列表。
+ * `circuitId` 优先；否则用 `deviceIds`。空回路会返回空数组（按键变成 no-op）。
+ */
+function _resolveTargets(action: { circuitId?: string; deviceIds?: string[] }): string[] {
+  if (action.circuitId) {
+    return listCircuitMembers(action.circuitId).map((d) => d.id)
+  }
+  return action.deviceIds ?? []
+}
+
 function _executeAction(action: PanelAction): void {
   switch (action.type) {
-    case 'toggle':
-      for (const id of action.deviceIds) {
+    case 'toggle': {
+      const ids = _resolveTargets(action)
+      for (const id of ids) {
         toggleDevice(id as DeviceNode['id'])
       }
       break
+    }
 
-    case 'set':
-      for (const id of action.deviceIds) {
+    case 'set': {
+      const ids = _resolveTargets(action)
+      for (const id of ids) {
         setDeviceState(id as DeviceNode['id'], action.state)
       }
       break
+    }
 
     case 'scene':
       applyScene(action.sceneId)

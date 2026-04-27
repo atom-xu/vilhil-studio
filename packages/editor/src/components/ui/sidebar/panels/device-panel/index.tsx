@@ -1,19 +1,60 @@
 'use client'
 
-/**
- * DevicePanel — 设备面板
- *
- * 1) 显示设备目录（用于快速选型）
- * 2) 显示未入场/已入场清单（用于方案推进）
- */
-
 import { useScene } from '@pascal-app/core'
-import { DEVICE_CATALOG, getSubsystemLabel } from '@vilhil/smarthome'
-import { Cpu } from 'lucide-react'
-import { useMemo } from 'react'
+import { DEVICE_CATALOG, SUBSYSTEM_META, getSubsystemLabel } from '@vilhil/smarthome'
+import { Cpu, X } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { cn } from '../../../../../lib/utils'
 import useEditor from '../../../../../store/use-editor'
 import { DeviceCatalog } from '../../../device-catalog/device-catalog'
-import { Button } from '../../../primitives/button'
+
+// 按房间类型预设的常用设备组合，方便设计师快速选型
+const ROOM_BUNDLES: { id: string; label: string; catalogIds: string[] }[] = [
+  {
+    id: 'living',
+    label: '客厅',
+    catalogIds: [
+      'LIGHT-DOWNLIGHT',
+      'LIGHT-PENDANT',
+      'PANEL-SCENE-4KEY',
+      'HVAC-AC-WALL',
+      'CURTAIN-SIDE-OPEN',
+    ],
+  },
+  {
+    id: 'bedroom',
+    label: '卧室',
+    catalogIds: [
+      'LIGHT-DOWNLIGHT',
+      'PANEL-SWITCH-2KEY',
+      'PANEL-DIMMER-KNOB',
+      'HVAC-AC-WALL',
+      'CURTAIN-SIDE-OPEN',
+    ],
+  },
+  {
+    id: 'security',
+    label: '安防',
+    catalogIds: [
+      'SECURITY-DOOR-LOCK',
+      'SECURITY-CAMERA-DOME',
+      'SECURITY-CAMERA-BULLET',
+      'SECURITY-PIR',
+      'SECURITY-SMOKE',
+    ],
+  },
+  {
+    id: 'network',
+    label: '网络',
+    catalogIds: [
+      'NETWORK-AP-CEILING',
+      'NETWORK-AP-WALL',
+      'NETWORK-CABINET-WALL',
+      'NETWORK-ROUTER',
+      'INFRA-SMART-HOST',
+    ],
+  },
+]
 
 export function DevicePanel() {
   const nodes = useScene((s) => s.nodes)
@@ -25,32 +66,19 @@ export function DevicePanel() {
   const setCatalogCategory = useEditor((s) => s.setCatalogCategory)
   const setActiveSidebarPanel = useEditor((s) => s.setActiveSidebarPanel)
 
-  const stats = useMemo(() => {
+  const [activeBundleId, setActiveBundleId] = useState<string | null>(null)
+
+  const placedStats = useMemo(() => {
     const deviceNodes = Object.values(nodes).filter((n: any) => n?.type === 'device') as any[]
-    const countByCatalogId = new Map<string, number>()
-    const unknownInScene: Array<{ productId: string; count: number }> = []
-
+    const bySubsystem = new Map<string, number>()
     for (const node of deviceNodes) {
-      const productId = `${node.productId ?? ''}`
-      if (!productId) continue
-      countByCatalogId.set(productId, (countByCatalogId.get(productId) ?? 0) + 1)
+      const sub: string = node.subsystem ?? 'unknown'
+      bySubsystem.set(sub, (bySubsystem.get(sub) ?? 0) + 1)
     }
-
-    const unplaced = DEVICE_CATALOG.filter((d) => !countByCatalogId.has(d.catalogId))
-    const placed = DEVICE_CATALOG
-      .filter((d) => countByCatalogId.has(d.catalogId))
-      .map((d) => ({ def: d, count: countByCatalogId.get(d.catalogId) ?? 0 }))
-      .sort((a, b) => b.count - a.count)
-
-    for (const [productId, count] of countByCatalogId.entries()) {
-      if (!DEVICE_CATALOG.some((d) => d.catalogId === productId)) {
-        unknownInScene.push({ productId, count })
-      }
-    }
-
-    return { unplaced, placed, unknownInScene, totalInScene: deviceNodes.length }
+    return { total: deviceNodes.length, bySubsystem }
   }, [nodes])
 
+  // 进入放置模式：选中设备并切换到 furnish/build 阶段
   const enterPlacement = (catalogId: string) => {
     const target = DEVICE_CATALOG.find((d) => d.catalogId === catalogId) ?? null
     if (!target) return
@@ -62,86 +90,113 @@ export function DevicePanel() {
     setActiveSidebarPanel('building')
   }
 
+  const activeBundle = ROOM_BUNDLES.find((b) => b.id === activeBundleId) ?? null
+
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="flex shrink-0 items-center gap-2 border-border/50 border-b px-3 py-2.5">
-        <Cpu className="h-4 w-4 text-blue-400" />
-        <span className="font-semibold text-foreground text-sm">设备</span>
-        <span className="ml-auto text-[11px] text-muted-foreground">
-          已入场 {stats.totalInScene}
-        </span>
+      {/* 顶栏 */}
+      <div className="flex shrink-0 items-center gap-2 border-b border-border/50 px-3 py-2.5">
+        <Cpu className="h-4 w-4 text-muted-foreground" />
+        <span className="text-sm font-semibold text-foreground">设备</span>
+        {placedStats.total > 0 && (
+          <span className="ml-auto rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+            已放置 {placedStats.total}
+          </span>
+        )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3">
-        <div className="space-y-3">
-          <div className="rounded-lg border border-border/60 bg-background p-2">
-            <div className="mb-2 text-[11px] text-muted-foreground">设备目录（选型）</div>
-            <DeviceCatalog />
+      <div className="flex-1 overflow-y-auto">
+        {/* 正在放置提示 */}
+        {selectedDevice && (
+          <div className="flex items-center gap-2 border-b border-border/30 bg-primary/5 px-3 py-2">
+            <div
+              className="h-2 w-2 shrink-0 rounded-full"
+              style={{ backgroundColor: SUBSYSTEM_META[selectedDevice.subsystem]?.color }}
+            />
+            <span className="flex-1 truncate text-[11px] font-medium text-foreground">
+              点击场景放置 · {selectedDevice.name}
+            </span>
+            <button
+              className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              onClick={() => setSelectedDevice(null)}
+              title="取消"
+              type="button"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        )}
+
+        <div className="space-y-4 p-3">
+          {/* 快速方案 */}
+          <div>
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+              快速方案
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {ROOM_BUNDLES.map((bundle) => {
+                const isActive = activeBundleId === bundle.id
+                return (
+                  <button
+                    className={cn(
+                      'rounded-lg border px-3 py-1 text-xs font-medium transition-colors',
+                      isActive
+                        ? 'border-primary/40 bg-primary/10 text-primary'
+                        : 'border-border/50 bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground',
+                    )}
+                    key={bundle.id}
+                    onClick={() => setActiveBundleId((prev) => (prev === bundle.id ? null : bundle.id))}
+                    type="button"
+                  >
+                    {bundle.label}
+                    <span
+                      className={cn(
+                        'ml-1 text-[10px]',
+                        isActive ? 'text-primary/60' : 'text-muted-foreground/50',
+                      )}
+                    >
+                      {bundle.catalogIds.length}件
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+            {activeBundle && (
+              <p className="mt-1.5 text-[10px] text-muted-foreground">
+                {activeBundle.label}常用设备，点击卡片进入放置
+              </p>
+            )}
           </div>
 
-          <div className="rounded-lg border border-border/60 bg-background p-2">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-[11px] text-muted-foreground">未入场设备</span>
-              <span className="text-[11px] text-muted-foreground">{stats.unplaced.length} 种</span>
-            </div>
-            <div className="max-h-48 space-y-1 overflow-y-auto">
-              {stats.unplaced.map((d) => (
-                <Button variant="ghost"
-                  className="flex w-full items-center justify-between rounded-md border border-border/50 px-2 py-1.5 text-left hover:bg-accent/50"
-                  key={d.catalogId}
-                  onClick={() => enterPlacement(d.catalogId)}
-                  type="button"
-                >
-                  <span className="truncate text-xs">{d.name}</span>
-                  <span className="text-[10px] text-muted-foreground">
-                    {getSubsystemLabel(d.subsystem)}
+          {/* 设备目录 */}
+          <div>
+            {!activeBundle && (
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                所有设备
+              </p>
+            )}
+            <DeviceCatalog
+              filterCatalogIds={activeBundle?.catalogIds}
+              onPlaceDevice={enterPlacement}
+            />
+          </div>
+
+          {/* 已放置统计 */}
+          {placedStats.total > 0 && (
+            <div className="rounded-lg border border-border/40 bg-muted/20 px-3 py-2.5">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                已放置统计
+              </p>
+              <div className="flex flex-wrap gap-x-3 gap-y-1">
+                {Array.from(placedStats.bySubsystem.entries()).map(([sub, count]) => (
+                  <span className="text-[11px] text-muted-foreground" key={sub}>
+                    <span style={{ color: SUBSYSTEM_META[sub as keyof typeof SUBSYSTEM_META]?.color ?? '#888' }}>
+                      ●
+                    </span>{' '}
+                    {getSubsystemLabel(sub as any)} {count}
                   </span>
-                </Button>
-              ))}
-              {stats.unplaced.length === 0 && (
-                <div className="px-2 py-1 text-[11px] text-muted-foreground">全部设备已入场</div>
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-lg border border-border/60 bg-background p-2">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-[11px] text-muted-foreground">已入场设备</span>
-              <span className="text-[11px] text-muted-foreground">{stats.placed.length} 种</span>
-            </div>
-            <div className="max-h-44 space-y-1 overflow-y-auto">
-              {stats.placed.map(({ def, count }) => (
-                <div
-                  className="flex items-center justify-between rounded-md border border-border/50 px-2 py-1.5"
-                  key={def.catalogId}
-                >
-                  <span className="truncate text-xs">{def.name}</span>
-                  <span className="text-[10px] text-muted-foreground">x{count}</span>
-                </div>
-              ))}
-              {stats.placed.length === 0 && (
-                <div className="px-2 py-1 text-[11px] text-muted-foreground">场景中暂未放置设备</div>
-              )}
-            </div>
-          </div>
-
-          {stats.unknownInScene.length > 0 && (
-            <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-2">
-              <div className="mb-1 text-[11px] text-amber-600">已入场（未入库映射）</div>
-              <div className="space-y-1">
-                {stats.unknownInScene.map((x) => (
-                  <div className="flex items-center justify-between text-[11px]" key={x.productId}>
-                    <span className="truncate">{x.productId}</span>
-                    <span className="text-muted-foreground">x{x.count}</span>
-                  </div>
                 ))}
               </div>
-            </div>
-          )}
-
-          {selectedDevice && (
-            <div className="rounded-lg border border-primary/30 bg-primary/5 px-2 py-1.5 text-[11px] text-muted-foreground">
-              当前待放置：<span className="font-medium text-foreground">{selectedDevice.name}</span>
             </div>
           )}
         </div>

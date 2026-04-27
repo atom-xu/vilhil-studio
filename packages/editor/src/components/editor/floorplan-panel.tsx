@@ -23,7 +23,7 @@ import {
   type ZoneNode as ZoneNodeType,
 } from '@pascal-app/core'
 import { useViewer } from '@pascal-app/viewer'
-import { getSubsystemColor, placeDevice } from '@vilhil/smarthome'
+import { assignMissingCircuitIds, getLightCircuits, getSubsystemColor, placeDevice } from '@vilhil/smarthome'
 import { CheckCircle2, Command } from 'lucide-react'
 import {
   memo,
@@ -1695,6 +1695,64 @@ function snapPolygonDraftPoint({
   }
 
   return calculatePolygonSnapPoint(start, snappedPoint)
+}
+
+/**
+ * 灯带画线吸附 —— 多重吸附按优先级合成：
+ *
+ *   1. 墙端点（最近 0.4m 内）→ 直接吸到端点
+ *   2. 已有设备位置（最近 0.4m 内）→ 直接吸到该设备
+ *   3. 上一个点不为空 + 没按 Shift → 90°/45° 锁定（用 calculatePolygonSnapPoint）
+ *   4. 否则原 cursor
+ *
+ * Shift 按住 = 关闭角度锁定，可以画任意斜线（但仍然吸附端点 / 设备）
+ */
+function snapStripPoint(
+  cursor: WallPlanPoint,
+  lastPoint: WallPlanPoint | null,
+  walls: WallNode[],
+  devices: DeviceNode[],
+  shiftPressed: boolean,
+): WallPlanPoint {
+  const ENDPOINT_SNAP_RADIUS = 0.4
+  const r2 = ENDPOINT_SNAP_RADIUS * ENDPOINT_SNAP_RADIUS
+
+  // 1) 墙端点
+  let bestEndpoint: WallPlanPoint | null = null
+  let bestDist = r2
+  for (const w of walls) {
+    for (const ep of [w.start, w.end] as ReadonlyArray<readonly [number, number]>) {
+      const dx = ep[0] - cursor[0]
+      const dz = ep[1] - cursor[1]
+      const d2 = dx * dx + dz * dz
+      if (d2 < bestDist) {
+        bestDist = d2
+        bestEndpoint = [ep[0], ep[1]]
+      }
+    }
+  }
+  if (bestEndpoint) return bestEndpoint
+
+  // 2) 已有设备位置
+  let bestDevice: WallPlanPoint | null = null
+  bestDist = r2
+  for (const d of devices) {
+    const dx = d.position[0] - cursor[0]
+    const dz = d.position[2] - cursor[1]
+    const d2 = dx * dx + dz * dz
+    if (d2 < bestDist) {
+      bestDist = d2
+      bestDevice = [d.position[0], d.position[2]]
+    }
+  }
+  if (bestDevice) return bestDevice
+
+  // 3) 90° / 45° 角度锁定（lastPoint 必须存在 + Shift 没按）
+  if (lastPoint && !shiftPressed) {
+    return calculatePolygonSnapPoint(lastPoint, cursor)
+  }
+
+  return cursor
 }
 
 function pointMatchesWallPlanPoint(
@@ -4231,7 +4289,10 @@ function FloorplanCompass({
 //  Step 1 最简实现：只画圆点 + 外圈光晕。后续（Step 2-4）再补预览/吸附/
 //  朝向/覆盖范围。不做交互事件（选中后续走 handleBackgroundClick）。
 // ═══════════════════════════════════════════════════════════════════════════
-function FloorplanDeviceLayer({
+// memo —— 和 GridLayer / GuideLayer / GeometryLayer 等其他层保持一致。
+// 没 memo 时，FloorplanPanel 每次 re-render 都会让所有设备子节点重新渲染一轮，
+// drag 过程中 FloorplanPanel 会以 pointermove 频率重渲（240Hz+），非常卡。
+const FloorplanDeviceLayer = memo(function FloorplanDeviceLayer({
   devices,
   worldUnitsPerPixel,
   selectedIdSet,
@@ -4239,6 +4300,13 @@ function FloorplanDeviceLayer({
   onDeviceDragStart,
   onDeviceDelete,
   isDeleteMode,
+  circuitColors,
+  circuitInfoByDevice,
+  onStripVertexDragStart,
+  onStripVertexDragMove,
+  onStripVertexDragEnd,
+  onStripPathInsert,
+  onStripPathDelete,
 }: {
   devices: DeviceNode[]
   worldUnitsPerPixel: number
@@ -4252,6 +4320,28 @@ function FloorplanDeviceLayer({
   onDeviceDelete: (deviceId: string, event: ReactMouseEvent<SVGElement>) => void
   /** 当前是否处于删除模式（cursor 变成 × + click 走删除路径） */
   isDeleteMode: boolean
+  /**
+   * 回路自定义颜色（circuitId → HEX）。读自 LevelNode.circuitMeta；
+   * 未设置时回路虚线用全局默认色（lighting 子系统色）。
+   */
+  circuitColors: Record<string, string>
+  /**
+   * 每盏灯的回路信息（deviceId → number/name/color）—— 渲染 #N 小标签用。
+   * 父级从 getLightCircuits 派生，layer 不再自算。
+   */
+  circuitInfoByDevice: Record<string, { number: number; name?: string; color?: string }>
+  /** 灯带顶点 drag 三件套（select 模式 + 灯带选中时显示蓝色 handle）*/
+  onStripVertexDragStart: (
+    stripId: string,
+    vertexIdx: number,
+    event: ReactPointerEvent<SVGCircleElement>,
+  ) => void
+  onStripVertexDragMove: (event: ReactPointerEvent<SVGCircleElement>) => void
+  onStripVertexDragEnd: (event: ReactPointerEvent<SVGCircleElement>) => void
+  /** 灯带 path 加点（segment 中点 "+" 按钮）*/
+  onStripPathInsert: (stripId: string, segmentIdx: number) => void
+  /** 灯带 path 删点（右键顶点）*/
+  onStripPathDelete: (stripId: string, vertexIdx: number) => void
 }) {
   if (devices.length === 0) return null
 
@@ -4263,9 +4353,246 @@ function FloorplanDeviceLayer({
   // 命中半径放大：小圆点点击不容易，用一个更大的透明圆做 hit target
   const hitR = r * 3
 
+  // 回路连线 —— 同 circuitId 的灯按"最近邻折线"串起来。
+  // 视觉上一眼看出"哪几盏灯归一组"。仅对灯（subsystem === 'lighting'）有效。
+  // 算法：每个回路内按位置贪心串成一条折线（不是 MST，但对灯组够用），
+  // 复杂度 O(n²)，n 是回路里灯的数量，一般 <= 20，性能完全够。
+  // 灯带（params.path）用 path 的中点参与（让回路虚线连到灯带中央）。
+  const circuitPolylines: Array<{ id: string; pts: Array<[number, number]> }> = (() => {
+    type Pt = { id: string; cx: number; cy: number }
+    const groups = new Map<string, Pt[]>()
+    for (const d of devices) {
+      if (d.subsystem !== 'lighting') continue
+      const cid = (d.params as { circuitId?: string } | undefined)?.circuitId
+      if (!cid) continue
+      const path = (d.params as { path?: Array<[number, number]> } | undefined)?.path
+      let cx: number, cy: number
+      if (path && path.length >= 2) {
+        // 灯带：用 path 中点
+        const mx = path.reduce((s, p) => s + p[0], 0) / path.length
+        const mz = path.reduce((s, p) => s + p[1], 0) / path.length
+        cx = -mx; cy = -mz
+      } else {
+        cx = -d.position[0]; cy = -d.position[2]
+      }
+      const arr = groups.get(cid) ?? []
+      arr.push({ id: d.id, cx, cy })
+      groups.set(cid, arr)
+    }
+    const out: Array<{ id: string; pts: Array<[number, number]> }> = []
+    for (const [cid, pts] of groups) {
+      if (pts.length < 2) continue // 单灯不画线
+      // 贪心最近邻串联：从第一盏开始，每次找最近未访问的
+      const remaining = pts.slice(1)
+      const seq: Pt[] = [pts[0]!]
+      while (remaining.length > 0) {
+        const last = seq[seq.length - 1]!
+        let bestIdx = 0
+        let bestDist = Infinity
+        for (let i = 0; i < remaining.length; i++) {
+          const p = remaining[i]!
+          const dx = p.cx - last.cx
+          const dy = p.cy - last.cy
+          const d2 = dx * dx + dy * dy
+          if (d2 < bestDist) {
+            bestDist = d2
+            bestIdx = i
+          }
+        }
+        seq.push(remaining.splice(bestIdx, 1)[0]!)
+      }
+      out.push({ id: cid, pts: seq.map((p) => [p.cx, p.cy] as [number, number]) })
+    }
+    return out
+  })()
+
   return (
     <g>
+      {/* 回路连线层 —— 渲染在设备圆点之下，避免遮挡 */}
+      {circuitPolylines.length > 0 && (
+        <g pointerEvents="none">
+          {circuitPolylines.map(({ id, pts }) => {
+            const path = pts
+              .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p[0]} ${p[1]}`)
+              .join(' ')
+            // 自定义回路色优先；没有就用 lighting 子系统默认黄
+            const stroke = circuitColors[id] ?? '#d4a853'
+            return (
+              <path
+                key={id}
+                d={path}
+                fill="none"
+                stroke={stroke}
+                strokeWidth={Math.max(0.005, worldUnitsPerPixel * 0.6)}
+                strokeDasharray={`${Math.max(0.05, worldUnitsPerPixel * 4)} ${Math.max(0.04, worldUnitsPerPixel * 3)}`}
+                opacity={0.55}
+              />
+            )
+          })}
+        </g>
+      )}
+      {/* 灯带（params.path）单独画 polyline，不再画圆点 */}
       {devices.map((d) => {
+        const path = (d.params as { path?: Array<[number, number]> } | undefined)?.path
+        if (!path || path.length < 2) return null
+        const isSelected = selectedIdSet.has(d.id)
+        const color = getSubsystemColor(d.subsystem)
+        const stripStrokeW = Math.max(0.025, worldUnitsPerPixel * 2.4)
+        const dStr = path
+          .map((p, i) => `${i === 0 ? 'M' : 'L'} ${-p[0]} ${-p[1]}`)
+          .join(' ')
+        // 灯带的 #N 标签锚点：path 中点
+        const stripCx = -path.reduce((s, p) => s + p[0], 0) / path.length
+        const stripCy = -path.reduce((s, p) => s + p[1], 0) / path.length
+        const info = circuitInfoByDevice[d.id]
+        return (
+          <g key={`strip-${d.id}`} style={{ cursor: isDeleteMode ? 'not-allowed' : 'pointer' }}>
+            {/* 光晕：粗一点的透明描边 */}
+            <path
+              d={dStr}
+              fill="none"
+              stroke={color}
+              strokeWidth={stripStrokeW * 1.8}
+              opacity={0.18}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              pointerEvents="none"
+            />
+            {/* 实线 */}
+            <path
+              d={dStr}
+              fill="none"
+              stroke={color}
+              strokeWidth={stripStrokeW}
+              opacity={0.95}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              pointerEvents="none"
+            />
+            {/* 选中态：外描边 */}
+            {isSelected && (
+              <path
+                d={dStr}
+                fill="none"
+                stroke="#006AFF"
+                strokeWidth={stripStrokeW * 2.4}
+                opacity={0.9}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                pointerEvents="none"
+              />
+            )}
+            {/* 命中：粗透明 path 接管点击 */}
+            <path
+              d={dStr}
+              fill="none"
+              stroke="transparent"
+              strokeWidth={stripStrokeW * 3.5}
+              strokeLinecap="round"
+              onPointerDown={(e) => {
+                if (e.button !== 0) return
+                if (isDeleteMode) return
+                e.stopPropagation()
+                onDeviceDragStart(d.id, e as any)
+              }}
+              onClick={(e) => {
+                e.stopPropagation()
+                if (isDeleteMode) {
+                  onDeviceDelete(d.id, e as ReactMouseEvent<SVGElement>)
+                } else {
+                  onDeviceSelect(d.id, e as ReactMouseEvent<SVGElement>)
+                }
+              }}
+            />
+            {/* #N 回路标签 —— path 中点上方 */}
+            {info && (
+              <FloorplanCircuitBadge
+                cx={stripCx}
+                cy={stripCy}
+                color={info.color ?? color}
+                number={info.number}
+                worldUnitsPerPixel={worldUnitsPerPixel}
+              />
+            )}
+            {/* 选中：每个 path 顶点画蓝色 handle，可拖动改 path
+                右键顶点 = 删点（path.length > 2 才有效） */}
+            {isSelected &&
+              path.map((p, idx) => {
+                const vR = Math.max(0.05, worldUnitsPerPixel * 5)
+                return (
+                  <circle
+                    key={`vertex-${idx}`}
+                    cx={-p[0]}
+                    cy={-p[1]}
+                    r={vR}
+                    fill="#fff"
+                    stroke="#006AFF"
+                    strokeWidth={Math.max(0.008, worldUnitsPerPixel * 0.9)}
+                    style={{ cursor: 'move' }}
+                    onPointerDown={(e) => onStripVertexDragStart(d.id, idx, e)}
+                    onPointerMove={onStripVertexDragMove}
+                    onPointerUp={onStripVertexDragEnd}
+                    onPointerCancel={onStripVertexDragEnd}
+                    onContextMenu={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      onStripPathDelete(d.id, idx)
+                    }}
+                  />
+                )
+              })}
+            {/* 选中：每段中点画 "+" 加点按钮（path.length-1 段，全部显示） */}
+            {isSelected &&
+              path.length >= 2 &&
+              path.slice(0, -1).map((a, idx) => {
+                const b = path[idx + 1]!
+                const mx = -(a[0] + b[0]) / 2
+                const my = -(a[1] + b[1]) / 2
+                const plusR = Math.max(0.04, worldUnitsPerPixel * 4)
+                return (
+                  <g key={`plus-${idx}`} style={{ cursor: 'copy' }}>
+                    <circle
+                      cx={mx}
+                      cy={my}
+                      r={plusR}
+                      fill="#006AFF"
+                      stroke="#fff"
+                      strokeWidth={Math.max(0.005, worldUnitsPerPixel * 0.5)}
+                      opacity={0.85}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onStripPathInsert(d.id, idx)
+                      }}
+                    />
+                    {/* 十字线 "+" */}
+                    <line
+                      x1={mx - plusR * 0.55}
+                      x2={mx + plusR * 0.55}
+                      y1={my}
+                      y2={my}
+                      stroke="#fff"
+                      strokeWidth={Math.max(0.005, worldUnitsPerPixel * 0.7)}
+                      pointerEvents="none"
+                    />
+                    <line
+                      x1={mx}
+                      x2={mx}
+                      y1={my - plusR * 0.55}
+                      y2={my + plusR * 0.55}
+                      stroke="#fff"
+                      strokeWidth={Math.max(0.005, worldUnitsPerPixel * 0.7)}
+                      pointerEvents="none"
+                    />
+                  </g>
+                )
+              })}
+          </g>
+        )
+      })}
+      {devices.map((d) => {
+        // path 灯带不画圆点，跳过
+        const hasPath = !!(d.params as { path?: unknown } | undefined)?.path
+        if (hasPath) return null
         // SVG 坐标 = -world（floorplan 用 toSvgX/toSvgY 做负号翻转）
         const cx = -d.position[0]
         const cy = -d.position[2]
@@ -4284,8 +4611,45 @@ function FloorplanDeviceLayer({
             onDeviceSelect(d.id, e as ReactMouseEvent<SVGElement>)
           }
         }
+        // 灯具覆盖范围（点光源专用）—— 只在 lighting 子系统 + 选中时显示。
+        // 半径 = h × tan(beamAngle/2)。h 优先用实际安装高度（position[1]），fallback 2.6m。
+        // beamAngle 默认 30°；运行时由 device-panel 的"光束角"滑块编辑。
+        const showLightCoverage = d.subsystem === 'lighting' && isSelected
+        const lightCoverageR = (() => {
+          if (!showLightCoverage) return 0
+          const beamDeg = (d.params?.beamAngle as number | undefined) ?? 30
+          const installH = (d.position[1] as number | undefined) ?? 2.6
+          // 装在地面或负楼层时，画"假定 2.6m 净高"的覆盖（避免 0 半径）
+          const h = installH > 0.5 ? installH : 2.6
+          return h * Math.tan((beamDeg / 2) * (Math.PI / 180))
+        })()
+
         return (
           <g key={d.id} style={{ cursor: isDeleteMode ? 'not-allowed' : 'pointer' }}>
+            {/* 灯具覆盖：选中时画一个半透明圆（光锥在地面的投影）—— 帮助设计师评估照明范围 */}
+            {showLightCoverage && lightCoverageR > 0.01 && (
+              <>
+                <circle
+                  cx={cx}
+                  cy={cy}
+                  r={lightCoverageR}
+                  fill={color}
+                  opacity={0.06}
+                  pointerEvents="none"
+                />
+                <circle
+                  cx={cx}
+                  cy={cy}
+                  r={lightCoverageR}
+                  fill="none"
+                  stroke={color}
+                  strokeWidth={Math.max(0.005, worldUnitsPerPixel * 0.7)}
+                  strokeDasharray={`${Math.max(0.04, worldUnitsPerPixel * 3)} ${Math.max(0.03, worldUnitsPerPixel * 2)}`}
+                  opacity={0.5}
+                  pointerEvents="none"
+                />
+              </>
+            )}
             {/* 视觉：光晕 + 实心 */}
             <circle
               cx={cx}
@@ -4348,9 +4712,182 @@ function FloorplanDeviceLayer({
               }}
               onClick={handleSelect}
             />
+            {/* #N 回路标签 —— 仅 lighting 子系统；圆点正下方一行 */}
+            {d.subsystem === 'lighting' && circuitInfoByDevice[d.id] && (
+              <FloorplanCircuitBadge
+                cx={cx}
+                cy={cy + r * 2.4}
+                color={circuitInfoByDevice[d.id]!.color ?? color}
+                number={circuitInfoByDevice[d.id]!.number}
+                worldUnitsPerPixel={worldUnitsPerPixel}
+              />
+            )}
           </g>
         )
       })}
+    </g>
+  )
+})
+
+/**
+ * 回路 #N 小标签 —— 灯/灯带的悬浮徽章。
+ *
+ * 视觉：圆角小胶囊 + #N 文字。颜色用回路自定义色（fallback 到 lighting 黄）。
+ * 缩放：尺寸跟随 worldUnitsPerPixel（保证不同 zoom 下视觉大小恒定，约 16-20px 高）。
+ * 不响应事件（pointerEvents=none）—— 选择由灯本体 hit 元素负责。
+ */
+function FloorplanCircuitBadge({
+  cx,
+  cy,
+  color,
+  number,
+  worldUnitsPerPixel,
+}: {
+  cx: number
+  cy: number
+  color: string
+  number: number
+  worldUnitsPerPixel: number
+}) {
+  // SVG 单位换算：worldUnitsPerPixel 等于"1 SVG 单位 = 多少米"。
+  // 想让胶囊高度永远是 ~14px → 高度 = 14 * worldUnitsPerPixel。
+  const h = Math.max(0.12, worldUnitsPerPixel * 14)
+  const w = h * 1.6 + (number >= 10 ? h * 0.6 : 0) // 两位数加宽
+  const fontSize = h * 0.62
+  return (
+    <g pointerEvents="none">
+      <rect
+        x={cx - w / 2}
+        y={cy}
+        width={w}
+        height={h}
+        rx={h / 2}
+        ry={h / 2}
+        fill={color}
+        fillOpacity={0.92}
+      />
+      <text
+        x={cx}
+        y={cy + h / 2}
+        fontSize={fontSize}
+        fontWeight={700}
+        fill="#000"
+        fillOpacity={0.78}
+        textAnchor="middle"
+        dominantBaseline="central"
+        // 字体跟随 SVG 缩放，所以指定 font-family 用全局即可
+      >
+        {`#${number}`}
+      </text>
+    </g>
+  )
+}
+
+/** 灯带画线 draft 预览 —— 已确认的折线段（实色）+ 当前未确认的尾段（虚线 ghost）
+ *  - 至少一个 confirmed point 才显示尾段
+ *  - 端点小圆点
+ */
+function FloorplanLightStripDraft({
+  draft,
+  color,
+  worldUnitsPerPixel,
+}: {
+  draft: { points: Array<[number, number]>; hoverPoint: [number, number] | null }
+  color: string
+  worldUnitsPerPixel: number
+}) {
+  const stroke = Math.max(0.025, worldUnitsPerPixel * 2.4)
+  const dotR = Math.max(0.04, worldUnitsPerPixel * 4)
+  // 命中点（hoverPoint）的十字准星：半径 + 线宽独立于端点，突出"下一次点击在哪"
+  const crossR = Math.max(0.12, worldUnitsPerPixel * 10)
+  const crossLine = Math.max(0.008, worldUnitsPerPixel * 0.9)
+
+  // confirmed 段（实色）
+  const confirmedD = draft.points.length >= 2
+    ? draft.points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${-p[0]} ${-p[1]}`).join(' ')
+    : null
+
+  // ghost 段（最后一个 confirmed → hoverPoint）
+  const last = draft.points.length > 0 ? draft.points[draft.points.length - 1]! : null
+  const ghostD = last && draft.hoverPoint
+    ? `M ${-last[0]} ${-last[1]} L ${-draft.hoverPoint[0]} ${-draft.hoverPoint[1]}`
+    : null
+
+  const hx = draft.hoverPoint ? -draft.hoverPoint[0] : null
+  const hy = draft.hoverPoint ? -draft.hoverPoint[1] : null
+
+  return (
+    <g pointerEvents="none">
+      {confirmedD && (
+        <path
+          d={confirmedD}
+          fill="none"
+          stroke={color}
+          strokeWidth={stroke}
+          opacity={0.85}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
+      {ghostD && (
+        <path
+          d={ghostD}
+          fill="none"
+          stroke={color}
+          strokeWidth={stroke}
+          opacity={0.45}
+          strokeDasharray={`${stroke * 3} ${stroke * 2}`}
+          strokeLinecap="round"
+        />
+      )}
+      {/* 端点 —— 已确认的每个点 */}
+      {draft.points.map((p, i) => (
+        <circle
+          key={i}
+          cx={-p[0]}
+          cy={-p[1]}
+          r={dotR}
+          fill="#fff"
+          stroke={color}
+          strokeWidth={Math.max(0.008, worldUnitsPerPixel * 0.8)}
+        />
+      ))}
+      {/* Hover 十字准星 —— 给"下一次点击位置"一个清晰的视觉锚点。
+          即便尚未点第一个点，用户也能立刻看出自己在灯带模式里。 */}
+      {hx !== null && hy !== null && (
+        <>
+          <circle
+            cx={hx}
+            cy={hy}
+            r={crossR * 0.85}
+            fill="none"
+            stroke={color}
+            strokeWidth={crossLine}
+            opacity={0.35}
+          />
+          <line
+            x1={hx - crossR}
+            x2={hx + crossR}
+            y1={hy}
+            y2={hy}
+            stroke={color}
+            strokeWidth={crossLine}
+            opacity={0.6}
+            strokeLinecap="round"
+          />
+          <line
+            x1={hx}
+            x2={hx}
+            y1={hy - crossR}
+            y2={hy + crossR}
+            stroke={color}
+            strokeWidth={crossLine}
+            opacity={0.6}
+            strokeLinecap="round"
+          />
+          <circle cx={hx} cy={hy} r={dotR * 0.7} fill={color} opacity={0.95} />
+        </>
+      )}
     </g>
   )
 }
@@ -4588,35 +5125,43 @@ const WALL_ATTENUATION_DB: Record<string, { at2_4: number; at5: number }> = {
   default:        { at2_4: 6,  at5: 10 },
 }
 
-/** 1m 自由空间路径损耗 L(1m) —— 按频率 */
-const FSPL_AT_1M: Record<'2.4' | '5', number> = {
-  '2.4': 40, // ≈ 40.05 dB
-  '5':   46, // ≈ 46.45 dB
+/** 典型频段中心频率（MHz）—— 用于精确 FSPL 计算 */
+const FREQ_MHZ: Record<'2.4' | '5', number> = {
+  '2.4': 2437, // 2.4 GHz 信道 6
+  '5':   5500, // 5 GHz 中段
 }
 
 interface WifiApParams {
   txPower: number       // dBm
   antennaGain: number   // dBi
   freq: '2.4' | '5'
-  pathLossExp: number   // indoor n（2 = 自由空间，3-4 = 多障碍室内）
 }
 
 const DEFAULT_WIFI: WifiApParams = {
-  txPower: 20,
+  txPower: 17,   // 真实消费级 AP 典型值（原 20 过于理想）
   antennaGain: 3,
   freq: '5',
-  pathLossExp: 2.8,
 }
 
-/** 提取单个 AP 的 WiFi 参数（优先读 params.custom.wifi，否则用默认） */
 function getWifiParams(device: DeviceNode): WifiApParams {
   const custom = (device.params?.custom as { wifi?: Partial<WifiApParams> } | undefined)?.wifi
   return {
     txPower: custom?.txPower ?? DEFAULT_WIFI.txPower,
     antennaGain: custom?.antennaGain ?? DEFAULT_WIFI.antennaGain,
     freq: custom?.freq ?? DEFAULT_WIFI.freq,
-    pathLossExp: custom?.pathLossExp ?? DEFAULT_WIFI.pathLossExp,
   }
+}
+
+/** 路径损耗指数 n 按墙数动态选（对齐 UniFi 实测）：
+ *    0 墙 → n=2.0 自由空间 LOS
+ *    1-2 墙 → n=2.8 室内常规
+ *    3+ 墙 → n=3.5 NLOS 重损耗
+ *  再叠加每面墙的显式 dB 衰减（WALL_ATTENUATION_DB）
+ */
+function pickPathLossExponent(wallCount: number): number {
+  if (wallCount === 0) return 2.0
+  if (wallCount <= 2) return 2.8
+  return 3.5
 }
 
 /** 两线段是否严格相交（共享端点不算）—— CCW 算法 */
@@ -4636,7 +5181,15 @@ function segmentsIntersect(
   )
 }
 
-/** 计算 AP 到 point 的 RSSI（dBm）—— 考虑 FSPL + 墙衰减 */
+/** 计算 AP 到 point 的 RSSI（dBm）—— UniFi 对齐版
+ *
+ *    RSSI = EIRP − PathLoss − Σ WallAttenuation
+ *    EIRP = txPower + antennaGain
+ *    PathLoss = 20·log10(f_MHz) − 27.55 + 10·n·log10(d)
+ *      其中 n 按穿墙数动态选（0/1-2/3+）
+ *
+ *  精确 FSPL 公式，和 UniFi 一致
+ */
 function computeRssiAtPoint(
   apX: number, apZ: number,
   wifi: WifiApParams,
@@ -4646,25 +5199,32 @@ function computeRssiAtPoint(
   const dx = px - apX
   const dz = pz - apZ
   const d = Math.sqrt(dx * dx + dz * dz)
-  // 近 AP（<0.5m）饱和 —— 避免 log10(小) 奇异
-  if (d < 0.5) return wifi.txPower + wifi.antennaGain - 20
+  if (d < 0.5) return wifi.txPower + wifi.antennaGain - 20 // 近 AP 饱和
 
-  const fspl = FSPL_AT_1M[wifi.freq] + 10 * wifi.pathLossExp * Math.log10(d)
-
-  // 穿墙衰减
-  let wallLoss = 0
+  // 统计穿墙数 + 累加每面墙衰减
+  let wallCount = 0
+  let wallLossDb = 0
   for (const w of walls) {
     const hit = segmentsIntersect(
       apX, apZ, px, pz,
       w.start[0], w.start[1], w.end[0], w.end[1],
     )
     if (!hit) continue
+    wallCount++
     const wallType = ((w.metadata as any)?.wallType as string | undefined) ?? 'default'
     const att = WALL_ATTENUATION_DB[wallType] ?? WALL_ATTENUATION_DB.default!
-    wallLoss += wifi.freq === '5' ? att.at5 : att.at2_4
+    wallLossDb += wifi.freq === '5' ? att.at5 : att.at2_4
   }
 
-  return wifi.txPower + wifi.antennaGain - fspl - wallLoss
+  // 动态 n：穿墙越多，整体室内损耗指数越高（对齐 UniFi 2 / 2.8 / 3.5 三档）
+  const n = pickPathLossExponent(wallCount)
+  const freqMHz = FREQ_MHZ[wifi.freq]
+  // 标准 FSPL：20·log10(d) + 20·log10(f_MHz) − 27.55
+  // 把 20·log10(d) 拆成 n 版本 → 10·n·log10(d)
+  const pathLossDb =
+    20 * Math.log10(freqMHz) - 27.55 + 10 * n * Math.log10(d)
+
+  return wifi.txPower + wifi.antennaGain - pathLossDb - wallLossDb
 }
 
 /** RSSI → RGBA 平滑梯度（线性插值，和 UniFi 一样柔和过渡）
@@ -4680,14 +5240,20 @@ function computeRssiAtPoint(
  *
  * 相邻停点之间线性混色 —— 消除"马赛克色带"
  */
+/** RSSI 色停点 —— 对齐设计场景："可用覆盖区"观感
+ *
+ * 真实消费级 AP 的有效设计覆盖止于 −75 dBm 左右（能稳定看视频），
+ * −85 以下已经是信号边缘、设计上不应该把客户带到那里做"能用"的承诺。
+ * 所以我们把 −85 以下都当作"没覆盖"，直接透明 —— 不再画出那些深红
+ * 深紫的"虚假覆盖"圈，让设计师一眼看到真实可用范围。
+ */
 const RSSI_STOPS: Array<{ rssi: number; rgba: [number, number, number, number] }> = [
-  { rssi: -40, rgba: [22, 163, 74, 180] },
-  { rssi: -55, rgba: [22, 163, 74, 150] },
-  { rssi: -65, rgba: [101, 163, 13, 140] },
-  { rssi: -75, rgba: [202, 138, 4, 120] },
-  { rssi: -85, rgba: [234, 88, 12, 100] },
-  { rssi: -95, rgba: [220, 38, 38, 70] },
-  { rssi: -105, rgba: [0, 0, 0, 0] },
+  { rssi: -45, rgba: [74, 222, 128, 210] },  // #4ade80 鲜绿 Excellent（近 AP）
+  { rssi: -55, rgba: [132, 204, 22, 200] },  // #84cc16 黄绿 Great
+  { rssi: -65, rgba: [234, 179, 8, 185] },   // #eab308 黄 Good
+  { rssi: -75, rgba: [249, 115, 22, 170] },  // #f97316 橙 Fair（设计边界）
+  { rssi: -82, rgba: [220, 38, 38, 120] },   // #dc2626 红 Poor（弱到不应该承诺可用）
+  { rssi: -86, rgba: [0, 0, 0, 0] },         // 透明（视作无覆盖）
 ]
 
 function rssiToRgba(rssi: number): [number, number, number, number] {
@@ -4726,35 +5292,102 @@ function rssiToRgba(rssi: number): [number, number, number, number] {
  * useMemo：只在 aps/walls 变化时重算；typical 20m × 15m 户型 + 3 AP + 20 墙
  * 单次耗时约 30-80ms，鼠标操作/滚轮缩放不触发
  */
+/** 3×3 box blur 对 RGBA ImageData（就地变换）—— UniFi 视觉柔和感来源 */
+function boxBlurRgba(data: Uint8ClampedArray, w: number, h: number, passes = 2) {
+  const tmp = new Uint8ClampedArray(data.length)
+  for (let pass = 0; pass < passes; pass++) {
+    // 水平 pass：把 data 写到 tmp
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let r = 0, g = 0, b = 0, a = 0, n = 0
+        for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx
+          if (xx < 0 || xx >= w) continue
+          const i = (y * w + xx) * 4
+          r += data[i]!; g += data[i + 1]!; b += data[i + 2]!; a += data[i + 3]!
+          n++
+        }
+        const o = (y * w + x) * 4
+        tmp[o] = r / n; tmp[o + 1] = g / n; tmp[o + 2] = b / n; tmp[o + 3] = a / n
+      }
+    }
+    // 垂直 pass：tmp → data
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let r = 0, g = 0, b = 0, a = 0, n = 0
+        for (let dy = -1; dy <= 1; dy++) {
+          const yy = y + dy
+          if (yy < 0 || yy >= h) continue
+          const i = (yy * w + x) * 4
+          r += tmp[i]!; g += tmp[i + 1]!; b += tmp[i + 2]!; a += tmp[i + 3]!
+          n++
+        }
+        const o = (y * w + x) * 4
+        data[o] = r / n; data[o + 1] = g / n; data[o + 2] = b / n; data[o + 3] = a / n
+      }
+    }
+  }
+}
+
+/** 值稳定 N ms 后再"落地" —— 拖动这类连续变化时跳过中间帧，只在用户停顿后重算。
+ *  useDeferredValue 只是降优先级，useMemo 一旦开始跑就阻塞整帧；
+ *  debounce 直接让重算根本不发生在 drag 期间，drag 手感才能丝滑。
+ */
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delayMs)
+    return () => clearTimeout(id)
+  }, [value, delayMs])
+  return debounced
+}
+
 function FloorplanWifiHeatmapLayer({
   aps,
   walls,
-  /** 每米多少像素，精度↔性能 trade-off（默认 10 px/m 足够平滑） */
-  pixelsPerMeter = 10,
+  /** 每米多少像素（20 px/m → 20m 户型 400×300 = 12 万像素，编辑器流畅度优先）*/
+  pixelsPerMeter = 20,
 }: {
   aps: DeviceNode[]
   walls: WallNode[]
   pixelsPerMeter?: number
 }) {
+  // 【AP 拖动不卡的关键】—— 用 debounce（不是 useDeferredValue）
+  //   useDeferredValue：把重算放低优先级，但 useMemo 一旦开始执行就阻塞整帧
+  //     → 拖 AP 时每帧都会开始一次 7M+ 次的射线-墙相交计算 → 卡
+  //   debounce：drag 期间持续重置 timer，重算 根本不触发
+  //     → drag 期间热力图"定格"在最后一次稳定的状态
+  //     → 用户停下手（150ms）后才算一次新图，视觉上像"跟手"
+  //
+  // 150ms 是人眼感知"动起来 vs 停下"的阈值，基本是无感切换。
+  const apsDebounced = useDebouncedValue(aps, 150)
+  const wallsDebounced = useDebouncedValue(walls, 150)
+
+  // 从 apsDebounced / wallsDebounced 取名后，让编译器帮我们忘掉旧变量
+  const apsDeferred = apsDebounced
+  const wallsDeferred = wallsDebounced
+
   const bitmap = useMemo(() => {
-    if (aps.length === 0 || walls.length === 0) return null
+    if (apsDeferred.length === 0 || wallsDeferred.length === 0) return null
     if (typeof document === 'undefined') return null // SSR 兼容
 
-    // bbox = 墙 + AP 范围，外扩 5m 给衰减到无信号的地方留白
+    // bbox = 墙 + AP 范围
     let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity
-    for (const w of walls) {
+    for (const w of wallsDeferred) {
       minX = Math.min(minX, w.start[0], w.end[0])
       maxX = Math.max(maxX, w.start[0], w.end[0])
       minZ = Math.min(minZ, w.start[1], w.end[1])
       maxZ = Math.max(maxZ, w.start[1], w.end[1])
     }
-    for (const ap of aps) {
+    for (const ap of apsDeferred) {
       minX = Math.min(minX, ap.position[0])
       maxX = Math.max(maxX, ap.position[0])
       minZ = Math.min(minZ, ap.position[2])
       maxZ = Math.max(maxZ, ap.position[2])
     }
-    const margin = 5
+    // 外扩 2m —— 真实 AP 在 −85 dBm 处大概离 AP 10–15m，不需要把画布画到离建筑很远。
+    // 外扩缩小 = 像素总数减少 ≈60%，直接降编辑器负担。
+    const margin = 2
     minX -= margin; maxX += margin; minZ -= margin; maxZ += margin
     const worldW = maxX - minX
     const worldH = maxZ - minZ
@@ -4772,7 +5405,7 @@ function FloorplanWifiHeatmapLayer({
     const data = imgData.data
 
     // Pre-extract AP params
-    const apData = aps.map((ap) => ({
+    const apData = apsDeferred.map((ap) => ({
       x: ap.position[0],
       z: ap.position[2],
       wifi: getWifiParams(ap),
@@ -4780,14 +5413,30 @@ function FloorplanWifiHeatmapLayer({
 
     // 画布 pixel (0,0) 对应 world 最大角 (maxX, maxZ)，沿 i+ / j+ 递减到 (minX, minZ)
     // 这样 <image x=-maxX y=-maxZ width=worldW height=worldH> 就和 SVG 坐标系自然对齐
+    //
+    // 【反射线扇形伪影的关键】把每个 AP 当作 0.2m 半径的小面源。
+    // 采样 3 点（中心 + 东西 2 点）= ray cast 次数降 40%。
+    // 对墙端点阴影的角度涂抹已经够用（距 10m 处 ≈ 1.1° 分散）。
+    const apJitter = 0.2
+    const apOffsets: Array<[number, number]> = [
+      [0, 0],
+      [apJitter, 0],
+      [-apJitter, 0],
+    ]
     for (let j = 0; j < pxH; j++) {
       const wz = maxZ - (j + 0.5) / pixelsPerMeter
       for (let i = 0; i < pxW; i++) {
         const wx = maxX - (i + 0.5) / pixelsPerMeter
+        // 对每个 AP：做 5 次面源采样取平均（线性 dBm 域平均，软化硬阴影）
+        // 然后各 AP 之间取 max（WiFi 实际表现是最强信号覆盖）
         let maxR = -Infinity
         for (const ap of apData) {
-          const r = computeRssiAtPoint(ap.x, ap.z, ap.wifi, wx, wz, walls)
-          if (r > maxR) maxR = r
+          let sumR = 0
+          for (const [ox, oz] of apOffsets) {
+            sumR += computeRssiAtPoint(ap.x + ox, ap.z + oz, ap.wifi, wx, wz, wallsDeferred)
+          }
+          const avgR = sumR / apOffsets.length
+          if (avgR > maxR) maxR = avgR
         }
         const rgba = rssiToRgba(maxR)
         const idx = (j * pxW + i) * 4
@@ -4797,26 +5446,70 @@ function FloorplanWifiHeatmapLayer({
         data[idx + 3] = rgba[3]
       }
     }
+
+    // 2 遍 3×3 box blur —— 等效 Gaussian σ≈1.4 像素（在 20 px/m 下 ≈ 7cm 世界单位）
+    // AP 面源采样已经消掉了大部分射线条纹，blur 只需要做最后的软化
+    boxBlurRgba(data, pxW, pxH, 2)
     ctx.putImageData(imgData, 0, 0)
 
+    // 不在这里做 PNG 编码 —— toDataURL 是同步的，几十万像素编码能吃 30–50ms 一帧。
+    // 只把 canvas 对象 + 几何返回，交给下方 useEffect 用 toBlob 异步编码。
     return {
-      url: canvas.toDataURL('image/png'),
+      canvas,
       svgX: -maxX,
       svgY: -maxZ,
       svgW: worldW,
       svgH: worldH,
     }
-  }, [aps, walls, pixelsPerMeter])
+  }, [apsDeferred, wallsDeferred, pixelsPerMeter])
 
-  if (!bitmap) return null
+  // 异步 PNG 编码 —— toBlob 在多数浏览器里走内部线程，不阻塞主线程的 drag/render。
+  // 编完通过 blob URL 挂到 <image>。旧 URL 在拿到新 URL 后统一回收。
+  const [imageUrl, setImageUrl] = useState<string | null>(null)
+  const prevUrlRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!bitmap) {
+      if (prevUrlRef.current) {
+        URL.revokeObjectURL(prevUrlRef.current)
+        prevUrlRef.current = null
+      }
+      setImageUrl(null)
+      return
+    }
+    let aborted = false
+    bitmap.canvas.toBlob((blob) => {
+      if (aborted || !blob) return
+      const newUrl = URL.createObjectURL(blob)
+      if (prevUrlRef.current) URL.revokeObjectURL(prevUrlRef.current)
+      prevUrlRef.current = newUrl
+      setImageUrl(newUrl)
+    }, 'image/png')
+    return () => {
+      aborted = true
+    }
+  }, [bitmap])
+  // 卸载时清 blob
+  useEffect(
+    () => () => {
+      if (prevUrlRef.current) {
+        URL.revokeObjectURL(prevUrlRef.current)
+        prevUrlRef.current = null
+      }
+    },
+    [],
+  )
 
+  if (!bitmap || !imageUrl) return null
+
+  // 所有柔化都在 canvas 层做了（multi-sample + 2-pass box blur），
+  // 这里直接 <image>，依赖浏览器 bilinear 做缩放过滤
   return (
     <image
       x={bitmap.svgX}
       y={bitmap.svgY}
       width={bitmap.svgW}
       height={bitmap.svgH}
-      href={bitmap.url}
+      href={imageUrl}
       preserveAspectRatio="none"
       pointerEvents="none"
       style={{ imageRendering: 'auto' }}
@@ -5194,23 +5887,76 @@ export function FloorplanPanel() {
     }),
   )
 
+  /**
+   * 回路自定义颜色（circuitId → HEX）。读自 LevelNode.circuitMeta。
+   * useShallow 保证 meta 没变时引用稳定，FloorplanDeviceLayer 的 memo 不会失效。
+   */
+  const circuitColors = useScene(
+    useShallow((state) => {
+      const out: Record<string, string> = {}
+      if (!levelId) return out
+      const lv = state.nodes[levelId as AnyNodeId] as
+        | { type: string; circuitMeta?: Record<string, { color?: string }> }
+        | undefined
+      if (!lv || lv.type !== 'level' || !lv.circuitMeta) return out
+      for (const [cid, m] of Object.entries(lv.circuitMeta)) {
+        if (m?.color) out[cid] = m.color
+      }
+      return out
+    }),
+  )
+
+  /**
+   * 回路按楼层的可视化信息（deviceId → { number, name? }）—— 给 2D 灯具加 #N 小标签用。
+   * 编号是 derived value（按楼层下灯出现顺序），不写 schema；这里只生成查询表。
+   * 依赖 levelDevices（成员变化要重排编号）+ 上面的 circuitColors（meta 改名也要刷新）。
+   */
+  const circuitInfoByDevice = useMemo(() => {
+    const out: Record<string, { number: number; name?: string; color?: string }> = {}
+    if (!levelId) return out
+    const list = getLightCircuits(levelId)
+    for (const c of list) {
+      for (const m of c.members) {
+        out[m.id] = { number: c.number, name: c.name, color: c.color }
+      }
+    }
+    return out
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [levelId, levelDevices, circuitColors])
+
   /** AP / 路由/ 交换机 —— 参与 WiFi 热力图计算的网络设备
    *  renderType 匹配 catalog 现有命名（subtype = ceiling / wall / router）+ 旧别名
+   *
+   *  【性能】直接走 useScene + useShallow，不经 levelDevices 派生。
+   *  这样拖动非-AP 设备（灯/摄像头/窗帘…）时，apDevices 内容引用不变，
+   *  useShallow 命中缓存 → 热力图根本不会重算。
+   *  之前用 useMemo(levelDevices.filter(...))，levelDevices 每次变都生成新数组，
+   *  热力图跟着非-AP drag 一起重算，纯无用功。
    */
-  const apDevices = useMemo(
-    () =>
-      levelDevices.filter((d) => {
-        if (d.subsystem !== 'network') return false
+  const apDevices = useScene(
+    useShallow((state) => {
+      if (!levelId) return [] as DeviceNode[]
+      const level = state.nodes[levelId]
+      if (!level || level.type !== 'level') return [] as DeviceNode[]
+      const out: DeviceNode[] = []
+      for (const childId of level.children) {
+        const n = state.nodes[childId]
+        if (n?.type !== 'device') continue
+        const d = n as DeviceNode
+        if (d.subsystem !== 'network') continue
         const rt = d.renderType
-        return (
+        if (
           rt === 'ceiling' ||
           rt === 'wall' ||
           rt === 'router' ||
           rt === 'ap-ceiling' ||
           rt === 'ap-wall'
-        )
-      }),
-    [levelDevices],
+        ) {
+          out.push(d)
+        }
+      }
+      return out
+    }),
   )
 
   const [draftStart, setDraftStart] = useState<WallPlanPoint | null>(null)
@@ -5257,10 +6003,37 @@ export function FloorplanPanel() {
     pointerId: number
     startPoint: WallPlanPoint
     dragged: boolean
+    /**
+     * 灯带专用：按下瞬间的 params.path 快照。drag move 时按 delta 平移
+     * 整条折线（每帧基于快照重新计算，避免累计误差）。点光源为 undefined。
+     */
+    startPath?: Array<[number, number]>
   } | null>(null)
+  /**
+   * 灯带"单个端点"拖动 —— 区别于 deviceDragRef 的整条平移。
+   * 选中灯带后显示蓝色顶点 handle，按下某个 → 该端点跟着鼠标走，path 其它点不动。
+   */
+  const stripVertexDragRef = useRef<{
+    stripId: string
+    vertexIdx: number
+    pointerId: number
+  } | null>(null)
+  const stripVertexPendingRef = useRef<{
+    clientX: number
+    clientY: number
+    pointerId: number
+  } | null>(null)
+  const stripVertexRafRef = useRef<number | null>(null)
+  // 【drag 性能关键】pointermove 原生可达 240Hz+，但 SVG 渲染只有 60Hz。
+  // 用 rAF 合并同一帧内的所有 pointermove，每帧最多写一次 store —— 避免
+  // updateNode 以 240Hz 频率触发所有 useScene 订阅者导致的级联重渲。
+  const deviceDragRafRef = useRef<number | null>(null)
+  const deviceDragPendingRef = useRef<{ clientX: number; clientY: number; pointerId: number } | null>(null)
   // 设备目录的响应式订阅（handleBackgroundClick 用 getState 拿即时值；预览和 UI 指示器需要重渲染触发）
   const selectedDevice = useEditor((s) => s.selectedDevice)
   const setSelectedDevice = useEditor((s) => s.setSelectedDevice)
+  // 灯带画线 draft —— 用 selector 订阅，每次 push 顶点 / hover 移动都重渲染
+  const lightStripDraftState = useEditor((s) => s.lightStripDraft)
   const [wallEndpointDraft, setWallEndpointDraft] = useState<WallEndpointDraft | null>(null)
   const [hoveredOpeningId, setHoveredOpeningId] = useState<OpeningNode['id'] | null>(null)
   const [hoveredWallId, setHoveredWallId] = useState<WallNode['id'] | null>(null)
@@ -5315,16 +6088,42 @@ export function FloorplanPanel() {
   // ── Esc 退出建造模式 —— 回到 select 模式 ──
   // 注意：不清 selectedDevice，因为 DeviceCatalog 有 auto-select effect 会立即补回来（会形成
   // 互相 setState 的无限循环）；改用 mode 门控 ghost / 放置（下面在 UI 层判断 mode === 'build'）
+  //
+  // 灯带画线模式下，Esc 优先取消 draft（如果有），二次 Esc 才退 build；Enter 落地 draft。
+  // 用 commitRef 转发，避免函数声明顺序问题（commitLightStripDraft 在下面声明）。
+  const commitLightStripDraftRef = useRef<(() => void) | null>(null)
   useEffect(() => {
     if (mode !== 'build') return
     const onKey = (e: KeyboardEvent) => {
+      const editorState = useEditor.getState()
+      const isStripDraft =
+        editorState.selectedDevice?.lightType === 'line' && editorState.lightStripDraft
       if (e.key === 'Escape') {
+        if (isStripDraft) {
+          editorState.setLightStripDraft(null)
+          return
+        }
         setMode('select')
+      } else if (e.key === 'Enter' && isStripDraft) {
+        commitLightStripDraftRef.current?.()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [mode, setMode])
+
+  // ── 老灯一次性回填 circuitId ──────────────────────────────────────────────
+  // 楼层切换时跑一遍，把 schema 加 circuitId 之前放的灯都补上真实 id。
+  // 之后所有右侧面板 / 开关绑定 / 场景效果都按"显式回路 id"工作，不走 fallback。
+  // 已经有 circuitId 的灯不会被改 —— 函数内部判断。
+  useEffect(() => {
+    if (!levelId) return
+    const n = assignMissingCircuitIds(levelId)
+    if (n > 0) {
+      // 不需要 sfx，纯静默迁移；console 留个痕迹方便排查
+      console.log(`[circuit] 回填 ${n} 盏老灯的 circuitId`)
+    }
+  }, [levelId])
 
   // ── Esc 也能退出摄像头 follow 模式 ──────────────────────────────────────────
   // 直接操作 ref + sfx，避免依赖 exitFollowMode（它在下面才声明）
@@ -6097,6 +6896,12 @@ export function FloorplanPanel() {
       previousLevelIdRef.current = levelId ?? null
       hasUserAdjustedViewportRef.current = false
       setViewport(fittedViewport)
+      // 灯带画线草稿是"当前层上未落地的几个点"，切层之后没有意义，
+      // 而且旧点会被新层继续拼接（bug: 第二层点一下就直接连到第一层的折线上）。
+      // 楼层切换时立刻清空，强制从头画。
+      if (useEditor.getState().lightStripDraft) {
+        useEditor.getState().setLightStripDraft(null)
+      }
       return
     }
 
@@ -6104,6 +6909,14 @@ export function FloorplanPanel() {
       setViewport(fittedViewport)
     }
   }, [fittedViewport, levelId])
+
+  // tool 变化时，若离开 'item'（设备放置工具），清掉残留的灯带草稿。
+  // 不然切到 wall 工具后，SVG 上还画着灯带的 ghost 线和已点的顶点，视觉噪音。
+  useEffect(() => {
+    if (tool !== 'item' && useEditor.getState().lightStripDraft) {
+      useEditor.getState().setLightStripDraft(null)
+    }
+  }, [tool])
 
   useEffect(() => {
     if (!(phase === 'site' && levelNode?.type === 'level' && levelNode.level > 0)) {
@@ -6408,11 +7221,18 @@ export function FloorplanPanel() {
       if (useEditor.getState().mode === 'build') return
       const pt = getPlanPointFromClientPoint(event.clientX, event.clientY)
       if (!pt) return
+      // 灯带拖动：需要缓存原 path，drag move 时基于快照 + delta 平移整条折线
+      const node = useScene.getState().nodes[deviceId as AnyNodeId] as DeviceNode | undefined
+      const rawPath = (node?.params as { path?: Array<[number, number]> } | undefined)?.path
+      const startPath = Array.isArray(rawPath) && rawPath.length >= 2
+        ? rawPath.map(([x, z]) => [x, z] as [number, number])
+        : undefined
       deviceDragRef.current = {
         id: deviceId,
         pointerId: event.pointerId,
         startPoint: pt,
         dragged: false,
+        startPath,
       }
       event.currentTarget.setPointerCapture(event.pointerId)
       setSelectedReferenceId(null)
@@ -6425,61 +7245,102 @@ export function FloorplanPanel() {
     (event: ReactPointerEvent<SVGSVGElement>) => {
       const drag = deviceDragRef.current
       if (!drag || drag.pointerId !== event.pointerId) return
-      const pt = getPlanPointFromClientPoint(event.clientX, event.clientY)
-      if (!pt) return
 
-      const dx = pt[0] - drag.startPoint[0]
-      const dz = pt[1] - drag.startPoint[1]
-      const moveThreshold = floorplanWorldUnitsPerPixel * 3
-      if (!drag.dragged && Math.hypot(dx, dz) < moveThreshold) return
-      drag.dragged = true
-
-      const deviceNode = useScene.getState().nodes[drag.id as AnyNodeId] as DeviceNode | undefined
-      if (!deviceNode) return
-      const mt = deviceNode.mountType
-      const isWallMount = mt === 'wall' || mt === 'wall_switch'
-
-      let newX = pt[0]
-      let newZ = pt[1]
-      const patch: Partial<DeviceNode> = {}
-
-      if (isWallMount) {
-        const hit = findClosestWallPoint(pt, walls, 1.0)
-        if (hit) {
-          const placement = computeWallPlacement(hit.wall, pt)
-          if (placement) {
-            newX = placement.position[0]
-            newZ = placement.position[1]
-            patch.params = {
-              ...(deviceNode.params ?? {}),
-              wallId: hit.wall.id,
-              wallT: placement.t,
-              wallSide: placement.side,
-            } as any
-          }
-        }
-        // 墙挂拖动也显示 4 向距离（不显示天花板引导线）
-        setDevicePlacementPreview({
-          point: [newX, newZ],
-          wallSnap: null,
-          ceilingGuides: [],
-          wallDistances: computeWallDistancesFourWay([newX, newZ], walls),
-        })
-      } else {
-        // 吸顶/地面类拖动时跑 Keynote 多轴参考（忽略自身，避免 snap 到自己）+ 全时尺寸
-        const snap = computeCeilingSnap(pt, walls, zones, levelDevices, openings, drag.id)
-        newX = snap.snapPoint[0]
-        newZ = snap.snapPoint[1]
-        setDevicePlacementPreview({
-          point: snap.snapPoint,
-          wallSnap: null,
-          ceilingGuides: snap.guides,
-          wallDistances: computeWallDistancesFourWay(snap.snapPoint, walls),
-        })
+      // 不立即处理 —— 只缓存最新坐标，等下一个 animation frame 再做吸附 + updateNode。
+      // pointermove 能跑 240Hz+，我们没必要跟着 240Hz 更新 store；合并到 60Hz 足够顺滑，
+      // 还能把中间那些被"超过"的位置丢掉（天然做 drag coalescing）。
+      deviceDragPendingRef.current = {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        pointerId: event.pointerId,
       }
+      if (deviceDragRafRef.current != null) return
 
-      patch.position = [newX, deviceNode.position[1], newZ]
-      updateNode(drag.id as AnyNodeId, patch as any)
+      deviceDragRafRef.current = requestAnimationFrame(() => {
+        deviceDragRafRef.current = null
+        const pending = deviceDragPendingRef.current
+        deviceDragPendingRef.current = null
+        if (!pending) return
+        const d = deviceDragRef.current
+        if (!d || d.pointerId !== pending.pointerId) return
+
+        const pt = getPlanPointFromClientPoint(pending.clientX, pending.clientY)
+        if (!pt) return
+
+        const dx = pt[0] - d.startPoint[0]
+        const dz = pt[1] - d.startPoint[1]
+        const moveThreshold = floorplanWorldUnitsPerPixel * 3
+        if (!d.dragged && Math.hypot(dx, dz) < moveThreshold) return
+        d.dragged = true
+
+        const deviceNode = useScene.getState().nodes[d.id as AnyNodeId] as DeviceNode | undefined
+        if (!deviceNode) return
+        const mt = deviceNode.mountType
+        const isWallMount = mt === 'wall' || mt === 'wall_switch'
+
+        // 灯带：整条折线按 delta 平移
+        // 不走吸附——灯带是多点几何，单点吸附会扭曲整条；后续可以加"整体对齐网格"。
+        if (d.startPath) {
+          const rawDx = pt[0] - d.startPoint[0]
+          const rawDz = pt[1] - d.startPoint[1]
+          const newPath = d.startPath.map(
+            ([x, z]) => [x + rawDx, z + rawDz] as [number, number],
+          )
+          const cx = newPath.reduce((s, p) => s + p[0], 0) / newPath.length
+          const cz = newPath.reduce((s, p) => s + p[1], 0) / newPath.length
+          const patchStrip: Partial<DeviceNode> = {
+            position: [cx, deviceNode.position[1], cz],
+            params: {
+              ...(deviceNode.params ?? {}),
+              path: newPath,
+            } as any,
+          }
+          // 清预览 ghost —— 灯带不需要 wall/ceiling 吸附的可视化
+          if (devicePlacementPreview !== null) setDevicePlacementPreview(null)
+          updateNode(d.id as AnyNodeId, patchStrip as any)
+          return
+        }
+
+        let newX = pt[0]
+        let newZ = pt[1]
+        const patch: Partial<DeviceNode> = {}
+
+        if (isWallMount) {
+          const hit = findClosestWallPoint(pt, walls, 1.0)
+          if (hit) {
+            const placement = computeWallPlacement(hit.wall, pt)
+            if (placement) {
+              newX = placement.position[0]
+              newZ = placement.position[1]
+              patch.params = {
+                ...(deviceNode.params ?? {}),
+                wallId: hit.wall.id,
+                wallT: placement.t,
+                wallSide: placement.side,
+              } as any
+            }
+          }
+          setDevicePlacementPreview({
+            point: [newX, newZ],
+            wallSnap: null,
+            ceilingGuides: [],
+            wallDistances: computeWallDistancesFourWay([newX, newZ], walls),
+          })
+        } else {
+          const snap = computeCeilingSnap(pt, walls, zones, levelDevices, openings, d.id)
+          newX = snap.snapPoint[0]
+          newZ = snap.snapPoint[1]
+          setDevicePlacementPreview({
+            point: snap.snapPoint,
+            wallSnap: null,
+            ceilingGuides: snap.guides,
+            wallDistances: computeWallDistancesFourWay(snap.snapPoint, walls),
+          })
+        }
+
+        patch.position = [newX, deviceNode.position[1], newZ]
+        updateNode(d.id as AnyNodeId, patch as any)
+      })
     },
     [
       getPlanPointFromClientPoint,
@@ -6504,11 +7365,154 @@ export function FloorplanPanel() {
       if (drag.dragged) {
         sfxEmitter.emit('sfx:item-place')
       }
+      // 取消还没执行的 rAF —— 否则可能在 drag 结束后还写一次 store
+      if (deviceDragRafRef.current != null) {
+        cancelAnimationFrame(deviceDragRafRef.current)
+        deviceDragRafRef.current = null
+      }
+      deviceDragPendingRef.current = null
       deviceDragRef.current = null
       // 清掉拖动时显示的参考线
       setDevicePlacementPreview(null)
     },
     [],
+  )
+
+  /**
+   * 灯带"单端点"拖动 —— 选中灯带后蓝色顶点 handle 按下时调用。
+   * 用 SVG 级 pointer capture，path 单点更新，rAF 合并 240Hz pointermove 到 60Hz。
+   */
+  const handleStripVertexDragStart = useCallback(
+    (stripId: string, vertexIdx: number, event: ReactPointerEvent<SVGCircleElement>) => {
+      if (event.button !== 0) return
+      if (useEditor.getState().mode === 'build') return // build 模式禁拖（避免画线和编辑串台）
+      event.preventDefault()
+      event.stopPropagation()
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId)
+      } catch {
+        /* ok */
+      }
+      stripVertexDragRef.current = {
+        stripId,
+        vertexIdx,
+        pointerId: event.pointerId,
+      }
+    },
+    [],
+  )
+  const handleStripVertexDragMove = useCallback(
+    (event: ReactPointerEvent<SVGCircleElement>) => {
+      const drag = stripVertexDragRef.current
+      if (!drag || drag.pointerId !== event.pointerId) return
+      stripVertexPendingRef.current = {
+        clientX: event.clientX,
+        clientY: event.clientY,
+        pointerId: event.pointerId,
+      }
+      if (stripVertexRafRef.current != null) return
+      stripVertexRafRef.current = requestAnimationFrame(() => {
+        stripVertexRafRef.current = null
+        const pending = stripVertexPendingRef.current
+        stripVertexPendingRef.current = null
+        if (!pending) return
+        const d = stripVertexDragRef.current
+        if (!d || d.pointerId !== pending.pointerId) return
+        const pt = getPlanPointFromClientPoint(pending.clientX, pending.clientY)
+        if (!pt) return
+        const node = useScene.getState().nodes[d.stripId as AnyNodeId] as
+          | DeviceNode
+          | undefined
+        if (!node) return
+        const oldPath = (
+          (node.params as { path?: Array<[number, number]> } | undefined)?.path ?? []
+        ).slice()
+        if (d.vertexIdx < 0 || d.vertexIdx >= oldPath.length) return
+        oldPath[d.vertexIdx] = [pt[0], pt[1]]
+        const cx = oldPath.reduce((s, q) => s + q[0], 0) / oldPath.length
+        const cz = oldPath.reduce((s, q) => s + q[1], 0) / oldPath.length
+        updateNode(d.stripId as AnyNodeId, {
+          position: [cx, node.position[1], cz],
+          params: { ...(node.params ?? {}), path: oldPath } as any,
+        } as any)
+      })
+    },
+    [getPlanPointFromClientPoint, updateNode],
+  )
+  const handleStripVertexDragEnd = useCallback(
+    (event: ReactPointerEvent<SVGCircleElement>) => {
+      const drag = stripVertexDragRef.current
+      if (!drag || drag.pointerId !== event.pointerId) return
+      try {
+        event.currentTarget.releasePointerCapture(event.pointerId)
+      } catch {
+        /* ok */
+      }
+      if (stripVertexRafRef.current != null) {
+        cancelAnimationFrame(stripVertexRafRef.current)
+        stripVertexRafRef.current = null
+      }
+      stripVertexPendingRef.current = null
+      stripVertexDragRef.current = null
+      sfxEmitter.emit('sfx:item-place')
+    },
+    [],
+  )
+
+  /**
+   * 灯带 path 加点 —— 选中后两顶点中点的"+"按钮被点击时调用，
+   * 在指定 segmentIdx 之后插一个新顶点（用 segment 中点作初始位置）。
+   * 加点后用户可立即拖该新顶点继续整形。
+   */
+  const handleStripPathInsert = useCallback(
+    (stripId: string, segmentIdx: number) => {
+      const node = useScene.getState().nodes[stripId as AnyNodeId] as
+        | DeviceNode
+        | undefined
+      if (!node) return
+      const oldPath = (
+        (node.params as { path?: Array<[number, number]> } | undefined)?.path ?? []
+      ).slice()
+      if (segmentIdx < 0 || segmentIdx >= oldPath.length - 1) return
+      const a = oldPath[segmentIdx]!
+      const b = oldPath[segmentIdx + 1]!
+      const mid: [number, number] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]
+      const newPath = [
+        ...oldPath.slice(0, segmentIdx + 1),
+        mid,
+        ...oldPath.slice(segmentIdx + 1),
+      ]
+      const cx = newPath.reduce((s, q) => s + q[0], 0) / newPath.length
+      const cz = newPath.reduce((s, q) => s + q[1], 0) / newPath.length
+      updateNode(stripId as AnyNodeId, {
+        position: [cx, node.position[1], cz],
+        params: { ...(node.params ?? {}), path: newPath } as any,
+      } as any)
+      sfxEmitter.emit('sfx:item-place')
+    },
+    [updateNode],
+  )
+
+  /** 灯带 path 删点 —— 右键顶点时调用。少于 2 点的灯带没有意义，所以保护 length > 2。 */
+  const handleStripPathDelete = useCallback(
+    (stripId: string, vertexIdx: number) => {
+      const node = useScene.getState().nodes[stripId as AnyNodeId] as
+        | DeviceNode
+        | undefined
+      if (!node) return
+      const oldPath = (
+        (node.params as { path?: Array<[number, number]> } | undefined)?.path ?? []
+      )
+      if (oldPath.length <= 2) return // 至少保留 2 点
+      const newPath = oldPath.filter((_, i) => i !== vertexIdx)
+      const cx = newPath.reduce((s, q) => s + q[0], 0) / newPath.length
+      const cz = newPath.reduce((s, q) => s + q[1], 0) / newPath.length
+      updateNode(stripId as AnyNodeId, {
+        position: [cx, node.position[1], cz],
+        params: { ...(node.params ?? {}), path: newPath } as any,
+      } as any)
+    },
+    [updateNode],
   )
 
   // ── 摄像头"跟鼠标调方向"模式 ─────────────────────────────────────────────
@@ -7898,27 +8902,113 @@ export function FloorplanPanel() {
         return
       }
 
+      // ── 灯带画线 —— 选中 lightType=line 设备时走这里 ──
+      // 单击 = push 一个 path 顶点（带吸附 + 去重）；落地由 dblclick / Enter 触发
+      //
+      // 【必须】同时判 tool === 'item'。设备目录选中后 tool='item'；
+      // 如果用户之后切到 wall/slab/zone/door/window 等结构工具，
+      // selectedDevice 可能还没被清掉，这时 click 应该走结构绘制而不是走灯带。
+      {
+        const editorState = useEditor.getState()
+        const sd = editorState.selectedDevice
+        const isBuildMode = editorState.mode === 'build'
+        const isItemTool = editorState.tool === 'item'
+        if (isBuildMode && isItemTool && sd && sd.lightType === 'line') {
+          const draft = editorState.lightStripDraft
+          const lastPt = draft && draft.points.length > 0
+            ? draft.points[draft.points.length - 1]!
+            : null
+          // 多重吸附（按优先级）：墙端点 → 已有设备点 → 90° 角度锁定
+          const snapped = snapStripPoint(planPoint, lastPt, walls, levelDevices, shiftPressed)
+
+          // 去重：如果新点跟上一点在 2cm 内（含双击在同位置时的"第二次 click"），跳过 push。
+          // 这样 dblclick 不会重复添加点，commit 也不需要再 dedup。
+          if (lastPt) {
+            const dx = snapped[0] - lastPt[0]
+            const dz = snapped[1] - lastPt[1]
+            if (dx * dx + dz * dz < 0.0004 /* 0.02m² */) {
+              return
+            }
+          }
+
+          const newPoints: Array<[number, number]> = draft
+            ? [...draft.points, snapped]
+            : [snapped]
+          editorState.setLightStripDraft({
+            points: newPoints,
+            hoverPoint: snapped,
+          })
+          sfxEmitter.emit('sfx:item-pick')
+          return
+        }
+      }
+
       // ── 2D 设备放置 —— 只在 build 模式下允许 ──
-      // 用当前 devicePlacementPreview（移动过程中已 apply 好吸附 + 侧别）作为真值
+      //
+      // 【重要】用"点击瞬间的 click 坐标重新算 snap"，不复用上一次 pointermove
+      // 缓存的 devicePlacementPreview。原因：高刷鼠标/触控板下，pointermove 和
+      // click 之间可能有几像素的位置差（鼠标在按下瞬间略微移动），preview 滞后
+      // 一帧 → ghost 位置和实际放置位置就会"明显不一致"。
+      //
+      // 这里现算一次：snap 输入是 click 的 planPoint，输出就是要落地的点；
+      // 同一帧渲染前最后一次 setDevicePlacementPreview 已经是 click 坐标对应的
+      // snap 结果（pointermove 紧贴 click 触发），所以视觉和数据完全对齐。
       {
         const editorState = useEditor.getState()
         const selectedDevice = editorState.selectedDevice
         const isBuildMode = editorState.mode === 'build'
+        const isItemTool = editorState.tool === 'item'
         const currentLevelId = useViewer.getState().selection.levelId
-        if (isBuildMode && selectedDevice && currentLevelId) {
+        // tool==='item' 才走设备放置路径。否则（wall/slab/zone/door/window 工具）
+        // 即使 selectedDevice 残留也不应该拦截 click。
+        if (isBuildMode && isItemTool && selectedDevice && currentLevelId) {
           const y = selectedDevice.defaultH ?? 0
-          // 优先用 preview（含墙挂侧别等元数据）；没有 preview 就 fallback 到 raw click
-          const placement = devicePlacementPreview ?? { point: planPoint, wallSnap: null }
+          const mt = selectedDevice.mountType
+          const isWallMount = mt === 'wall' || mt === 'wall_switch'
+          const isCeilingMount =
+            mt === 'ceiling' || mt === 'ceiling_suspended' || mt === 'hidden'
+
+          // 用 click 坐标实时算 snap，不读 preview state（避免一帧延迟）
+          let snappedPt: WallPlanPoint = planPoint
+          let wallSnap: { wallId: string; t: number; side: 'front' | 'back' } | null = null
+          if (isWallMount) {
+            const hit = findClosestWallPoint(planPoint, walls, 1.0)
+            if (hit) {
+              const placement = computeWallPlacement(hit.wall, planPoint)
+              if (placement) {
+                snappedPt = placement.position
+                wallSnap = {
+                  wallId: hit.wall.id,
+                  t: placement.t,
+                  side: placement.side,
+                }
+              }
+            }
+          } else if (isCeilingMount) {
+            const snap = computeCeilingSnap(planPoint, walls, zones, levelDevices, openings)
+            snappedPt = snap.snapPoint
+          }
+
           const params: Record<string, unknown> = {}
-          if (placement.wallSnap) {
-            params.wallId = placement.wallSnap.wallId
-            params.wallT = placement.wallSnap.t
-            params.wallSide = placement.wallSnap.side
+          if (wallSnap) {
+            params.wallId = wallSnap.wallId
+            params.wallT = wallSnap.t
+            params.wallSide = wallSnap.side
+          }
+          // 回路归组：灯具放置时分配 circuitId —— 同一次"连续放置"共享一个回路
+          // 非灯类设备（摄像头/面板/HVAC 等）跳过，它们没有回路概念。
+          if (selectedDevice.subsystem === 'lighting') {
+            let circuitId = editorState.currentCircuitId
+            if (!circuitId) {
+              circuitId = `ckt_${Math.random().toString(36).slice(2, 8)}`
+              editorState.setCurrentCircuitId(circuitId)
+            }
+            params.circuitId = circuitId
           }
           placeDevice(
             currentLevelId,
             selectedDevice.catalogId,
-            [placement.point[0], y, placement.point[1]],
+            [snappedPt[0], y, snappedPt[1]],
             params as Partial<import('@pascal-app/core').DeviceParams>,
           )
           sfxEmitter.emit('sfx:item-place')
@@ -8029,10 +9119,26 @@ export function FloorplanPanel() {
       structureLayer,
       visibleZonePolygons,
       walls,
+      // 灯带画线吸附用：墙、设备列表
+      levelDevices,
+      zones,
+      openings,
     ],
   )
   const handleBackgroundDoubleClick = useCallback(
     (event: ReactMouseEvent<SVGSVGElement>) => {
+      // 灯带画线 —— 双击落地（仅 tool==='item' 时生效，和 click 路径保持一致）
+      const editorState = useEditor.getState()
+      const sd = editorState.selectedDevice
+      if (
+        editorState.tool === 'item' &&
+        sd?.lightType === 'line' &&
+        editorState.lightStripDraft
+      ) {
+        commitLightStripDraft()
+        return
+      }
+
       if (!isPolygonBuildActive) {
         return
       }
@@ -8064,6 +9170,42 @@ export function FloorplanPanel() {
       shiftPressed,
     ],
   )
+
+  // 灯带 commit：把 draft.points 写成一个 DeviceNode（params.path），分回路 id，清 draft
+  // 不再做 dedup —— click handler 已经在 push 时拦了重复点，commit 阶段拿到的就是干净的 path
+  const commitLightStripDraft = useCallback(() => {
+    const editorState = useEditor.getState()
+    const sd = editorState.selectedDevice
+    const draft = editorState.lightStripDraft
+    const currentLevelId = useViewer.getState().selection.levelId
+    if (!sd || !draft || !currentLevelId) return
+    const points = draft.points
+    if (points.length < 2) {
+      // 没意义的草稿（只点了 1 下就 dblclick），直接清掉
+      editorState.setLightStripDraft(null)
+      return
+    }
+    // 取中点做 position，便于回路连线和聚焦相机
+    const cx = points.reduce((s, p) => s + p[0], 0) / points.length
+    const cz = points.reduce((s, p) => s + p[1], 0) / points.length
+    const y = sd.defaultH ?? 2.6
+
+    let circuitId = editorState.currentCircuitId
+    if (!circuitId) {
+      circuitId = `ckt_${Math.random().toString(36).slice(2, 8)}`
+      editorState.setCurrentCircuitId(circuitId)
+    }
+    placeDevice(
+      currentLevelId,
+      sd.catalogId,
+      [cx, y, cz],
+      { path: points, circuitId } as Partial<import('@pascal-app/core').DeviceParams>,
+    )
+    editorState.setLightStripDraft(null)
+    sfxEmitter.emit('sfx:item-place')
+  }, [])
+  // 把 commit 函数注册到上面的 keyboard handler 用的 ref
+  commitLightStripDraftRef.current = commitLightStripDraft
 
   const commitFloorplanSelection = useCallback(
     (nextSelectedIds: string[]) => {
@@ -8227,29 +9369,43 @@ export function FloorplanPanel() {
       // ── 2D 设备放置（墙挂设备）—— 精确识别点击位置 + 墙侧别 ─────────────
       // 对于 wall / wall_switch 等墙挂类型，优先走这里；识别用户点在墙哪一侧，
       // 再把设备落位到对应侧（绑 wallId/wallT/wallSide）
+      //
+      // 【必须】判 tool === 'item'。否则用户之前选过壁挂设备（selectedDevice 残留），
+      // 后来切到 wall 工具想画/选墙，点到现有墙时会被这里吃掉、直接落一个新设备而不是选墙。
       {
         const editorState = useEditor.getState()
         const selectedDevice = editorState.selectedDevice
         const isBuildMode = editorState.mode === 'build'
+        const isItemTool = editorState.tool === 'item'
         const currentLevelId = useViewer.getState().selection.levelId
         const mountType = selectedDevice?.mountType ?? ''
         const isWallMount = mountType === 'wall' || mountType === 'wall_switch'
-        if (isBuildMode && selectedDevice && currentLevelId && isWallMount) {
+        if (isBuildMode && isItemTool && selectedDevice && currentLevelId && isWallMount) {
           // 从原始 event 取点击 plan 坐标（不再用 wall center）
           const clickPt = getPlanPointFromClientPoint(event.clientX, event.clientY)
           if (clickPt) {
             const placement = computeWallPlacement(targetWall, clickPt)
             if (placement) {
               const y = selectedDevice.defaultH ?? 1.3
+              const wallParams: Record<string, unknown> = {
+                wallId: targetWall.id,
+                wallT: placement.t,
+                wallSide: placement.side,
+              }
+              // 同 ceiling 路径的回路归组逻辑（壁灯也是 lighting）
+              if (selectedDevice.subsystem === 'lighting') {
+                let circuitId = editorState.currentCircuitId
+                if (!circuitId) {
+                  circuitId = `ckt_${Math.random().toString(36).slice(2, 8)}`
+                  editorState.setCurrentCircuitId(circuitId)
+                }
+                wallParams.circuitId = circuitId
+              }
               placeDevice(
                 currentLevelId,
                 selectedDevice.catalogId,
                 [placement.position[0], y, placement.position[1]],
-                {
-                  wallId: targetWall.id,
-                  wallT: placement.t,
-                  wallSide: placement.side,
-                },
+                wallParams as Partial<import('@pascal-app/core').DeviceParams>,
               )
               sfxEmitter.emit('sfx:item-place')
               event.stopPropagation()
@@ -8961,11 +10117,43 @@ export function FloorplanPanel() {
         setFloorplanCursorPosition(null)
       }
 
+      // 灯带画线 hover —— 更新 draft 的尾段终点，让 2D 渲染画"draft 折线 + 当前未确认段"
+      // 也走吸附：鼠标在墙端点附近会"吸"过去，沿水平/垂直会"锁"住 —— 让用户预知点击会落到哪
+      //
+      // 【必须】判 tool === 'item'。否则切到 wall 工具后 hover 还会不停地写 draft.hoverPoint
+      // ——即使没有 click 路径，视觉上也会闪一下灯带 ghost 线。
+      if (
+        mode === 'build' &&
+        tool === 'item' &&
+        selectedDevice?.lightType === 'line' &&
+        !panStateRef.current
+      ) {
+        const pp = getPlanPointFromClientPoint(event.clientX, event.clientY)
+        const draft = useEditor.getState().lightStripDraft
+        if (pp) {
+          const lastPt = draft && draft.points.length > 0
+            ? draft.points[draft.points.length - 1]!
+            : null
+          const snapped = snapStripPoint(pp, lastPt, walls, levelDevices, event.shiftKey)
+          useEditor.getState().setLightStripDraft({
+            points: draft?.points ?? [],
+            hoverPoint: snapped,
+          })
+        }
+        // 不画 ghost / snap，灯带不需要这些
+        if (devicePlacementPreview !== null) setDevicePlacementPreview(null)
+        handlePointerMove(event)
+        return
+      }
+
       // 设备工具激活时（且处于 build 模式），按 mountType 计算预览位置：
       //   - wall / wall_switch → 吸附到最近的墙边（1m 吸附半径）+ 识别侧别（front/back）
       //   - ceiling / floor / 其他 → 自由放置（raw plan point，不做网格吸附）
       // 对齐 BDD §P1-1：每种 mountType 有对应放置策略
-      if (mode === 'build' && selectedDevice && !panStateRef.current) {
+      //
+      // 【必须】判 tool === 'item'。否则切到 wall/slab/zone/door/window 工具时，
+      // hover 还会画设备 ghost —— 点击却会走结构绘制路径，视觉和行为对不上。
+      if (mode === 'build' && tool === 'item' && selectedDevice && !panStateRef.current) {
         const pp = getPlanPointFromClientPoint(event.clientX, event.clientY)
         if (pp) {
           const mt = selectedDevice.mountType
@@ -9024,6 +10212,7 @@ export function FloorplanPanel() {
       zoneVertexDragState,
       selectedDevice,
       mode,
+      tool,
       getPlanPointFromClientPoint,
       devicePlacementPreview,
       walls,
@@ -9432,6 +10621,27 @@ export function FloorplanPanel() {
             rotationModifierPressed={rotationModifierPressed}
           />
         )}
+        {/* 灯带画线提示条 —— build + item + lightType='line' 时顶部显示操作说明。
+            比纯光标更清楚地告诉用户"现在处于画灯带模式 + 怎么提交/取消"。*/}
+        {mode === 'build' && tool === 'item' && selectedDevice?.lightType === 'line' && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute top-3 left-1/2 z-20 -translate-x-1/2 rounded-xl border border-border/40 bg-background/95 px-3 py-1.5 text-xs text-foreground shadow-lg backdrop-blur-xl"
+          >
+            <span className="text-muted-foreground">画灯带 · </span>
+            <span>单击</span>
+            <span className="text-muted-foreground"> 加点 · </span>
+            <span>Enter</span>
+            <span className="text-muted-foreground"> 提交 · </span>
+            <span>Esc</span>
+            <span className="text-muted-foreground"> 取消</span>
+            {lightStripDraftState && lightStripDraftState.points.length > 0 && (
+              <span className="ml-2 rounded-md bg-primary/15 px-1.5 py-0.5 font-medium text-[10px] text-primary">
+                已放 {lightStripDraftState.points.length} 点
+              </span>
+            )}
+          </div>
+        )}
         {selectedOpeningActionMenuPosition && isFloorplanHovered && !movingNode && (
           <div
             className="absolute z-30"
@@ -9669,14 +10879,43 @@ export function FloorplanPanel() {
             {/* 设备 2D 符号层 + 预览 ghost —— 放在 marquee rect 之后，
                 保证任何模式下（包括框选）设备都能被点选（SVG 后渲染 = 视觉/事件在上） */}
             <FloorplanDeviceLayer
+              circuitColors={circuitColors}
+              circuitInfoByDevice={circuitInfoByDevice}
               devices={levelDevices}
+              onStripVertexDragStart={handleStripVertexDragStart}
+              onStripVertexDragMove={handleStripVertexDragMove}
+              onStripVertexDragEnd={handleStripVertexDragEnd}
+              onStripPathInsert={handleStripPathInsert}
+              onStripPathDelete={handleStripPathDelete}
               worldUnitsPerPixel={floorplanWorldUnitsPerPixel}
               selectedIdSet={selectedIdSet}
               onDeviceSelect={(deviceId) => {
-                // follow-mode 交互：点击摄像头 → 进入 follow；再点同一摄像头 → 退出 follow（确认方向）
                 const node = useScene.getState().nodes[deviceId as AnyNodeId] as
                   | DeviceNode
                   | undefined
+
+                // 回路连接拾取：如果当前在 link 模式且点的是另一盏灯 → 合并回路
+                const editorState = useEditor.getState()
+                const linkSourceId = editorState.circuitLinkSourceId
+                if (
+                  linkSourceId &&
+                  linkSourceId !== deviceId &&
+                  node?.subsystem === 'lighting'
+                ) {
+                  // 异步导入避免循环依赖（mergeCircuits 来自 @vilhil/smarthome）
+                  import('@vilhil/smarthome').then(({ mergeCircuits }) => {
+                    mergeCircuits(linkSourceId, deviceId)
+                    editorState.setCircuitLinkSourceId(null)
+                    sfxEmitter.emit('sfx:item-place')
+                  })
+                  return
+                }
+                // 同一灯再点 / 点的不是灯 → 退出 link 模式（不合并）
+                if (linkSourceId) {
+                  editorState.setCircuitLinkSourceId(null)
+                }
+
+                // follow-mode 交互：点击摄像头 → 进入 follow；再点同一摄像头 → 退出 follow（确认方向）
                 const isCamera =
                   node?.subsystem === 'security' &&
                   (node.renderType === 'dome' || node.renderType === 'camera-bullet')
@@ -9713,14 +10952,32 @@ export function FloorplanPanel() {
               worldUnitsPerPixel={floorplanWorldUnitsPerPixel}
               palette={palette}
             />
-            {/* Ghost 圆点 —— 仅在 build 模式放置预览时显示 */}
+            {/* Ghost 圆点 —— 仅在 build 模式 + tool==='item' 放置预览时显示。
+                灯带模式下不显示（用 strip draft）；切到 wall/slab 等工具时也不显示。*/}
             <FloorplanDeviceGhost
-              point={mode === 'build' ? (devicePlacementPreview?.point ?? null) : null}
+              point={
+                mode === 'build' && tool === 'item' && selectedDevice?.lightType !== 'line'
+                  ? (devicePlacementPreview?.point ?? null)
+                  : null
+              }
               subsystem={
-                mode === 'build' && selectedDevice ? (selectedDevice.subsystem ?? null) : null
+                mode === 'build' && tool === 'item' && selectedDevice
+                  ? (selectedDevice.subsystem ?? null)
+                  : null
               }
               worldUnitsPerPixel={floorplanWorldUnitsPerPixel}
             />
+            {/* 灯带画线 draft —— 仅在 build 模式 + item 工具 + 灯带类设备时显示 */}
+            {mode === 'build' &&
+              tool === 'item' &&
+              selectedDevice?.lightType === 'line' &&
+              lightStripDraftState && (
+                <FloorplanLightStripDraft
+                  draft={lightStripDraftState}
+                  color={getSubsystemColor(selectedDevice.subsystem)}
+                  worldUnitsPerPixel={floorplanWorldUnitsPerPixel}
+                />
+              )}
 
             {visibleSvgMarqueeBounds && (
               <rect

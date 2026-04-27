@@ -19,11 +19,15 @@ export interface DeviceData {
   id: string
   name: string         // 房间名（来自 zone.name），用作灯标签
   renderType: string
+  /** 来自 catalog 的产品 id（"LIGHT-DOWNLIGHT" 等），IES 配光曲线按它选 */
+  productId?: string
   position: [number, number, number]
   on: boolean
   brightness: number   // 0-100
   colorTemp: number    // 2700-6500K
   beamAngle: number    // degrees
+  /** 回路 id —— 同 circuitId 的灯共享一条回路；空则单灯回路（用 device.id 兜底） */
+  circuitId?: string
 }
 
 export interface ConvertedWall {
@@ -178,6 +182,23 @@ export interface AvailableLevel {
 
 // ─── 数据加载 ─────────────────────────────────────────────────────────────────
 
+/** 加载全部楼层数据，供"全屋"模式渲染；返回按楼层号从下到上排列的数组 */
+export function loadAllSeeds(): SceneSeed[] {
+  const base = loadSeed(undefined)
+  if (!base) return []
+  const results: SceneSeed[] = []
+  for (const lvl of base.availableLevels) {
+    const s = loadSeed(lvl.id)
+    if (s) results.push(s)
+  }
+  // 按 level 数值升序（地下在底部，高层在顶部）
+  return results.sort((a, b) => {
+    const la = base.availableLevels.find(l => l.id === a.levelId)?.level ?? 0
+    const lb = base.availableLevels.find(l => l.id === b.levelId)?.level ?? 0
+    return la - lb
+  })
+}
+
 export function loadSeed(requestedLevelId?: string): SceneSeed | null {
   if (typeof window === 'undefined') return null
   let raw: SceneGraph
@@ -275,22 +296,30 @@ export function loadSeed(requestedLevelId?: string): SceneSeed | null {
     })
   }
 
-  // 收集当前楼层的灯具设备
+  // 收集当前楼层的灯具设备（仅点光源；灯带单独走 DeviceRenderer）
+  //
+  // 灯带（params.path 有至少 2 个点的 lighting 设备）在编辑器端已由
+  // LightStripGeometry 沿 path 拉管渲染，和 DemoLightBulb 的"质心处放一个
+  // SpotLight+球体"语义完全不同。这里显式跳过，交给下游的 DeviceRenderer
+  // 走 demo 模式渲染；否则会在灯带质心多出一个不对的灯泡。
   const devices: DeviceData[] = []
   for (const n of all) {
     if (n.type !== 'device' || n.subsystem !== 'lighting') continue
     if (n.parentId !== livingLevelId) continue
-    const st  = (n.state  as any) ?? {}
     const par = (n.params as any) ?? {}
+    if (Array.isArray(par.path) && par.path.length >= 2) continue
+    const st  = (n.state  as any) ?? {}
     devices.push({
       id:         n.id,
       name:       (n.name as string) ?? '灯光',
       renderType: (n.renderType as string) ?? 'downlight',
+      productId:  (n.productId as string | undefined),
       position:   (n.position ?? [0, 2.7, 0]) as [number, number, number],
       on:         (st.on        as boolean) ?? false,
       brightness: (st.brightness as number) ?? 100,
       colorTemp:  (st.colorTemp  as number) ?? 3000,
       beamAngle:  (par.beamAngle as number) ?? 30,
+      circuitId:  (par.circuitId as string | undefined),
     })
   }
 
@@ -360,40 +389,11 @@ export function loadSeed(requestedLevelId?: string): SceneSeed | null {
     roomCentroids.push({ id: zone.id as string, label, cx, cz: cy, radius, width, depth, lightPositions: computeLightPositions(poly) })
   }
 
-  // ── 若无 zone，回退到 slab 节点（直接挂 level 或挂 zone 的子节点）──
-  if (roomCentroids.length === 0) {
-    // 收集本楼层所有 slab（直接 parentId=levelId，或 parentId 是本楼层 zone 的）
-    const levelZoneIds = new Set(zoneNodes.map((z: any) => z.id as string))
-    const slabNodesAll = all.filter((n: any) =>
-      n.type === 'slab' &&
-      (n.parentId === livingLevelId || levelZoneIds.has(n.parentId as string))
-    )
-    for (const sn of slabNodesAll) {
-      const poly = (sn.polygon ?? []) as [number, number][]
-      if (poly.length < 3) continue
-      const xs = poly.map((p: [number, number]) => p[0])
-      const ys = poly.map((p: [number, number]) => p[1])
-      const bMinX = Math.min(...xs), bMaxX = Math.max(...xs)
-      const bMinY = Math.min(...ys), bMaxY = Math.max(...ys)
-      const cx = xs.reduce((a: number, b: number) => a + b, 0) / xs.length
-      const cy = ys.reduce((a: number, b: number) => a + b, 0) / ys.length
-      const width = bMaxX - bMinX
-      const depth = bMaxY - bMinY
-      const radius = Math.hypot(width, depth) * 0.55
-      const label = (sn.name as string) || `空间 ${roomCentroids.length + 1}`
-      roomCentroids.push({ id: sn.id as string, label, cx, cz: cy, radius, width, depth, lightPositions: computeLightPositions(poly) })
-    }
-  }
-
-  // ── 最终兜底：没有任何空间节点，用 bbox 中心放一个主照明 ─────────────
-  if (roomCentroids.length === 0) {
-    const cx = (minX + maxX) / 2
-    const cz = (minZ + maxZ) / 2
-    const width = maxX - minX
-    const depth = maxZ - minZ
-    const radius = Math.hypot(width, depth) * 0.55
-    roomCentroids.push({ id: 'room-fallback', label: '主照明', cx, cz, radius, width, depth, lightPositions: [[cx, cz]] })
-  }
+  // 删掉两个旧 fallback（slab 自动顶替 + bbox 兜底）：
+  //   - 之前 zone 为空时会用 slab 多边形自动生成空间，结果"画了楼板自动起灯"
+  //   - 更早还有 bbox 兜底，整层都没东西也起灯
+  // 现在的硬规则：**只有用户主动画 zone（房间）才会有 RoomBaseLight**。
+  // 楼板是结构件，不是空间；空间是设计师明确划的功能区。
 
   // ── 收集本楼层全部 device 节点（所有子系统，不再过滤 lighting）──────────
   // 这部分被新的 DeviceRenderer + DeviceEffects 使用；lighting 仍由既有的

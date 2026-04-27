@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useMemo } from 'react'
+import { forwardRef, useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { DeviceNode, Subsystem } from '@pascal-app/core'
 import { getDemoChromePalette, getPillColors, RENDER_PRESETS } from './render-presets'
@@ -69,12 +69,159 @@ export function FpsBadge({ topBorder, topBg }: { topBorder: string; topBg: strin
 
 // ─── 顶栏 ─────────────────────────────────────────────────────────────────────
 
+type ThemeFieldKey = keyof RenderPreset['theme']
+type EditorScope = 'global' | 'day' | 'night'
+type EditorMode = 'quick' | 'advanced'
+
+const THEME_FIELD_LABEL: Record<ThemeFieldKey, string> = {
+  envPresetDay: '环境预设 Day',
+  envPresetNight: '环境预设 Night',
+  skyDay: '天空 Day',
+  skyNight: '天空 Night',
+  groundDay: '地面 Day',
+  groundNight: '地面 Night',
+  sunColorDay: '日光 Day',
+  sunColorNight: '月光 Night',
+  wallColor: '墙体',
+  furnitureColorDay: '家具 Day',
+  furnitureColorNight: '家具 Night',
+  windowColor: '窗体',
+  doorColor: '门体',
+  capColorA: '楼层边线 A',
+  capColorB: '楼层边线 B',
+  capOpacity: '楼层边线透明',
+  padColorDay: '楼板 Day',
+  padColorNight: '楼板 Night',
+  padEmissiveDay: '楼板发光 Day',
+  padEmissiveNight: '楼板发光 Night',
+  bgColorDay: '背景 Day',
+  bgColorNight: '背景 Night',
+  overlayDay: '叠层 Day',
+  overlayNight: '叠层 Night',
+  panelBgDay: '面板底 Day',
+  panelBgNight: '面板底 Night',
+  panelBorderDay: '面板边框 Day',
+  panelBorderNight: '面板边框 Night',
+  wallRoughness: '墙体粗糙度',
+  wallMetalness: '墙体金属度',
+  wallEnvMapIntensity: '墙体环境反射',
+  wallOpacity: '墙体透明度',
+  furnitureRoughness: '家具粗糙度',
+  furnitureMetalness: '家具金属度',
+  furnitureInteractiveColor: '家具交互高亮色',
+}
+
+const THEME_FIELD_HINT: Partial<Record<ThemeFieldKey, string>> = {
+  wallColor: '建筑主材颜色（墙面基调）',
+  furnitureColorDay: '白天家具主色（沙发、柜体、桌椅）',
+  furnitureColorNight: '夜晚家具主色',
+  windowColor: '窗洞/玻璃辅助色',
+  doorColor: '门洞辅助色',
+  capColorA: '楼层边线主色（更显眼）',
+  capColorB: '楼层边线辅色（渐变过渡）',
+  bgColorDay: '白天背景主色',
+  bgColorNight: '夜晚背景主色',
+  padColorDay: '楼板主色',
+  padColorNight: '楼板夜色',
+  panelBgDay: '仪表盘 UI 底色（系统项）',
+  panelBgNight: '仪表盘 UI 底色（系统项）',
+  panelBorderDay: '仪表盘 UI 边框（系统项）',
+  panelBorderNight: '仪表盘 UI 边框（系统项）',
+  overlayDay: '全局叠层光感（系统项）',
+  overlayNight: '全局叠层光感（系统项）',
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value))
+}
+
+function parseHexColor(input: string) {
+  const value = input.trim()
+  const short = /^#([0-9a-f]{3})$/i.exec(value)
+  if (short) {
+    const shortHex = short[1]
+    if (!shortHex) return null
+    const chars = shortHex.split('')
+    if (chars.length !== 3) return null
+    const [cr, cg, cb] = chars
+    if (!cr || !cg || !cb) return null
+    const r = parseInt(cr + cr, 16)
+    const g = parseInt(cg + cg, 16)
+    const b = parseInt(cb + cb, 16)
+    return { r, g, b, a: 1, format: 'hex' as const }
+  }
+  const full = /^#([0-9a-f]{6})$/i.exec(value)
+  if (full) {
+    const hex = full[1]
+    if (!hex) return null
+    return {
+      r: parseInt(hex.slice(0, 2), 16),
+      g: parseInt(hex.slice(2, 4), 16),
+      b: parseInt(hex.slice(4, 6), 16),
+      a: 1,
+      format: 'hex' as const,
+    }
+  }
+  const fullAlpha = /^#([0-9a-f]{8})$/i.exec(value)
+  if (fullAlpha) {
+    const hex = fullAlpha[1]
+    if (!hex) return null
+    return {
+      r: parseInt(hex.slice(0, 2), 16),
+      g: parseInt(hex.slice(2, 4), 16),
+      b: parseInt(hex.slice(4, 6), 16),
+      a: parseInt(hex.slice(6, 8), 16) / 255,
+      format: 'hex' as const,
+    }
+  }
+  return null
+}
+
+function parseRgbColor(input: string) {
+  const m = /^rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)(?:\s*,\s*([0-9.]+))?\s*\)$/i.exec(input.trim())
+  if (!m) return null
+  const rToken = m[1]
+  const gToken = m[2]
+  const bToken = m[3]
+  if (rToken == null || gToken == null || bToken == null) return null
+  const r = clamp(Number(rToken), 0, 255)
+  const g = clamp(Number(gToken), 0, 255)
+  const b = clamp(Number(bToken), 0, 255)
+  const a = m[4] == null ? 1 : clamp(Number(m[4]), 0, 1)
+  if (![r, g, b, a].every(Number.isFinite)) return null
+  return { r, g, b, a, format: m[4] == null ? ('rgb' as const) : ('rgba' as const) }
+}
+
+function parseEditableColor(input: string) {
+  return parseHexColor(input) ?? parseRgbColor(input)
+}
+
+function toHexInput(color: { r: number; g: number; b: number }) {
+  const to2 = (n: number) => Math.round(clamp(n, 0, 255)).toString(16).padStart(2, '0')
+  return `#${to2(color.r)}${to2(color.g)}${to2(color.b)}`
+}
+
+function toCssColor(
+  color: { r: number; g: number; b: number; a: number; format: 'hex' | 'rgb' | 'rgba' },
+  forceRgba = false,
+) {
+  if (!forceRgba && color.format === 'hex' && color.a >= 0.999) return toHexInput(color)
+  if (!forceRgba && color.format === 'rgb' && color.a >= 0.999) {
+    return `rgb(${Math.round(color.r)}, ${Math.round(color.g)}, ${Math.round(color.b)})`
+  }
+  return `rgba(${Math.round(color.r)}, ${Math.round(color.g)}, ${Math.round(color.b)}, ${Number(color.a.toFixed(3))})`
+}
+
 export function DemoTopBar({
   buildingName, levelName, wallCount,
   displayHour, realHour, isPreviewing, isNight,
   preset,
+  presetCatalog,
   activePresetKey, onPresetChange,
+  onPreviewPreset, onSavePreset, onResetPreset, hasPresetOverride,
   onSliderChange, onSliderDown, onSyncNow,
+  uniformWall10cm, onToggleUniformWall10cm,
+  colorCalibrationMode, onToggleColorCalibrationMode,
 }: {
   buildingName: string
   levelName: string
@@ -84,11 +231,20 @@ export function DemoTopBar({
   isPreviewing: boolean
   isNight: boolean
   preset: RenderPreset
+  presetCatalog: Record<RenderPresetKey, RenderPreset>
   activePresetKey: RenderPresetKey
   onPresetChange: (key: RenderPresetKey) => void
+  onPreviewPreset: (preset: RenderPreset | null) => void
+  onSavePreset: (key: RenderPresetKey, preset: RenderPreset) => void
+  onResetPreset: (key: RenderPresetKey) => void
+  hasPresetOverride: (key: RenderPresetKey) => boolean
   onSliderChange: (h: number) => void
   onSliderDown: () => void
   onSyncNow: () => void
+  uniformWall10cm: boolean
+  onToggleUniformWall10cm: (value: boolean) => void
+  colorCalibrationMode: boolean
+  onToggleColorCalibrationMode: (value: boolean) => void
 }) {
   const fmt = (h: number) => {
     const hh = Math.floor(h).toString().padStart(2, '0')
@@ -96,8 +252,14 @@ export function DemoTopBar({
     return `${hh}:${mm}`
   }
   const [tweaksOpen, setTweaksOpen] = useState(false)
+  const [editorOpen, setEditorOpen] = useState(false)
+  const [editorMode, setEditorMode] = useState<EditorMode>('quick')
+  const [editorScope, setEditorScope] = useState<EditorScope>('day')
+  const [showUiSystemFields, setShowUiSystemFields] = useState(false)
+  const buildDraft = (p: RenderPreset): RenderPreset => ({ ...p, theme: { ...p.theme } })
+  const [draft, setDraft] = useState<RenderPreset>(buildDraft(presetCatalog[activePresetKey]))
 
-  const chrome = getDemoChromePalette(isNight)
+  const chrome = getDemoChromePalette(isNight, preset)
   const topBg     = chrome.bg
   const topBorder = chrome.border
   const inkColor  = chrome.text
@@ -111,6 +273,169 @@ export function DemoTopBar({
     showcase: ['#102437', '#1e3f58', '#4b697f'],
     smooth:   ['#2e3136', '#4f5560', '#7a838e'],
     night:    ['#231a30', '#44305d', '#6b4f88'],
+    'mist-warm-contrast': ['#d8e6fb', '#f0d9ba', '#f7f9fd'],
+  }
+
+  const numericFields: Array<{ key: keyof RenderPreset; label: string; step: number; min?: number; max?: number }> = [
+    { key: 'exposure', label: '曝光', step: 0.01, min: 0.2, max: 2.5 },
+    { key: 'envDay', label: '环境 Day', step: 0.01, min: 0, max: 2 },
+    { key: 'envNight', label: '环境 Night', step: 0.01, min: 0, max: 2 },
+    { key: 'hemiDay', label: '半球 Day', step: 0.01, min: 0, max: 2 },
+    { key: 'hemiNight', label: '半球 Night', step: 0.01, min: 0, max: 2 },
+    { key: 'sunDay', label: '太阳 Day', step: 0.01, min: 0, max: 3 },
+    { key: 'sunNight', label: '太阳 Night', step: 0.01, min: 0, max: 3 },
+    { key: 'shadowMapSize', label: '阴影尺寸', step: 1, min: 256, max: 4096 },
+    { key: 'shadowRadiusDay', label: '阴影半径 Day', step: 0.1, min: 0, max: 12 },
+    { key: 'shadowRadiusNight', label: '阴影半径 Night', step: 0.1, min: 0, max: 12 },
+  ]
+  const quickNumericFields: Array<{ key: keyof RenderPreset; label: string; step: number; min: number; max: number }> = [
+    { key: 'exposure', label: '曝光', step: 0.01, min: 0.3, max: 1.8 },
+    { key: 'envDay', label: '环境光 Day', step: 0.01, min: 0, max: 1.5 },
+    { key: 'envNight', label: '环境光 Night', step: 0.01, min: 0, max: 1.5 },
+    { key: 'hemiDay', label: '半球光 Day', step: 0.01, min: 0, max: 1.5 },
+    { key: 'hemiNight', label: '半球光 Night', step: 0.01, min: 0, max: 1.5 },
+    { key: 'sunDay', label: '主光 Day', step: 0.01, min: 0, max: 2.2 },
+    { key: 'sunNight', label: '主光 Night', step: 0.01, min: 0, max: 1.2 },
+  ]
+  const quickDayThemeFields: ThemeFieldKey[] = [
+    'wallColor', 'furnitureColorDay', 'windowColor', 'doorColor',
+    'padColorDay', 'bgColorDay', 'capColorA', 'capColorB',
+  ]
+  const quickNightThemeFields: ThemeFieldKey[] = [
+    'wallColor', 'furnitureColorNight', 'windowColor', 'doorColor',
+    'padColorNight', 'bgColorNight', 'capColorA', 'capColorB',
+  ]
+  const dayThemeFields: ThemeFieldKey[] = [
+    'skyDay', 'groundDay', 'sunColorDay', 'wallColor', 'furnitureColorDay',
+    'padColorDay', 'padEmissiveDay', 'bgColorDay',
+  ]
+  const nightThemeFields: ThemeFieldKey[] = [
+    'skyNight', 'groundNight', 'sunColorNight', 'wallColor', 'furnitureColorNight',
+    'padColorNight', 'padEmissiveNight', 'bgColorNight',
+  ]
+  const uiDayThemeFields: ThemeFieldKey[] = ['overlayDay', 'panelBgDay', 'panelBorderDay']
+  const uiNightThemeFields: ThemeFieldKey[] = ['overlayNight', 'panelBgNight', 'panelBorderNight']
+  const sharedThemeFields: ThemeFieldKey[] = ['wallColor', 'windowColor', 'doorColor', 'capColorA', 'capColorB']
+
+  const isCssColorLike = (v: string) => /^#|^rgb|^hsl|^oklch|^color\(|^[a-z]+$/i.test(v.trim())
+  const miniPreviewStyle = (v: string) => {
+    if (isCssColorLike(v)) return { background: v }
+    return {
+      backgroundImage: 'linear-gradient(135deg, rgba(130,150,190,0.25), rgba(60,80,120,0.15))',
+      borderStyle: 'dashed' as const,
+    }
+  }
+
+  useEffect(() => {
+    setDraft(buildDraft(presetCatalog[activePresetKey]))
+  }, [activePresetKey, presetCatalog])
+
+  useEffect(() => {
+    if (!editorOpen) onPreviewPreset(null)
+  }, [editorOpen, onPreviewPreset])
+
+  const applyDraft = (next: RenderPreset) => {
+    setDraft(next)
+    onPreviewPreset(next)
+  }
+
+  const setThemeValue = (key: ThemeFieldKey, value: string) => {
+    applyDraft({ ...draft, theme: { ...draft.theme, [key]: value } })
+  }
+
+  const setThemeHexColor = (key: ThemeFieldKey, hex: string) => {
+    const parsed = parseEditableColor(String(draft.theme[key]))
+    if (!parsed) return
+    const hexParsed = parseHexColor(hex)
+    if (!hexParsed) return
+    const next = {
+      ...hexParsed,
+      a: parsed.a,
+      format: parsed.a < 0.999 ? ('rgba' as const) : parsed.format,
+    }
+    setThemeValue(key, toCssColor(next, parsed.a < 0.999))
+  }
+
+  const setThemeAlpha = (key: ThemeFieldKey, alpha: number) => {
+    const parsed = parseEditableColor(String(draft.theme[key]))
+    if (!parsed) return
+    setThemeValue(key, toCssColor({ ...parsed, a: clamp(alpha, 0, 1), format: 'rgba' }, true))
+  }
+
+  const renderThemeField = (key: ThemeFieldKey) => {
+    const value = String(draft.theme[key])
+    const parsed = parseEditableColor(value)
+
+    return (
+      <div
+        key={key}
+        className="rounded-md border p-2"
+        style={{ borderColor: topBorder, background: isNight ? 'rgba(16,24,38,0.45)' : 'rgba(255,255,255,0.55)' }}
+      >
+        <div className="mb-1 flex items-center gap-2">
+          <span style={{ minWidth: 96, color: ink2, fontSize: 11 }}>{THEME_FIELD_LABEL[key]}</span>
+          <span
+            style={{
+              width: 14, height: 14, borderRadius: 3, border: `1px solid ${topBorder}`, flexShrink: 0,
+              ...miniPreviewStyle(value),
+            }}
+          />
+          {!parsed && <span style={{ fontSize: 10, color: ink3 }}>复杂值（仅文本）</span>}
+        </div>
+        {THEME_FIELD_HINT[key] && (
+          <div className="mb-1" style={{ fontSize: 10, color: ink3 }}>
+            {THEME_FIELD_HINT[key]}
+          </div>
+        )}
+
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => setThemeValue(key, e.target.value)}
+            style={{
+              flex: 1, fontSize: 11, padding: '3px 6px', borderRadius: 6,
+              border: `1px solid ${topBorder}`, background: 'transparent', color: inkColor,
+            }}
+          />
+          <input
+            type="color"
+            value={parsed ? toHexInput(parsed) : '#3b82f6'}
+            disabled={!parsed}
+            onChange={(e) => setThemeHexColor(key, e.target.value)}
+            style={{
+              width: 30, height: 26, padding: 0, borderRadius: 6,
+              border: `1px solid ${topBorder}`, background: 'transparent',
+              cursor: parsed ? 'pointer' : 'not-allowed',
+              opacity: parsed ? 1 : 0.35,
+            }}
+            title="颜色选择器"
+          />
+        </div>
+
+        <div className="mt-1.5 flex items-center gap-2">
+          <span style={{ fontSize: 10, color: ink3, minWidth: 40 }}>透明度</span>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={parsed ? parsed.a : 1}
+            disabled={!parsed}
+            onChange={(e) => setThemeAlpha(key, Number(e.target.value))}
+            style={{ flex: 1, opacity: parsed ? 1 : 0.4 }}
+          />
+          <span style={{ fontSize: 10, color: ink2, width: 34, textAlign: 'right' }}>
+            {parsed ? `${Math.round(parsed.a * 100)}%` : '--'}
+          </span>
+        </div>
+        {!parsed && (
+          <div className="mt-1.5 flex items-center gap-2">
+            <span style={{ fontSize: 10, color: ink3 }}>当前是复杂值（如 gradient），透明度请直接编辑文本中的 rgba alpha。</span>
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -216,7 +541,8 @@ export function DemoTopBar({
             </div>
             <div className="px-3.5 py-3">
               <div className="flex items-center gap-2.5">
-                {Object.values(RENDER_PRESETS).map((p) => {
+                {(Object.keys(RENDER_PRESETS) as RenderPresetKey[]).map((key) => {
+                  const p = presetCatalog[key] ?? RENDER_PRESETS[key]
                   const active = p.key === activePresetKey
                   const [c0, c1, c2] = swatchPalette[p.key]
                   const swatchBg = `radial-gradient(125% 125% at 18% 14%, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.03) 34%, rgba(255,255,255,0) 58%), linear-gradient(145deg, ${c0} 0%, ${c1} 56%, ${c2} 100%)`
@@ -224,7 +550,7 @@ export function DemoTopBar({
                     <button
                       key={p.key}
                       type="button"
-                      onClick={() => { onPresetChange(p.key); setTweaksOpen(false) }}
+                      onClick={() => { onPresetChange(p.key) }}
                       className="relative transition-all duration-200"
                       style={{
                         width: 28, height: 28, borderRadius: '50%', background: swatchBg,
@@ -244,6 +570,409 @@ export function DemoTopBar({
                 })}
               </div>
               <div className="mt-2 text-[10px]" style={{ color: ink3 }}>当前：{preset.label}</div>
+              <div
+                className="mt-2 flex items-center justify-between gap-2 rounded-md border px-2 py-1.5"
+                style={{ borderColor: topBorder, background: isNight ? 'rgba(16,24,38,0.35)' : 'rgba(245,249,255,0.55)' }}
+              >
+                <div className="min-w-0">
+                  <div style={{ fontSize: 11, color: ink2 }}>实验：统一墙厚 10cm</div>
+                  <div style={{ fontSize: 10, color: ink3 }}>作用于全部楼层与全部模块（可随时关闭）</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onToggleUniformWall10cm(!uniformWall10cm)}
+                  style={{
+                    width: 40,
+                    height: 22,
+                    borderRadius: 999,
+                    border: `1px solid ${uniformWall10cm ? 'rgba(0,111,255,0.55)' : topBorder}`,
+                    background: uniformWall10cm ? 'rgba(0,111,255,0.22)' : 'transparent',
+                    cursor: 'pointer',
+                    position: 'relative',
+                    flexShrink: 0,
+                  }}
+                  title={uniformWall10cm ? '已开启' : '已关闭'}
+                >
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: 2,
+                      left: uniformWall10cm ? 20 : 2,
+                      width: 16,
+                      height: 16,
+                      borderRadius: '50%',
+                      background: uniformWall10cm ? '#006FFF' : (isNight ? '#8FA9CA' : '#A8B9CE'),
+                      transition: 'left 0.18s ease',
+                    }}
+                  />
+                </button>
+              </div>
+              <div
+                className="mt-2 flex items-center justify-between gap-2 rounded-md border px-2 py-1.5"
+                style={{ borderColor: topBorder, background: isNight ? 'rgba(16,24,38,0.35)' : 'rgba(245,249,255,0.55)' }}
+              >
+                <div className="min-w-0">
+                  <div style={{ fontSize: 11, color: ink2 }}>颜色校准模式</div>
+                  <div style={{ fontSize: 10, color: ink3 }}>中性光源 + 关闭后期，专门用于精确调色</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onToggleColorCalibrationMode(!colorCalibrationMode)}
+                  style={{
+                    width: 40,
+                    height: 22,
+                    borderRadius: 999,
+                    border: `1px solid ${colorCalibrationMode ? 'rgba(0,111,255,0.55)' : topBorder}`,
+                    background: colorCalibrationMode ? 'rgba(0,111,255,0.22)' : 'transparent',
+                    cursor: 'pointer',
+                    position: 'relative',
+                    flexShrink: 0,
+                  }}
+                  title={colorCalibrationMode ? '已开启' : '已关闭'}
+                >
+                  <span
+                    style={{
+                      position: 'absolute',
+                      top: 2,
+                      left: colorCalibrationMode ? 20 : 2,
+                      width: 16,
+                      height: 16,
+                      borderRadius: '50%',
+                      background: colorCalibrationMode ? '#006FFF' : (isNight ? '#8FA9CA' : '#A8B9CE'),
+                      transition: 'left 0.18s ease',
+                    }}
+                  />
+                </button>
+              </div>
+              <div className="mt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditorOpen((v) => !v)}
+                  style={{
+                    fontSize: 10,
+                    borderRadius: 6,
+                    border: `1px solid ${topBorder}`,
+                    padding: '4px 8px',
+                    background: editorOpen ? (isNight ? 'rgba(72,122,200,0.2)' : 'rgba(0,111,255,0.12)') : 'transparent',
+                    color: ink2,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {editorOpen ? '收起高级编辑' : '高级编辑'}
+                </button>
+                {hasPresetOverride(activePresetKey) && (
+                  <span style={{ fontSize: 10, color: '#0ea5e9' }}>已覆盖</span>
+                )}
+              </div>
+              {editorOpen && (
+                <div
+                  className="mt-3 space-y-3 rounded-lg border p-2"
+                  style={{
+                    borderColor: topBorder,
+                    background: isNight ? 'rgba(8,14,25,0.45)' : 'rgba(245,249,255,0.65)',
+                    maxHeight: 420,
+                    overflow: 'auto',
+                  }}
+                >
+                  <div className="text-[10px]" style={{ color: ink3 }}>
+                    正在编辑：{draft.label}（{draft.key}）
+                  </div>
+
+                  <div className="flex items-center gap-1 rounded-md border p-1" style={{ borderColor: topBorder }}>
+                    {([
+                      ['quick', '快速调色'],
+                      ['advanced', '高级模式'],
+                    ] as Array<[EditorMode, string]>).map(([mode, label]) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setEditorMode(mode)}
+                        style={{
+                          flex: 1,
+                          fontSize: 10,
+                          padding: '4px 6px',
+                          borderRadius: 6,
+                          border: 'none',
+                          cursor: 'pointer',
+                          color: editorMode === mode ? '#006FFF' : ink2,
+                          background: editorMode === mode ? (isNight ? 'rgba(40,92,170,0.24)' : 'rgba(0,111,255,0.12)') : 'transparent',
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {editorMode === 'quick' ? (
+                    <>
+                      <div className="space-y-2">
+                        <div className="text-[10px]" style={{ color: ink3 }}>核心光照参数</div>
+                        {quickNumericFields.map((f) => (
+                          <div key={String(f.key)} className="rounded-md border px-2 py-1.5" style={{ borderColor: topBorder }}>
+                            <div className="mb-1 flex items-center justify-between gap-2">
+                              <span style={{ color: ink2, fontSize: 11 }}>{f.label}</span>
+                              <span style={{ fontSize: 10, color: ink3 }}>{Number((draft[f.key] as number).toFixed(2))}</span>
+                            </div>
+                            <input
+                              type="range"
+                              min={f.min}
+                              max={f.max}
+                              step={f.step}
+                              value={Number(draft[f.key] as number)}
+                              onChange={(e) => {
+                                const raw = Number(e.target.value)
+                                const next = { ...draft, [f.key]: Number.isFinite(raw) ? raw : (draft[f.key] as number) } as RenderPreset
+                                applyDraft(next)
+                              }}
+                              style={{ width: '100%' }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      <label className="flex items-center justify-between gap-2">
+                        <span style={{ color: ink2, fontSize: 11 }}>边线透明度</span>
+                        <input
+                          type="number"
+                          step={0.01}
+                          min={0}
+                          max={1}
+                          value={draft.theme.capOpacity}
+                          onChange={(e) => {
+                            const raw = Number(e.target.value)
+                            const next = { ...draft, theme: { ...draft.theme, capOpacity: Number.isFinite(raw) ? raw : draft.theme.capOpacity } }
+                            applyDraft(next)
+                          }}
+                          style={{
+                            width: 92, fontSize: 11, padding: '3px 6px', borderRadius: 6,
+                            border: `1px solid ${topBorder}`, background: 'transparent', color: inkColor,
+                          }}
+                        />
+                      </label>
+
+                      <div className="space-y-2">
+                        <div className="text-[10px]" style={{ color: ink3 }}>
+                          快速色板：只保留常用可见色，避免调色噪音。
+                        </div>
+                        <div className="flex items-center gap-1 rounded-md border p-1" style={{ borderColor: topBorder }}>
+                          {([
+                            ['day', '白天'],
+                            ['night', '夜晚'],
+                          ] as Array<[EditorScope, string]>).map(([scope, label]) => (
+                            <button
+                              key={scope}
+                              type="button"
+                              onClick={() => setEditorScope(scope)}
+                              style={{
+                                flex: 1,
+                                fontSize: 10,
+                                padding: '4px 6px',
+                                borderRadius: 6,
+                                border: 'none',
+                                cursor: 'pointer',
+                                color: editorScope === scope ? '#006FFF' : ink2,
+                                background: editorScope === scope ? (isNight ? 'rgba(40,92,170,0.24)' : 'rgba(0,111,255,0.12)') : 'transparent',
+                              }}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="space-y-1.5">
+                          {editorScope === 'day' && quickDayThemeFields.map(renderThemeField)}
+                          {editorScope === 'night' && quickNightThemeFields.map(renderThemeField)}
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="space-y-1.5">
+                        <div className="text-[10px]" style={{ color: ink3 }}>基础参数</div>
+                        {numericFields.map((f) => (
+                          <label key={String(f.key)} className="flex items-center justify-between gap-2">
+                            <span style={{ color: ink2, fontSize: 11 }}>{f.label}</span>
+                            <input
+                              type="number"
+                              step={f.step}
+                              min={f.min}
+                              max={f.max}
+                              value={String(draft[f.key] as number)}
+                              onChange={(e) => {
+                                const raw = Number(e.target.value)
+                                const next = { ...draft, [f.key]: Number.isFinite(raw) ? raw : (draft[f.key] as number) } as RenderPreset
+                                applyDraft(next)
+                              }}
+                              style={{
+                                width: 92, fontSize: 11, padding: '3px 6px', borderRadius: 6,
+                                border: `1px solid ${topBorder}`, background: 'transparent', color: inkColor,
+                              }}
+                            />
+                          </label>
+                        ))}
+                      </div>
+
+                      <label className="flex items-center justify-between gap-2">
+                        <span style={{ color: ink2, fontSize: 11 }}>边线透明度</span>
+                        <input
+                          type="number"
+                          step={0.01}
+                          min={0}
+                          max={1}
+                          value={draft.theme.capOpacity}
+                          onChange={(e) => {
+                            const raw = Number(e.target.value)
+                            const next = { ...draft, theme: { ...draft.theme, capOpacity: Number.isFinite(raw) ? raw : draft.theme.capOpacity } }
+                            applyDraft(next)
+                          }}
+                          style={{
+                            width: 92, fontSize: 11, padding: '3px 6px', borderRadius: 6,
+                            border: `1px solid ${topBorder}`, background: 'transparent', color: inkColor,
+                          }}
+                        />
+                      </label>
+
+                      <div className="grid grid-cols-2 gap-2">
+                    <label className="space-y-1">
+                      <span style={{ color: ink3, fontSize: 10 }}>环境 Day</span>
+                      <select
+                        value={draft.theme.envPresetDay}
+                        onChange={(e) => {
+                          const next = { ...draft, theme: { ...draft.theme, envPresetDay: e.target.value as RenderPreset['theme']['envPresetDay'] } }
+                          applyDraft(next)
+                        }}
+                        style={{ width: '100%', fontSize: 11, padding: '4px 6px', borderRadius: 6, border: `1px solid ${topBorder}`, background: 'transparent', color: inkColor }}
+                      >
+                        <option value="apartment">apartment</option>
+                        <option value="city">city</option>
+                        <option value="studio">studio</option>
+                        <option value="warehouse">warehouse</option>
+                      </select>
+                    </label>
+                    <label className="space-y-1">
+                      <span style={{ color: ink3, fontSize: 10 }}>环境 Night</span>
+                      <select
+                        value={draft.theme.envPresetNight}
+                        onChange={(e) => {
+                          const next = { ...draft, theme: { ...draft.theme, envPresetNight: e.target.value as RenderPreset['theme']['envPresetNight'] } }
+                          applyDraft(next)
+                        }}
+                        style={{ width: '100%', fontSize: 11, padding: '4px 6px', borderRadius: 6, border: `1px solid ${topBorder}`, background: 'transparent', color: inkColor }}
+                      >
+                        <option value="night">night</option>
+                        <option value="city">city</option>
+                        <option value="warehouse">warehouse</option>
+                        <option value="studio">studio</option>
+                      </select>
+                    </label>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div style={{ fontSize: 10, color: ink3 }}>
+                          默认只展示“建筑和家具可见色”。系统 UI 色放在高级项，避免信息过载。
+                        </div>
+                        <div className="flex items-center gap-1 rounded-md border p-1" style={{ borderColor: topBorder }}>
+                          {([
+                            ['day', '白天'],
+                            ['night', '夜晚'],
+                            ['global', '共享'],
+                          ] as Array<[EditorScope, string]>).map(([scope, label]) => (
+                            <button
+                              key={scope}
+                              type="button"
+                              onClick={() => setEditorScope(scope)}
+                              style={{
+                                flex: 1,
+                                fontSize: 10,
+                                padding: '4px 6px',
+                                borderRadius: 6,
+                                border: 'none',
+                                cursor: 'pointer',
+                                color: editorScope === scope ? '#006FFF' : ink2,
+                                background: editorScope === scope ? (isNight ? 'rgba(40,92,170,0.24)' : 'rgba(0,111,255,0.12)') : 'transparent',
+                              }}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+
+                        <div className="space-y-1.5">
+                          {editorScope === 'day' && dayThemeFields.map(renderThemeField)}
+                          {editorScope === 'night' && nightThemeFields.map(renderThemeField)}
+                          {editorScope === 'global' && sharedThemeFields.map(renderThemeField)}
+                          {(editorScope === 'day' || editorScope === 'night') && (
+                            <div className="rounded-md border p-2" style={{ borderColor: topBorder }}>
+                              <button
+                                type="button"
+                                onClick={() => setShowUiSystemFields((v) => !v)}
+                                style={{
+                                  width: '100%',
+                                  textAlign: 'left',
+                                  fontSize: 11,
+                                  border: 'none',
+                                  background: 'transparent',
+                                  color: ink2,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                {showUiSystemFields ? '收起' : '展开'} 系统 UI 颜色（面板/叠层）
+                              </button>
+                              {showUiSystemFields && (
+                                <div className="mt-2 space-y-1.5">
+                                  {editorScope === 'day' && uiDayThemeFields.map(renderThemeField)}
+                                  {editorScope === 'night' && uiNightThemeFields.map(renderThemeField)}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const fallback = buildDraft(presetCatalog[activePresetKey])
+                        setDraft(fallback)
+                        onPreviewPreset(null)
+                      }}
+                      style={{
+                        fontSize: 11, borderRadius: 6, padding: '4px 8px', cursor: 'pointer',
+                        border: `1px solid ${topBorder}`, background: 'transparent', color: ink2,
+                      }}
+                    >
+                      取消预览
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onResetPreset(activePresetKey)
+                        const fallback = buildDraft(RENDER_PRESETS[activePresetKey])
+                        setDraft(fallback)
+                        onPreviewPreset(null)
+                      }}
+                      style={{
+                        fontSize: 11, borderRadius: 6, padding: '4px 8px', cursor: 'pointer',
+                        border: `1px solid ${topBorder}`, background: 'transparent', color: '#ef4444',
+                      }}
+                    >
+                      恢复默认
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onSavePreset(activePresetKey, draft)}
+                      style={{
+                        fontSize: 11, borderRadius: 6, padding: '4px 8px', cursor: 'pointer',
+                        border: `1px solid rgba(0,111,255,0.45)`, background: 'rgba(0,111,255,0.12)', color: '#006FFF',
+                      }}
+                    >
+                      保存覆盖
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -251,72 +980,6 @@ export function DemoTopBar({
 
       {/* FPS 计数器 */}
       <FpsBadge topBorder={topBorder} topBg={topBg} />
-
-      {/* Share */}
-      <button
-        type="button"
-        style={{
-          marginLeft: 4, width: 34, height: 34, border: `1px solid ${topBorder}`, borderRadius: 7,
-          background: topBg, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: ink2, cursor: 'pointer',
-        }}
-        title="分享"
-      >
-        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M4 12v7a1 1 0 001 1h14a1 1 0 001-1v-7"/><path d="M16 6l-4-4-4 4M12 2v13"/>
-        </svg>
-      </button>
-    </div>
-  )
-}
-
-export function DemoTwinHud({
-  preset,
-  isNight,
-  devicesTotal,
-  devicesOn,
-  windowsTotal,
-  wallCount,
-}: {
-  preset: RenderPreset
-  isNight: boolean
-  devicesTotal: number
-  devicesOn: number
-  windowsTotal: number
-  wallCount: number
-}) {
-  const chrome = getDemoChromePalette(isNight)
-  const panelBg = isNight ? 'rgba(14,28,51,0.78)' : 'rgba(255,255,255,0.92)'
-  const panelBorder = chrome.border
-  const titleColor = chrome.text
-  const mutedColor = chrome.text3
-
-  return (
-    <div className="pointer-events-none absolute bottom-5 left-5 z-10">
-      <div className="w-64 rounded-2xl border px-4 py-3 backdrop-blur-xl" style={{ background: panelBg, borderColor: panelBorder }}>
-        <div className="mb-2 flex items-center justify-between">
-          <div className="font-semibold text-xs tracking-[0.08em]" style={{ color: titleColor }}>DIGITAL TWIN</div>
-          <div className="rounded px-1.5 py-0.5 text-[10px]" style={{ color: mutedColor, border: `1px solid ${panelBorder}` }}>LIVE</div>
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-lg px-2 py-1.5" style={{ background: chrome.tile }}>
-            <div className="text-[10px]" style={{ color: mutedColor }}>在线灯具</div>
-            <div className="font-semibold text-sm" style={{ color: titleColor }}>{devicesOn}/{devicesTotal}</div>
-          </div>
-          <div className="rounded-lg px-2 py-1.5" style={{ background: chrome.tile }}>
-            <div className="text-[10px]" style={{ color: mutedColor }}>墙体节点</div>
-            <div className="font-semibold text-sm" style={{ color: titleColor }}>{wallCount}</div>
-          </div>
-          <div className="rounded-lg px-2 py-1.5" style={{ background: chrome.tile }}>
-            <div className="text-[10px]" style={{ color: mutedColor }}>门窗开口</div>
-            <div className="font-semibold text-sm" style={{ color: titleColor }}>{windowsTotal}</div>
-          </div>
-          <div className="rounded-lg px-2 py-1.5" style={{ background: chrome.tile }}>
-            <div className="text-[10px]" style={{ color: mutedColor }}>风格模式</div>
-            <div className="font-semibold text-sm" style={{ color: titleColor }}>{preset.label}</div>
-          </div>
-        </div>
-      </div>
     </div>
   )
 }
@@ -325,19 +988,21 @@ export function DemoTwinHud({
 
 export function DemoRail({
   isNight,
+  preset,
   activeModule,
+  isGlobalOverview,
   onModuleClick,
   onOverviewClick,
 }: {
   isNight: boolean
-  /** 当前聚焦的 module，用于 active 高亮 */
+  preset: RenderPreset
   activeModule: ModuleKey
-  /** 点击某个子系统 —— 触发 switchModule（会自动把 Detail 先回退到 Overview） */
+  /** true = 当前处于全屋总览，overview 按钮高亮，子系统按钮不高亮 */
+  isGlobalOverview: boolean
   onModuleClick: (module: ModuleKey) => void
-  /** 点击 overview —— 回到全屋总览 */
   onOverviewClick: () => void
 }) {
-  const chrome = getDemoChromePalette(isNight)
+  const chrome = getDemoChromePalette(isNight, preset)
   const railBg     = chrome.bg
   const railBorder = chrome.border
   const ink3       = chrome.text3
@@ -470,9 +1135,7 @@ export function DemoRail({
           return <div key={i} style={{ height: 1, background: railBorder, margin: '6px 12px' }} />
         }
         const { id, tip, color, icon } = entry
-        // active: overview 时看是否聚焦到任何 module（这里没有单独 overview 模式，
-        // 简化成"活跃模块 === 当前 id"），其余按 module 名比较
-        const isActive = id === 'overview' ? false : id === activeModule
+        const isActive = id === 'overview' ? isGlobalOverview : (!isGlobalOverview && id === activeModule)
         const activeBg = `color-mix(in srgb, ${color} ${isNight ? '14%' : '8%'}, transparent)`
         const handleClick = () => {
           if (id === 'overview') {
@@ -604,23 +1267,38 @@ export function FloorSwitcher({
   currentLevelId,
   onChange,
   isNight,
+  preset,
 }: {
   levels: AvailableLevel[]
-  currentLevelId: string
-  onChange: (levelId: string) => void
+  /** 当前楼层 id；null = 全屋模式 */
+  currentLevelId: string | null
+  /** null = 全屋，string = 指定楼层 */
+  onChange: (levelId: string | null) => void
   isNight: boolean
+  preset: RenderPreset
 }) {
-  if (levels.length < 2) return null
+  if (levels.length < 1) return null
 
+  const chrome = getDemoChromePalette(isNight, preset)
   const lineColor = isNight ? 'rgba(224, 228, 236, 0.45)' : 'rgba(30, 35, 41, 0.35)'
   const activeColor = '#006AFF'
 
+  const entries: Array<{ id: string | null; label: string; sub?: string }> = [
+    { id: null, label: '全屋' },
+    ...levels.map((lvl) => ({
+      id: lvl.id,
+      label: lvl.name,
+      sub: `${lvl.area}m² · ${lvl.deviceCount}台`,
+    })),
+  ]
+
   return (
     <div
-      className="pointer-events-auto flex flex-col items-center justify-center gap-4"
+      className="pointer-events-auto flex flex-col items-center justify-center gap-1"
+      onPointerDown={(e) => e.stopPropagation()}
       style={{
         position: 'absolute',
-        left: 80,             // 紧贴 DemoRail（64px）右边 + 16px 边距
+        left: 80,
         top: '50%',
         transform: 'translateY(-50%)',
         zIndex: 15,
@@ -628,13 +1306,13 @@ export function FloorSwitcher({
         padding: '12px 4px',
       }}
     >
-      {levels.map((lvl) => {
-        const isActive = lvl.id === currentLevelId
+      {entries.map((entry) => {
+        const isActive = entry.id === currentLevelId
         return (
           <button
-            key={lvl.id}
+            key={entry.id ?? '__all__'}
             type="button"
-            onClick={() => onChange(lvl.id)}
+            onClick={() => onChange(entry.id)}
             className="group relative flex items-center"
             style={{
               background: 'transparent',
@@ -644,9 +1322,8 @@ export function FloorSwitcher({
               width: '100%',
               justifyContent: 'center',
             }}
-            aria-label={`切换到 ${lvl.name}`}
+            aria-label={entry.label}
           >
-            {/* 短横线 —— hover 放大 */}
             <div
               className="transition-all duration-200 ease-out group-hover:w-10"
               style={{
@@ -656,7 +1333,6 @@ export function FloorSwitcher({
                 borderRadius: 1,
               }}
             />
-            {/* Hover 信息卡 */}
             <div
               className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none"
               style={{
@@ -665,19 +1341,18 @@ export function FloorSwitcher({
                 top: '50%',
                 transform: 'translateY(-50%)',
                 padding: '6px 10px',
-                background: isNight ? 'rgba(20, 24, 32, 0.92)' : 'rgba(255, 255, 255, 0.94)',
-                color: isNight ? '#E0E4EC' : '#1E2329',
+                background: chrome.bg,
+                color: chrome.text,
                 fontSize: 11,
                 lineHeight: 1.4,
                 borderRadius: 6,
                 boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                border: `1px solid ${chrome.border}`,
                 whiteSpace: 'nowrap',
               }}
             >
-              <div style={{ fontWeight: 600 }}>{lvl.name}</div>
-              <div style={{ opacity: 0.6, fontSize: 10 }}>
-                {lvl.area} m² · {lvl.deviceCount} 设备
-              </div>
+              <div style={{ fontWeight: 600 }}>{entry.label}</div>
+              {entry.sub && <div style={{ opacity: 0.6, fontSize: 10 }}>{entry.sub}</div>}
             </div>
           </button>
         )
@@ -724,8 +1399,7 @@ export function DashboardPanel({
   activeSceneLabel,
   activeSceneStartedAt,
   isNight,
-  wallCount,
-  openingsTotal,
+  preset,
   lightsOn,
   lightsTotal,
 }: {
@@ -738,6 +1412,7 @@ export function DashboardPanel({
   /** 场景触发时戳（毫秒 epoch），用于"已运行 X:XX" */
   activeSceneStartedAt: number | null
   isNight: boolean
+  preset: RenderPreset
   /** 在线灯具 X/Y（运行态信息，和 3D 灯光呼应；0 台时整行不显示） */
   lightsOn?: number
   lightsTotal?: number
@@ -768,10 +1443,11 @@ export function DashboardPanel({
     return () => clearInterval(id)
   }, [activeSceneStartedAt])
 
-  const bg = isNight ? 'rgba(20, 24, 32, 0.85)' : 'rgba(255, 255, 255, 0.9)'
-  const border = isNight ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)'
-  const textPrimary = isNight ? '#E8EBF0' : '#1E2329'
-  const textSecondary = isNight ? '#8a93a6' : '#6b7280'
+  const chrome = getDemoChromePalette(isNight, preset)
+  const bg = chrome.bg
+  const border = chrome.border
+  const textPrimary = chrome.text
+  const textSecondary = chrome.text3
   const tileBg = isNight ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.025)'
 
   // Donut 配置
@@ -811,13 +1487,17 @@ export function DashboardPanel({
         {lightsTotal != null && lightsTotal > 0 && (
           <div
             style={{
+              display: 'flex', alignItems: 'center', gap: 4,
               fontSize: 10.5,
               color: textSecondary,
               marginTop: 6,
               fontVariantNumeric: 'tabular-nums',
             }}
           >
-            💡 {lightsOn ?? 0}/{lightsTotal} 亮
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" width={11} height={11} style={{ flexShrink: 0 }}>
+              <path d="M9 18h6"/><path d="M10 21h4"/><path d="M9 18c-1.2-1-3-3.2-3-6a6 6 0 1112 0c0 2.8-1.8 5-3 6"/>
+            </svg>
+            {lightsOn ?? 0}/{lightsTotal} 亮
           </div>
         )}
       </div>
@@ -917,18 +1597,20 @@ export function DashboardPanel({
 export function SceneDock({
   activeSceneId,
   isNight,
+  preset,
   onExecute,
   onAllOn,
   onAllOff,
 }: {
   activeSceneId: string | null
   isNight: boolean
+  preset: RenderPreset
   onExecute: (scene: SceneConfig) => void
   onAllOn: () => void
   onAllOff: () => void
 }) {
-  const chrome = getDemoChromePalette(isNight)
-  const panelBg     = isNight ? 'rgba(14,28,51,0.78)' : 'rgba(255,255,255,0.92)'
+  const chrome = getDemoChromePalette(isNight, preset)
+  const panelBg     = chrome.bg
   const panelBorder = chrome.border
   const textColor   = chrome.text
   const mutedColor  = chrome.text3
@@ -994,3 +1676,68 @@ export function SceneDock({
     </div>
   )
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Compass —— 南北仪表盘（DOM overlay，needle 由 CompassUpdater 每帧更新）
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// needleRef 传给 Canvas 内的 CompassUpdater，后者通过 useFrame 直接写
+// CSS transform，无需 React re-render，完全跟手。
+
+export const Compass = forwardRef<HTMLDivElement, { isNight: boolean }>(
+  function Compass({ isNight }, needleRef) {
+    const fg   = isNight ? 'rgba(220,228,240,0.92)' : 'rgba(25,35,55,0.88)'
+    const bg   = isNight ? 'rgba(14,24,44,0.72)'    : 'rgba(255,255,255,0.76)'
+    const ring = isNight ? 'rgba(180,200,230,0.18)'  : 'rgba(40,60,100,0.12)'
+
+    return (
+      <div
+        className="pointer-events-none"
+        style={{
+          position: 'absolute',
+          bottom: 24,
+          right: 24,
+          zIndex: 15,
+          width: 52,
+          height: 52,
+          borderRadius: '50%',
+          background: bg,
+          border: `1px solid ${ring}`,
+          backdropFilter: 'blur(12px)',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.18)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        {/* 旋转指针（由 CompassUpdater 写入 transform） */}
+        <div
+          ref={needleRef}
+          style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <svg width={28} height={28} viewBox="0 0 28 28" fill="none">
+            {/* 北针（红）：指向 12 点钟 = 屏幕上方 = 计算得到的北向 */}
+            <polygon points="14,2 11,14 14,12 17,14" fill="#ef4444" opacity={0.9} />
+            {/* 南针（灰） */}
+            <polygon points="14,26 11,14 14,16 17,14" fill={fg} opacity={0.45} />
+          </svg>
+        </div>
+        {/* N 标签固定在指针组件外，始终在顶部 */}
+        <span style={{
+          position: 'absolute',
+          top: 4,
+          left: 0,
+          right: 0,
+          textAlign: 'center',
+          fontSize: 8,
+          fontWeight: 700,
+          letterSpacing: '0.06em',
+          color: '#ef4444',
+          lineHeight: 1,
+          pointerEvents: 'none',
+          userSelect: 'none',
+        }}>N</span>
+      </div>
+    )
+  }
+)

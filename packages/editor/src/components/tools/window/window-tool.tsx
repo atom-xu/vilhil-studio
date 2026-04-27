@@ -356,6 +356,9 @@ export const WindowTool: React.FC = () => {
       }).length
       const name = `Window ${windowCount + 1}`
 
+      // 持久化 presetId 到节点上 —— 选中后右侧面板就能切窗户类型
+      // 切预设时同步更新 width/height/sillHeight，避免用户手调到穿模
+      const presetId = useEditor.getState().windowPresetId
       const node = WindowNode.parse({
         name,
         position: [clampedX, clampedY, 0],
@@ -374,6 +377,7 @@ export const WindowTool: React.FC = () => {
         sill: draft.sill,
         sillDepth: draft.sillDepth,
         sillThickness: draft.sillThickness,
+        presetId,
       })
 
       useScene.getState().createNode(node, event.node.id as AnyNodeId)

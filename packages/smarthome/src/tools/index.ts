@@ -1,5 +1,17 @@
 export { placeDevice } from './place-device'
 export { removeDevice } from './remove-device'
+export {
+  makeCircuitId,
+  mergeCircuits,
+  separateLightToOwnCircuit,
+  listCircuitMembers,
+  getEffectiveCircuitId,
+  getLightCircuits,
+  getCircuitNumber,
+  setCircuitMeta,
+  assignMissingCircuitIds,
+  type CircuitInfo,
+} from './circuit-tools'
 export { setDeviceParams, setDeviceState } from './set-device-params'
 export { toggleDevice } from './toggle-device'
 export { executePanelAction, setPanelKeyConfig, type PanelAction, type PanelKeyConfig } from './panel-action'
@@ -8,7 +20,9 @@ export {
   updateScene,
   deleteScene,
   addSceneEffect,
+  addSceneCircuitEffect,
   removeSceneEffect,
+  removeSceneCircuitEffect,
   applyScene,
   subscribeSceneRunStatus,
   getSceneRunStatus,

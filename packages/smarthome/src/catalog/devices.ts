@@ -26,9 +26,12 @@ export const LIGHTING_FIXTURES: DeviceDefinition[] = [
     price: 680,
   },
   {
+    // 灯带的"统一入口"——目录里只显示这一条。
+    // 画完后用右侧面板的"发光朝向"切换 omni / down / up / wall（对应原本的
+    // LIGHT-STRIP / -SKIRTING / -COVE / -WASH-WALL），不需要重新画。
     catalogId: 'LIGHT-STRIP',
-    name: 'LED灯带',
-    description: '线性灯带，线光源',
+    name: '灯带',
+    description: '线性 LED 灯带，画完后可切换发光朝向（向下/向上/洗墙/全向）',
     type: 'light',
     subtype: 'strip',
     color: '#d4a853',
@@ -38,6 +41,55 @@ export const LIGHTING_FIXTURES: DeviceDefinition[] = [
     mountType: 'hidden',
     lightType: 'line',
     price: 280,
+  },
+  // ── 以下 3 条是【向后兼容】定义 ──
+  // 老项目的设备节点 productId 还可能是这些 catalogId，加载时仍要 resolve 到
+  // DeviceDefinition 拿 size / mountType。它们不进 catalog 选择器（hiddenFromCatalog）。
+  // 新项目都用 LIGHT-STRIP + emissionDirection 表达。
+  {
+    catalogId: 'LIGHT-STRIP-WASH-WALL',
+    name: '洗墙灯',
+    description: '（旧版）已合并到"灯带 / 洗墙"模式',
+    type: 'light',
+    subtype: 'strip-wash-wall',
+    color: '#d4a853',
+    defaultH: 0.05,
+    size: [0.5, 0.05, 0.05],
+    subsystem: 'lighting',
+    mountType: 'hidden',
+    lightType: 'line',
+    price: 480,
+    hiddenFromCatalog: true,
+  },
+  {
+    catalogId: 'LIGHT-STRIP-COVE',
+    name: '回形灯槽',
+    description: '（旧版）已合并到"灯带 / 向上"模式',
+    type: 'light',
+    subtype: 'strip-cove',
+    color: '#d4a853',
+    defaultH: 2.55,
+    size: [0.5, 0.02, 0.03],
+    subsystem: 'lighting',
+    mountType: 'hidden',
+    lightType: 'line',
+    price: 360,
+    hiddenFromCatalog: true,
+  },
+  {
+    catalogId: 'LIGHT-STRIP-SKIRTING',
+    name: '地脚线灯',
+    description: '（旧版）已合并到"灯带 / 向下"模式',
+    type: 'light',
+    subtype: 'strip-skirting',
+    color: '#d4a853',
+    defaultH: 0.05,
+    size: [0.5, 0.01, 0.01],
+    subsystem: 'lighting',
+    mountType: 'hidden',
+    lightType: 'line',
+    price: 300,
+    hiddenFromCatalog: true,
   },
   {
     catalogId: 'LIGHT-PENDANT',

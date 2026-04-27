@@ -5,6 +5,7 @@
 
 import { type DeviceNode, useScene } from '@pascal-app/core'
 import { useSelectedSubsystem } from '@vilhil/smarthome'
+import { useShallow } from 'zustand/react/shallow'
 import {
   APCoverage,
   ArchitectureHub,
@@ -49,14 +50,19 @@ export const DeviceEffects = ({ node, isFocusedBySubsystem }: DeviceEffectsProps
     isFocusedBySubsystem ??
     (selectedSubsystem === null || selectedSubsystem === node.subsystem)
 
-  // 合并为单一订阅，避免两次 selector 遍历（每次 store 变化只触发一次重渲染）
-  const { deviceState, deviceParams } = useScene((state) => {
-    const devNode = state.nodes[node.id] as DeviceNode | undefined
-    return {
-      deviceState: devNode?.state as Record<string, unknown> | undefined,
-      deviceParams: devNode?.params,
-    }
-  })
+  // 合并为单一订阅，避免两次 selector 遍历。
+  // 【必须 useShallow】selector 返回 derived object（{deviceState, deviceParams}），
+  // 没有 shallow 比较时每次调用都是新引用 → React 19 的 useSyncExternalStore 把它
+  // 当成"snapshot 一直在变" → 触发"Maximum update depth exceeded"死循环。
+  const { deviceState, deviceParams } = useScene(
+    useShallow((state) => {
+      const devNode = state.nodes[node.id] as DeviceNode | undefined
+      return {
+        deviceState: devNode?.state as Record<string, unknown> | undefined,
+        deviceParams: devNode?.params,
+      }
+    }),
+  )
 
   const isOn = (deviceState?.on as boolean) ?? false
 
@@ -98,15 +104,10 @@ export const DeviceEffects = ({ node, isFocusedBySubsystem }: DeviceEffectsProps
         />
       )}
 
-      {/* Light cone — always rendered, brightness=0 when off for smooth fade-out */}
-      {node.subsystem === 'lighting' && (
-        <LightCone
-          position={[0, 0, 0]}
-          brightness={isOn ? ((deviceState?.brightness as number) ?? 100) / 100 : 0}
-          beamAngle={(deviceParams?.beamAngle as number) ?? 30}
-          height={node.position[1]}
-        />
-      )}
+      {/* LightCone（300 粒子锥 + 60 地面粒子）已停用 ——
+          多盏灯叠起来视觉上是大片白色颗粒/马赛克，不符合"真实光照"的演示需求。
+          物理光锥已经由 DemoLightBulb 的 SpotLight 提供，这层粒子是装饰性的"赛博风"，
+          删掉后画面更干净。如果将来想恢复氛围，做成全局开关。 */}
 
       {/* 安防摄像头 FOV —— 激光扫描锥 */}
       {node.subsystem === 'security' &&

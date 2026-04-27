@@ -2,12 +2,14 @@
 // 必须拆分为 registry 架构。参考 docs/DEVICE-SPEC-DESIGN.md 决策 1。
 
 import { type MountType, type Subsystem } from '@pascal-app/core'
-import { Suspense, useMemo, useRef } from 'react'
+import { Suspense, useEffect, useMemo, useRef } from 'react'
+import type { Object3D, SpotLight } from 'three'
 import * as THREE from 'three'
 import { Clone } from '@react-three/drei/core/Clone'
 import { useGLTF } from '@react-three/drei/core/Gltf'
 import { useFrame } from '@react-three/fiber'
 import { getSubsystemColor } from '@vilhil/smarthome'
+import { colorTempToColor } from '../../../lib/color-temp'
 
 // 预加载常用 GLB，避免首次拖放时卡顿
 useGLTF.preload('/items/electric-panel/model.glb')
@@ -35,6 +37,12 @@ interface DeviceGeometryProps {
   renderType: string
   size?: [number, number, number]
   subsystem: Subsystem
+  /** 灯带的折线路径（plan 坐标 [x,z] 列表），有 path 时走 LightStripGeometry */
+  path?: Array<[number, number]>
+  /** 当前设备 position 在世界 (x,z)，用于把 path 转为相对坐标（DeviceGeometry 内部相对原点画） */
+  centroidWorld?: [number, number]
+  /** 灯带发光朝向：'down' / 'up' / 'wall' / 'omni' */
+  emissionDirection?: 'down' | 'up' | 'wall' | 'omni'
   /** 设备运行时视觉状态 — Kimi 3D 模型接入后通过此 prop 驱动动画 */
   visualState?: DeviceVisualState
 }
@@ -45,10 +53,36 @@ export const DeviceGeometry = ({
   renderType,
   size = [0.1, 0.1, 0.1],
   subsystem,
+  path,
+  centroidWorld,
+  emissionDirection,
   visualState,
 }: DeviceGeometryProps) => {
   const [width, height, depth] = size
-  const color = useMemo(() => getSubsystemColor(subsystem), [subsystem])
+  const subsystemColor = useMemo(() => getSubsystemColor(subsystem), [subsystem])
+
+  // 灯光设备：颜色优先用 visualState.colorTemp 走 Tanner Helland 黑体曲线
+  // （这样开关色温变化时灯具/灯带颜色立即响应），其它子系统沿用 subsystem 默认色。
+  const color = useMemo(() => {
+    if (subsystem === 'lighting' && typeof visualState?.colorTemp === 'number') {
+      return `#${colorTempToColor(visualState.colorTemp).getHexString()}`
+    }
+    return subsystemColor
+  }, [subsystem, subsystemColor, visualState?.colorTemp])
+
+  // 灯带（params.path 存在）走专用几何 —— 沿折线拉细圆柱，按 emissionDirection 调整光源
+  if (path && path.length >= 2 && centroidWorld) {
+    return (
+      <LightStripGeometry
+        path={path}
+        centroidWorld={centroidWorld}
+        color={color}
+        on={visualState?.on ?? true}
+        brightness={visualState?.brightness ?? 100}
+        emissionDirection={emissionDirection ?? 'omni'}
+      />
+    )
+  }
 
   // Get geometry based on render type and mount type
   const geometry = useMemo(() => {
@@ -891,5 +925,250 @@ const FloorCabinetGeometry = ({ size: [w, h, d] }: { size: [number, number, numb
         </mesh>
       ))}
     </group>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  灯带 / 线性灯具 —— 沿 path 拉细圆柱（TubeGeometry）
+//
+//  path：plan 坐标列表（[x, z]），但 DeviceGeometry 已经被 <group position=node.position>
+//        包住，所以这里要把 path 转成"相对于 centroidWorld 的局部坐标"。
+//  emissionDirection：决定灯带的朝向 / 光锥
+//        - 'down'   朝下打（吊顶藏灯、橱柜底）
+//        - 'up'     朝上打（回形灯槽 → 顶面反射）
+//        - 'wall'   朝侧打（洗墙 → 取 path 的法向方向）
+//        - 'omni'   全向（普通 LED 灯带 = 自发光）
+//
+//  视觉策略：
+//  - 圆柱本体颜色 = 子系统色（淡米黄）
+//  - on 时 emissive 用色温映射（默认暖白），强度 = brightness/100 * baseStrength
+//  - 沿 path 在每段中点放小 PointLight（可选）—— 简版先不放，避免大场景灯带太多 light 卡顿
+//
+//  几何性能：用 BufferGeometry 自己拼三角，避免 TubeGeometry 在 path > 5 段时的过度细分。
+// ═══════════════════════════════════════════════════════════════════════════
+const LightStripGeometry = ({
+  path,
+  centroidWorld,
+  color,
+  on,
+  brightness,
+  emissionDirection,
+}: {
+  path: Array<[number, number]>
+  centroidWorld: [number, number]
+  color: string
+  on: boolean
+  brightness: number
+  emissionDirection: 'down' | 'up' | 'wall' | 'omni'
+}) => {
+  // 局部 path（相对中心点），plan 坐标 [x, z] 直接对应 three 世界 [x, *, z]
+  const localPath = useMemo(
+    () =>
+      path.map(([x, z]) => [x - centroidWorld[0], z - centroidWorld[1]] as [number, number]),
+    [path, centroidWorld],
+  )
+
+  // 沿 path 构造 CatmullRom 曲线 → TubeGeometry。
+  // 灯带很细（半径 1.5 cm），分段不需要太多。
+  const radius = 0.015
+  const tubularSegments = Math.max(8, localPath.length * 4)
+  const radialSegments = 6
+  const curve = useMemo(() => {
+    const pts = localPath.map(([x, z]) => new THREE.Vector3(x, 0, z))
+    return new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.0)
+  }, [localPath])
+
+  // 灯带本体 emissive：AgX tonemap 下从 0.22 回到 0.55，灯带视觉感回归。
+  // AgX knee ~6.0，0.55 远在线性区，配合 SelectiveBloom（下一步）时也不会喂全屏 bloom。
+  const emissiveIntensity = on ? (brightness / 100) * 0.55 : 0
+
+  return (
+    <group>
+      <mesh>
+        <tubeGeometry args={[curve, tubularSegments, radius, radialSegments, false]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={emissiveIntensity}
+          metalness={0.3}
+          roughness={0.6}
+        />
+      </mesh>
+      {/* 灯带光源：on 时按 emissionDirection 投光。
+          - omni（默认）→ 沿 path 等距 PointLight 阵列
+          - down/up/wall → SpotLight 朝指定方向，target 指定 direction
+          采样密度 ~ 每 0.6m 一盏，相邻灯的有效范围（distance）略大于间距，
+          保证长灯带没有"亮斑+暗带"的断层。 */}
+      {on && (
+        <StripLightArray
+          localPath={localPath}
+          color={color}
+          brightness={brightness}
+          emissionDirection={emissionDirection}
+        />
+      )}
+    </group>
+  )
+}
+
+// 灯带每米采样密度 —— 每 1.6m 一盏；相邻两盏间隔 + distance 重叠保证连续性
+//
+// 【性能权衡】Three.js 每个材质 shader 的 light uniform 数组随 SpotLight/PointLight
+// 总数线性膨胀；超过 ~8 盏后 fragment shader 重编译开销显著。
+// 一条 5m 灯带原来 0.6m 间距 → 8 盏，4 条灯带 → 32 盏，整个场景帧率被拖。
+// 1.6m 间距：5m 灯带 3 盏，4 条 → 12 盏，可控。
+const STRIP_LIGHT_SPACING_M = 1.6
+// 距离从 2.5 → 1.2：灯带常贴顶（mount 2.55-2.6m，顶面 2.7m，间距仅 10cm），
+// distance=2.5 让 PointLight/SpotLight 在 1/d² 衰减下贴顶位置（d=0.1）爆出
+// ~100× 标称强度，整个顶面被打爆 + bloom 放大 → 看上去像"过曝"。
+// 限到 1.2m 直接砍掉远场无效散射，配合上偏移让灯不再紧贴顶。
+const STRIP_LIGHT_DISTANCE_M = 1.2
+// SpotLight 半角（度）—— up（灯槽）必须放宽角度，让光散在大片顶面而不是窄圆。
+// 45° 在距离 0.1m 时仅照亮 ~8cm² 的圆斑，单位面积亮度直接爆。
+const STRIP_SPOT_ANGLE_DEG_DOWN = 45
+const STRIP_SPOT_ANGLE_DEG_UP_WALL = 75
+// 灯带光源相对几何中心向"反发光面"偏移，给光留扩散空间：
+// - 'up'（灯槽）：灯带在 2.55m，光源下移 0.25m 到 2.30m，target 仍在头顶 → 长光程让光柔和扩散
+// - 'omni'：下移 0.25m，避免 PointLight 紧贴顶发出爆炸光斑
+const STRIP_LIGHT_Y_OFFSET_UP = -0.25
+const STRIP_LIGHT_Y_OFFSET_OMNI = -0.25
+
+interface StripLightSample {
+  pos: [number, number, number]
+  /** SpotLight 指向的目标位置（omni 模式时未使用） */
+  tgt: [number, number, number]
+}
+
+const StripLightArray = ({
+  localPath,
+  color,
+  brightness,
+  emissionDirection,
+}: {
+  localPath: Array<[number, number]>
+  color: string
+  brightness: number
+  emissionDirection: 'down' | 'up' | 'wall' | 'omni'
+}) => {
+  const samples = useMemo<StripLightSample[]>(() => {
+    const out: StripLightSample[] = []
+    // 光源在灯带本体的 y 偏移：'up' / 'omni' 下移避开"贴顶"几何爆炸；
+    // 'down' / 'wall' 不偏移（这两个方向本来就是离顶散开的）。
+    const yOffset =
+      emissionDirection === 'up'
+        ? STRIP_LIGHT_Y_OFFSET_UP
+        : emissionDirection === 'omni'
+          ? STRIP_LIGHT_Y_OFFSET_OMNI
+          : 0
+    for (let i = 0; i < localPath.length - 1; i++) {
+      const a = localPath[i]!
+      const b = localPath[i + 1]!
+      const segLen = Math.hypot(b[0] - a[0], b[1] - a[1])
+      // 每 STRIP_LIGHT_SPACING_M 一盏，至少 1 盏（短段也要有一盏中点光）
+      const samplesPerSeg = Math.max(1, Math.ceil(segLen / STRIP_LIGHT_SPACING_M))
+      // 段方向单位向量 + 段右手法线（wall 模式用）
+      const dx = b[0] - a[0]
+      const dz = b[1] - a[1]
+      const len = segLen || 1
+      const normX = -dz / len
+      const normZ = dx / len
+      for (let s = 0; s < samplesPerSeg; s++) {
+        const t = (s + 0.5) / samplesPerSeg
+        const px = a[0] + dx * t
+        const pz = a[1] + dz * t
+        let tgt: [number, number, number]
+        // target 是相对光源位置向「发光方向」走 1m，而不是相对灯带几何
+        // 这样 yOffset 改变光源位置时，光线方向保持不变。
+        if (emissionDirection === 'down') tgt = [px, yOffset - 1, pz]
+        else if (emissionDirection === 'up') tgt = [px, yOffset + 1, pz]
+        else if (emissionDirection === 'wall') tgt = [px + normX, yOffset, pz + normZ]
+        else tgt = [px, yOffset - 1, pz] // omni 模式不用 target，占个位
+        out.push({ pos: [px, yOffset, pz], tgt })
+      }
+    }
+    return out
+  }, [localPath, emissionDirection])
+
+  // brightness 0-100 → 强度。
+  // 灯带是「氛围光」不是「主光」—— 真实场景几瓦/米，照度远低于天花筒灯。
+  // 这里强度系数全面下调，把灯带还原成"看得见但不主导"的角色。
+  // 'up'（灯槽）即使下移 0.25m，到顶面距离仍只有 ~0.4m，强度需更低；
+  // 'down' 直射地板距离更长，可以稍亮。
+  const baseIntensity = brightness / 100
+  const downAngleRad = (STRIP_SPOT_ANGLE_DEG_DOWN * Math.PI) / 180
+  const upWallAngleRad = (STRIP_SPOT_ANGLE_DEG_UP_WALL * Math.PI) / 180
+
+  if (emissionDirection === 'omni') {
+    // AgX 下灯带强度回升：omni 0.03 → 0.08，给"装饰氛围"足够的可见度
+    return (
+      <>
+        {samples.map((s, i) => (
+          <pointLight
+            key={i}
+            position={s.pos}
+            color={color}
+            intensity={baseIntensity * 0.08}
+            distance={STRIP_LIGHT_DISTANCE_M}
+            decay={2}
+          />
+        ))}
+      </>
+    )
+  }
+
+  // 方向性 SpotLight：AgX 下回升，up/wall 0.10、down 0.15
+  const isUpOrWall = emissionDirection === 'up' || emissionDirection === 'wall'
+  const angleRad = isUpOrWall ? upWallAngleRad : downAngleRad
+  const intensityFactor =
+    emissionDirection === 'up' ? 0.10 : emissionDirection === 'wall' ? 0.12 : 0.15
+  return (
+    <>
+      {samples.map((s, i) => (
+        <DirectionalSpotSample
+          key={i}
+          pos={s.pos}
+          tgt={s.tgt}
+          color={color}
+          intensity={baseIntensity * intensityFactor}
+          distance={STRIP_LIGHT_DISTANCE_M}
+          angle={angleRad}
+        />
+      ))}
+    </>
+  )
+}
+
+/** SpotLight + 单独 target Object3D —— Three.js 要求 spotLight.target 是 scene graph 里的对象 */
+const DirectionalSpotSample = ({
+  pos, tgt, color, intensity, distance, angle,
+}: {
+  pos: [number, number, number]
+  tgt: [number, number, number]
+  color: string
+  intensity: number
+  distance: number
+  angle: number
+}) => {
+  const targetRef = useRef<Object3D>(null!)
+  const lightRef = useRef<SpotLight>(null!)
+  useEffect(() => {
+    if (lightRef.current && targetRef.current) {
+      lightRef.current.target = targetRef.current
+    }
+  }, [])
+  return (
+    <>
+      <spotLight
+        ref={lightRef}
+        position={pos}
+        color={color}
+        intensity={intensity}
+        distance={distance}
+        decay={2}
+        angle={angle}
+        penumbra={0.6}
+      />
+      <object3D ref={targetRef} position={tgt} />
+    </>
   )
 }

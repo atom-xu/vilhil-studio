@@ -41,6 +41,21 @@ export const WindowNode = BaseNode.extend({
   sill: z.boolean().default(true),
   sillDepth: z.number().default(0.08),
   sillThickness: z.number().default(0.03),
+
+  /**
+   * 窗户类型预设 id —— 'standard' / 'wide' / 'floor_ceiling' / 'high' 等。
+   *
+   * 现状：用户画窗时选预设决定 width / height / sillHeight，画完之后 preset 信息
+   * 丢失——只剩具体尺寸。结果：
+   *   1) 想换"窗户类型"必须删掉重画
+   *   2) 手调高度容易调出墙体范围、穿模
+   *
+   * 把 presetId 持久化到节点上，右侧面板就可以"切窗户类型"，切到目标预设时
+   * 自动套上对应 width / height / sillHeight，不再让用户手调到穿模。
+   *
+   * optional + 老数据无值时 UI 用 'standard' 兜底。
+   */
+  presetId: z.string().optional(),
 }).describe(dedent`Window node - a parametric window placed on a wall
   - position: center of the window in wall-local coordinate system
   - width/height: overall outer dimensions

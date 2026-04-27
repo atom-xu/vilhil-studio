@@ -45,14 +45,24 @@ export type MountType = z.infer<typeof MountTypeEnum>
 // ═══════════════════════════════════════════════════════════════
 
 // 面板按键动作类型
+//
+// 【回路优先模式】toggle / set 分支支持两种目标：
+//   - circuitId（推荐）：指向一条回路，运行时查 `params.circuitId === X` 的全部灯。
+//                      好处：回路里增减灯不用改面板配置。
+//   - deviceIds（向后兼容）：老数据或手动自选的灯 id 列表。
+//
+// 优先级：`circuitId` 非空 → 用回路；否则 fall back 到 `deviceIds`。
+// 两者可以共存但 **运行时只认 circuitId**（同时填 deviceIds 被忽略）。
 const PanelActionSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('toggle'),
-    deviceIds: z.array(z.string()),
+    circuitId: z.string().optional(),
+    deviceIds: z.array(z.string()).default([]),
   }),
   z.object({
     type: z.literal('set'),
-    deviceIds: z.array(z.string()),
+    circuitId: z.string().optional(),
+    deviceIds: z.array(z.string()).default([]),
     state: z.record(z.string(), z.unknown()),
   }),
   z.object({
@@ -86,6 +96,39 @@ export const DeviceParamsSchema = z.object({
   layers: z.array(CurtainLayerSchema).optional(),
   /** 面板按键数量（面板子系统专用） */
   buttonCount: z.number().int().min(1).max(8).optional(),
+  /**
+   * 回路 id —— 同一 circuitId 的灯共享一条回路。
+   * 自动归组规则：连续放置同一种灯 → 同一回路；
+   *             切换设备种类 / 退出放置模式 → 新回路；
+   *             右侧"连接/独立"按钮可以手动合并或拆开。
+   *
+   * 面板按键后续可以直接绑定回路 id（而不是设备 id 列表），
+   * 数据上更稳健（回路里增减灯不影响按键配置）。
+   */
+  circuitId: z.string().optional(),
+  /**
+   * 灯带 / 线性发光设备的折线路径（plan 坐标，[x, z] 列表）。
+   *
+   * 出现条件：catalog 里 type === 'light-strip' 的灯带类设备
+   *   - 用户用画线工具一段段画出来
+   *   - 至少 2 个点；可以是任意 N 段折线
+   *   - 渲染时 2D 画 SVG polyline、3D 沿路径拉细圆柱
+   *
+   * device.position 仍然存在（取 path 中点），用于：
+   *   - 选中后右侧面板的"位置"显示
+   *   - 回路虚线连接时取这个点做贪心串联
+   *   - 3D 视口聚焦相机时的 lookAt 目标
+   */
+  path: z.array(z.tuple([z.number(), z.number()])).optional(),
+  /**
+   * 灯带的发光朝向 —— 决定 3D 光源往哪打、洗墙 vs 洗顶 vs 普通隐藏。
+   *
+   *   - 'down'  普通灯带（朝下，吊顶藏灯/橱柜底）
+   *   - 'up'    回形灯槽（朝顶，反射柔和氛围光）
+   *   - 'wall'  洗墙灯（朝单侧墙面）
+   *   - 'omni'  全向（默认 LED 灯带）
+   */
+  emissionDirection: z.enum(['down', 'up', 'wall', 'omni']).optional(),
   wallId: z.string().optional(),
   wallT: z.number().min(0).max(1).optional(),
   /**
@@ -197,8 +240,20 @@ export type DeviceNode = z.infer<typeof DeviceNode>
 // 场景 Schema
 // ═══════════════════════════════════════════════════════════════
 
+/**
+ * 场景效果（SceneEffect）的目标二选一：
+ *   - `deviceId`：单个具体设备
+ *   - `circuitId`：整条回路（运行时展开为该回路所有灯，对每盏灯都应用 state）
+ *
+ * 优先级：`circuitId` 非空 → 走回路；否则用 `deviceId`。
+ * 这样回路里增减灯，场景效果不用改。
+ *
+ * 加载阶段两个字段都是 optional —— 历史数据只有 deviceId，新数据可能只有 circuitId。
+ * 写入侧（`addSceneEffect` / `addSceneCircuitEffect`）保证至少有一个非空。
+ */
 export const SceneEffectSchema = z.object({
-  deviceId: z.string(),
+  deviceId: z.string().optional(),
+  circuitId: z.string().optional(),
   delay: z.number().default(0),
   duration: z.number().default(0),
   state: z.any(),

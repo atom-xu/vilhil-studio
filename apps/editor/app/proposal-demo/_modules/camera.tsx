@@ -2,12 +2,13 @@
 
 import { useEffect, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
+import * as THREE from 'three'
 
 // ─── 视角系统（Overview / Detail 两层 + Module 过滤）───────────────────────────
 
 export type ModuleKey = 'lighting' | 'curtain' | 'sensor' | 'panel' | 'hvac' | 'av' | 'security' | 'network'
 
-export type ViewLevel = 'overview' | 'detail'
+export type ViewLevel = 'global' | 'overview' | 'detail'
 
 export interface ViewState {
   level: ViewLevel
@@ -70,15 +71,44 @@ export function sampleShot(shot: CameraShot, tRaw: number): { pos: Vec3Tuple; tg
   return { pos, tgt }
 }
 
-// 弧线中转点：65% 偏终点、仅高出 0.3m → 推进为主，"上升"只是微弯不显著
+// 弧线中转点（贝塞尔控制点）：
+//   下降（to.y 明显低于 from.y）：控制点高于起点，形成"先升后俯冲"的电影感弧线
+//   上升或水平：控制点位于两端中值上方，形成平滑抛物弧
 export function computeArcMidpoint(from: Vec3Tuple, to: Vec3Tuple): Vec3Tuple {
-  const bias = 0.65
-  const baseY = (from[1] + to[1]) * 0.5
-  return [
-    from[0] + (to[0] - from[0]) * bias,
-    baseY + 0.3,
-    from[2] + (to[2] - from[2]) * bias,
-  ]
+  const dx = to[0] - from[0]
+  const dz = to[2] - from[2]
+  const horiz = Math.hypot(dx, dz)
+  const mx      = (from[0] + to[0]) * 0.5
+  const mz      = (from[2] + to[2]) * 0.5
+  const absDY   = Math.abs(to[1] - from[1])
+  // 旧逻辑最小抬升固定 3m，短距离切换会出现明显“先起飞再落下”的突兀感。
+  // 新逻辑按水平距离 + 高差自适应，限制到合理区间，保证近距稳、远距有电影感。
+  const liftH   = THREE.MathUtils.clamp(horiz * 0.2 + absDY * 0.25, 1.2, 5.5)
+  const midY    = to[1] < from[1] - 1
+    ? from[1] + liftH                         // 下降：控制点高于起点 → 俯冲弧
+    : (from[1] + to[1]) * 0.5 + liftH         // 上升/水平：标准抛物弧
+  return [mx, midY, mz]
+}
+
+export function estimateShotDuration(
+  fromPos: Vec3Tuple,
+  toPos: Vec3Tuple,
+  fromTgt: Vec3Tuple,
+  toTgt: Vec3Tuple,
+): number {
+  const moveDist = Math.hypot(
+    toPos[0] - fromPos[0],
+    toPos[1] - fromPos[1],
+    toPos[2] - fromPos[2],
+  )
+  const tgtDist = Math.hypot(
+    toTgt[0] - fromTgt[0],
+    toTgt[1] - fromTgt[1],
+    toTgt[2] - fromTgt[2],
+  )
+  // 基准 0.58s，按相机位移 + 目标位移加时，统一约束区间避免过慢/过快。
+  const dur = 0.58 + moveDist * 0.04 + tgtDist * 0.03
+  return THREE.MathUtils.clamp(dur, 0.55, 1.35)
 }
 
 // ─── Pose Resolvers（每种视角的相机预设位姿）─────────────────────────────────
@@ -91,15 +121,49 @@ export interface PoseInput {
   devices: Array<{ id: string; position: Vec3Tuple }>
 }
 
+function resolveBearingXZ(
+  target: Vec3Tuple,
+  fromPos?: Vec3Tuple,
+  fallback: [number, number] = [0.5, -0.866],
+): [number, number] {
+  if (!fromPos) return fallback
+  const dx = fromPos[0] - target[0]
+  const dz = fromPos[2] - target[2]
+  const len = Math.hypot(dx, dz)
+  if (len < 0.001) return fallback
+  return [dx / len, dz / len]
+}
+
 // Canvas 相机 FOV（垂直），写死 50°（和 Canvas 设置一致）
 const CAMERA_FOV_DEG = 50
+const ROOM_DETAIL_TARGET_Y = 1.2
 
-// Overview：建筑外 30° 斜俯视
-export function resolveOverviewPose(input: PoseInput): { pos: Vec3Tuple; tgt: Vec3Tuple } {
-  const dist = input.bboxSpan * 2.2
-  const tgt: Vec3Tuple = [input.bboxCx, 0.6, input.bboxCz]
-  const pos: Vec3Tuple = [tgt[0] + dist * 0.612, tgt[1] + dist * 0.5, tgt[2] + dist * 0.612]
+// 坐标系：+X=东, -X=西, +Z=北, -Z=南
+// 坐标系：+X=东，-Z=北，+Z=南（2D图纸Y↓映射到3D+Z）
+// 相机在东北（+X, -Z），朝西南看建筑正面
+// 方位角约30°偏东（sin30°/cos30°=0.5/0.866，由用户实测位置推导）
+// scale 下限15m，防止小建筑视距/高度太低
+
+// Global Overview：与 page.tsx 初始相机位置保持完全一致，避免 backToGlobal 飞到错误位置
+export function resolveGlobalOverviewPose(input: PoseInput, fromPos?: Vec3Tuple): { pos: Vec3Tuple; tgt: Vec3Tuple } {
+  const scale = Math.max(input.bboxSpan, 10)
+  // 全局总览：低机位斜看（再平一点），优先稳定体块比例，减弱“上大下小”
+  const horizDist = scale * 1.85
+  const tgt: Vec3Tuple = [input.bboxCx, 0, input.bboxCz]
+  const [dirX, dirZ] = resolveBearingXZ(tgt, fromPos)
+  const pos: Vec3Tuple = [
+    tgt[0] + horizDist * dirX,
+    scale * 0.78,
+    tgt[2] + horizDist * dirZ,
+  ]
   return { pos, tgt }
+}
+
+// Module Overview：与 Global 使用完全一致的位姿
+// 切换子系统模块时相机不移动，只改变 UI 状态；仅 Detail zoom 才真正推进
+// 旧值 horizDist=1.2x / height=2.8x 与 global 差距太大，导致点模块按钮时相机向后飞远
+export function resolveOverviewPose(input: PoseInput, fromPos?: Vec3Tuple): { pos: Vec3Tuple; tgt: Vec3Tuple } {
+  return resolveGlobalOverviewPose(input, fromPos)
 }
 
 // Lighting Detail：房间近俯视（保留 8° 斜视避免 lookAt 奇异），
@@ -133,7 +197,9 @@ export function resolveLightingDetailPose(
     if (len > 1.0) { ox = dx / len; oz = dz / len }
   }
 
-  const tgt: Vec3Tuple = [room.cx, 0.1, room.cz]
+  // 与 RoomBaseLight 的 Html 锚点保持同一空间点（y=1.2）：
+  // “房间按钮位置”就是 detail 旋转轴心，避免视觉上的偏轴感。
+  const tgt: Vec3Tuple = [room.cx, ROOM_DETAIL_TARGET_Y, room.cz]
   const pos: Vec3Tuple = [
     room.cx + ox * xzOffset,
     tgt[1] + camH,
@@ -143,20 +209,30 @@ export function resolveLightingDetailPose(
 }
 
 // Device Detail：设备前方 1.5m，仰角 15°
-export function resolveDeviceDetailPose(input: PoseInput, deviceId: string): { pos: Vec3Tuple; tgt: Vec3Tuple } | null {
+export function resolveDeviceDetailPose(
+  input: PoseInput,
+  deviceId: string,
+  fromPos?: Vec3Tuple,
+): { pos: Vec3Tuple; tgt: Vec3Tuple } | null {
   const device = input.devices.find((d) => d.id === deviceId)
   if (!device) return null
   const [dx, dy, dz] = device.position
-  // 朝向房间中心的反方向（让设备"面对"相机）
-  const dirToCenter = { x: input.bboxCx - dx, z: input.bboxCz - dz }
-  const len = Math.hypot(dirToCenter.x, dirToCenter.z) || 1
-  const nx = -dirToCenter.x / len  // 背对房间中心 = 朝外
-  const nz = -dirToCenter.z / len
-  const dist = 1.5
-  const tgt: Vec3Tuple = [dx, dy, dz]
+  // 设备特写：优先继承当前相机方位，避免切换时"先转向再推进"。
+  // 若当前方位不可用，再回退到建筑中心外侧方向。
+  const fallbackBearing: [number, number] = (() => {
+    const vx = dx - input.bboxCx
+    const vz = dz - input.bboxCz
+    const len = Math.hypot(vx, vz)
+    if (len < 0.001) return [0.5, -0.866]
+    return [vx / len, vz / len]
+  })()
+
+  const tgt: Vec3Tuple = [dx, dy + 0.12, dz]
+  const [nx, nz] = resolveBearingXZ(tgt, fromPos, fallbackBearing)
+  const dist = THREE.MathUtils.clamp(input.bboxSpan * 0.2, 1.7, 3.0)
   const pos: Vec3Tuple = [
     dx + nx * dist,
-    dy + dist * 0.28,     // 仰角 ~15°
+    dy + THREE.MathUtils.clamp(dist * 0.58, 1.05, 1.95),
     dz + nz * dist,
   ]
   return { pos, tgt }
@@ -165,12 +241,13 @@ export function resolveDeviceDetailPose(input: PoseInput, deviceId: string): { p
 export function resolvePoseForView(
   view: ViewState,
   input: PoseInput,
-  fromPos?: Vec3Tuple,   // 当前相机位置，用于继承方位（避免落位时"转正"）
+  fromPos?: Vec3Tuple,
 ): { pos: Vec3Tuple; tgt: Vec3Tuple } | null {
-  if (view.level === 'overview') return resolveOverviewPose(input)
-  if (!view.targetId) return resolveOverviewPose(input)
+  if (view.level === 'global') return resolveGlobalOverviewPose(input, fromPos)
+  if (view.level === 'overview') return resolveOverviewPose(input, fromPos)
+  if (!view.targetId) return resolveOverviewPose(input, fromPos)
   if (view.module === 'lighting') return resolveLightingDetailPose(input, view.targetId, fromPos)
-  return resolveDeviceDetailPose(input, view.targetId)
+  return resolveDeviceDetailPose(input, view.targetId, fromPos)
 }
 
 // ─── CameraRig：挂 Canvas 内，useFrame 每帧推进动画 ───────────────────────────
@@ -188,22 +265,21 @@ export function CameraRig({
   useEffect(() => {
     apiRef.current = {
       play: (incoming) => {
-        // 打断规则：动画中再触发，从当前插值位姿接力
+        // 打断规则：动画中再触发，从当前插值位姿接力；被中断的 onDone 直接丢弃（无法安全执行）
         if (shotRef.current) {
           const snap = sampleShot(shotRef.current, shotRef.current.t)
           shotRef.current = { ...incoming, fromPos: snap.pos, fromTgt: snap.tgt, t: 0 }
         } else {
           shotRef.current = { ...incoming, t: 0 }
         }
-        // 清零 OrbitControls 的 damping 残留（sphericalDelta / panOffset）
-        // 不清的话，动画结束 enable 时残留量会一次性释放造成"跳一下"
+        // 清零 OrbitControls 的 damping 残留，并保持 disabled 状态直到动画结束
         const ctl = controlsRef.current
         if (ctl) {
+          ctl.enabled = false
           const wasDamping = ctl.enableDamping
           ctl.enableDamping = false
-          ctl.update()              // enableDamping=false 时 update 会把 delta 清为 0
+          ctl.update()
           ctl.enableDamping = wasDamping
-          ctl.enabled = false
         }
       },
       isAnimating: () => shotRef.current !== null,
@@ -228,22 +304,32 @@ export function CameraRig({
     shot.t += dt / shot.duration
 
     if (shot.t >= 1) {
-      // 落位：相机落到终点位置 + 朝向最终 target
+      // 落位：相机精确落到终点
       camera.position.set(shot.toPos[0], shot.toPos[1], shot.toPos[2])
       camera.lookAt(shot.toTgt[0], shot.toTgt[1], shot.toTgt[2])
+
       const ctl = controlsRef.current
       if (ctl) {
         ctl.target.set(shot.toTgt[0], shot.toTgt[1], shot.toTgt[2])
-        // 清 damping delta 后再 enable，避免残留量释放造成"跳一下"
+        // r183 OrbitControls 在每次 update() 开头就从 camera.position 重算 _spherical，
+        // 不存在坐标 desync。只需清 delta（damping 残留）再交还控制权。
         const wasDamping = ctl.enableDamping
         ctl.enableDamping = false
-        ctl.update()
+        ctl.update()   // 清空 _sphericalDelta / _panOffset，无副作用
         ctl.enableDamping = wasDamping
-        ctl.enabled = true
+
+        // onDone 先于 ctl.enabled = true 执行：
+        // 若 onDone 立即链式触发下一段动画（play() → ctl.enabled=false），
+        // 则控件在两段动画之间始终保持 disabled，消除"瞬间激活→snap"的硬切。
+        const cb = shot.onDone
+        shotRef.current = null
+        cb?.()
+        if (!shotRef.current) ctl.enabled = true
+      } else {
+        const cb = shot.onDone
+        shotRef.current = null
+        cb?.()
       }
-      const cb = shot.onDone
-      shotRef.current = null
-      cb?.()
       return
     }
 
@@ -254,6 +340,52 @@ export function CameraRig({
     camera.position.set(pos[0], pos[1], pos[2])
     if (controlsRef.current) controlsRef.current.target.set(tgt[0], tgt[1], tgt[2])
     camera.lookAt(tgt[0], tgt[1], tgt[2])
+  })
+
+  return null
+}
+
+// ─── 南北仪表盘驱动器（Canvas 内，每帧把北向投影写入 DOM ref）────────────────
+//
+// 把世界坐标系里的"北"方向（按 northAngle 旋转）投影到相机空间，
+// 取 (x, y) 分量得到屏幕上北的方位角，写入 compassNeedleRef 的 CSS transform。
+// 这样 DOM 指针随 OrbitControls 实时旋转，无需任何 React re-render。
+
+export function CompassUpdater({
+  northAngle,
+  needleRef,
+}: {
+  northAngle: number
+  needleRef: React.MutableRefObject<HTMLDivElement | null>
+}) {
+  const { camera } = useThree()
+
+  useFrame(() => {
+    if (!needleRef.current) return
+
+    // OrbitControls 在 useFrame 里更新 camera.position，但 matrixWorld
+    // 要等 renderer.render() 才会刷新 —— 必须手动强制更新，否则永远落后一帧
+    camera.updateMatrixWorld()
+
+    // 纯方位角罗盘：只用相机水平朝向（忽略俯仰），相机向上/向下看时指针不跳动
+    // matrixWorld 列 2（elements[8..10]）= 相机 back 向量（world 空间）
+    // 相机 forward（world）= -back
+    const mx = camera.matrixWorld.elements
+    const fwdX = -mx[8]
+    const fwdZ = -mx[10]
+    const fwdLen = Math.hypot(fwdX, fwdZ)
+    if (fwdLen < 0.001) return  // 相机垂直向上/向下，跳过
+
+    const rad = (northAngle * Math.PI) / 180
+    const northX = Math.sin(rad)
+    const northZ = Math.cos(rad)
+
+    // 从相机水平 forward 到北方向的有符号角（XZ 平面，右手系 CCW 正）
+    // CSS rotate 顺时针为正，取反
+    const cross2D = fwdX * northZ - fwdZ * northX
+    const dot2D   = fwdX * northX + fwdZ * northZ
+    const angle   = Math.atan2(-cross2D / fwdLen, dot2D / fwdLen)
+    needleRef.current.style.transform = `rotate(${angle}rad)`
   })
 
   return null

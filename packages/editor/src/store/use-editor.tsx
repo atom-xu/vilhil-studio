@@ -88,6 +88,39 @@ type EditorState = {
   setSelectedItem: (item: AssetInput) => void
   selectedDevice: DeviceDefinition | null
   setSelectedDevice: (device: DeviceDefinition | null) => void
+  /**
+   * 当前放置会话的回路 id —— 连续放置同一种灯时共享这个 id。
+   *
+   * 规则：
+   *   - `setSelectedDevice(newDevice)` 时，如果换了设备种类 → 清空，下次 placeDevice 时新生成
+   *   - `setSelectedDevice(null)` 时清空
+   *   - placeDevice 里从这里读；若为空就生成新 id 再存回来
+   * 这样"选灯 → 连点 5 下 → Esc"就是 5 盏灯一条回路。
+   */
+  currentCircuitId: string | null
+  setCurrentCircuitId: (id: string | null) => void
+  /**
+   * 回路连接拾取模式 —— 用户在右侧面板点"连接"，存这盏灯的 id；
+   * 之后下一次点击另一盏灯就把两盏（连同它们各自所在回路的所有灯）合并到同一回路。
+   * 拾取过程中 2D 上灯亮高亮提示。
+   */
+  circuitLinkSourceId: string | null
+  setCircuitLinkSourceId: (id: string | null) => void
+  /**
+   * 灯带画线草稿 —— 选中"灯带"类目录项后进入画线模式：
+   *   - 点一次 → push 一个 plan 坐标点
+   *   - 双击 / Enter → 至少 2 点时落地为 DeviceNode（params.path）
+   *   - Esc / 切换设备 / 切 mode → 清掉重来
+   * 鼠标 hover 时 pointermove 实时更新 hoverPoint，让 2D 渲染画"草稿尾段"。
+   */
+  lightStripDraft: {
+    points: Array<[number, number]>
+    hoverPoint: [number, number] | null
+  } | null
+  setLightStripDraft: (draft: {
+    points: Array<[number, number]>
+    hoverPoint: [number, number] | null
+  } | null) => void
   movingNode: ItemNode | WindowNode | DoorNode | RoofNode | RoofSegmentNode | StairNode | StairSegmentNode | null
   setMovingNode: (
     node: ItemNode | WindowNode | DoorNode | RoofNode | RoofSegmentNode | null,
@@ -440,6 +473,12 @@ const useEditor = create<EditorState>()(
         else if (tool) {
           set({ tool: null })
         }
+        // 离开 build 模式（按 Esc / 切回 select）—— 当前回路也作废，
+        // 即使 selectedDevice 仍然指向上次的灯，下次回到 build 再放置时也是新回路。
+        // 防御性：保证"放置过程被打断"= 必然开新回路，不会误粘到老回路里。
+        if (mode !== 'build') {
+          set({ currentCircuitId: null })
+        }
       },
       tool: DEFAULT_PERSISTED_EDITOR_UI_STATE.tool,
       setTool: (tool) => set({ tool }),
@@ -465,7 +504,27 @@ const useEditor = create<EditorState>()(
       selectedItem: null,
       setSelectedItem: (item) => set({ selectedItem: item }),
       selectedDevice: null,
-      setSelectedDevice: (device) => set({ selectedDevice: device }),
+      // 每次"从目录选灯"都开新回路 —— 哪怕选的还是同一种灯。
+      // 直觉：再点一次目录 = 用户主动想"开始新一组"。
+      // 连续放置时不会重新点目录，所以同一组连点都属同一回路。
+      // 同时清掉灯带画线草稿（切换设备 = 取消未完成的灯带）。
+      //
+      // 【关键】选中设备即 = 进入"设备放置工具"（tool: 'item'）。
+      // 否则用户之前在 wall/window 等结构工具里，从目录点灯/灯带时 tool 残留，
+      // click 路径上的 `tool === 'item'` 守卫会把设备放置吞掉。
+      setSelectedDevice: (device) =>
+        set({
+          selectedDevice: device,
+          currentCircuitId: null,
+          lightStripDraft: null,
+          ...(device ? { tool: 'item' as const, mode: 'build' as const } : {}),
+        }),
+      currentCircuitId: null,
+      setCurrentCircuitId: (id) => set({ currentCircuitId: id }),
+      circuitLinkSourceId: null,
+      setCircuitLinkSourceId: (id) => set({ circuitLinkSourceId: id }),
+      lightStripDraft: null,
+      setLightStripDraft: (draft) => set({ lightStripDraft: draft }),
       movingNode: null as ItemNode | WindowNode | DoorNode | RoofNode | RoofSegmentNode | null,
       setMovingNode: (node) => set({ movingNode: node }),
       selectedReferenceId: null,

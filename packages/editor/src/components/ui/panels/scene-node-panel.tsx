@@ -12,6 +12,8 @@ import {
   addSceneEffect,
   applyScene,
   deleteScene,
+  getLightCircuits,
+  removeSceneCircuitEffect,
   removeSceneEffect,
   updateScene,
 } from '@vilhil/smarthome'
@@ -43,9 +45,10 @@ export function SceneNodePanel({ sceneId }: SceneNodePanelProps) {
   )
 
   const effectMap = useMemo(() => {
+    // 仅索引"单灯类" effect（有 deviceId、无 circuitId）；回路类 effect 不进这张表
     const m = new Map<string, { state: Record<string, unknown> }>()
     for (const e of sceneNode?.effects ?? []) {
-      m.set(e.deviceId, { state: e.state })
+      if (e.deviceId && !e.circuitId) m.set(e.deviceId, { state: e.state })
     }
     return m
   }, [sceneNode?.effects])
@@ -118,27 +121,75 @@ export function SceneNodePanel({ sceneId }: SceneNodePanelProps) {
       {sceneNode.effects.length > 0 && (
         <PanelSection title="设备效果">
           <div className="space-y-1 px-1">
-            {sceneNode.effects.map((effect) => {
-              const device = nodes[effect.deviceId as AnyNode['id']] as DeviceNode | undefined
+            {sceneNode.effects.map((effect, idx) => {
+              // 状态摘要（开/关/亮度）
+              const stateText =
+                effect.state?.on === false
+                  ? '关'
+                  : typeof effect.state?.brightness === 'number'
+                    ? `${effect.state.brightness}%`
+                    : '开'
+
+              // 回路类 effect：展开成"回路 #N · K 盏"
+              if (effect.circuitId) {
+                // 回路是 level-scoped；从场景节点的 parentId（楼层）查
+                const lvId = (sceneNode.parentId as string | null) ?? null
+                const circuits = lvId ? getLightCircuits(lvId) : []
+                const c = circuits.find((x) => x.circuitId === effect.circuitId)
+                const label = c
+                  ? `${c.displayName}（${c.members.length} 盏）`
+                  : '回路已失效'
+                return (
+                  <div
+                    className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-2 py-1.5"
+                    key={`circuit-${effect.circuitId}-${idx}`}
+                  >
+                    <span className="shrink-0 rounded bg-primary/15 px-1.5 py-0.5 font-medium text-[10px] text-primary">
+                      回路
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-xs text-foreground">
+                      {label}
+                    </span>
+                    <span className="shrink-0 text-[10px] text-muted-foreground">
+                      {stateText}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-red-400"
+                      onClick={() =>
+                        removeSceneCircuitEffect(sceneId, effect.circuitId as string)
+                      }
+                      title="移除"
+                      type="button"
+                    >
+                      <Trash2 className="h-2.5 w-2.5" />
+                    </Button>
+                  </div>
+                )
+              }
+
+              // 单灯类 effect
+              const device = effect.deviceId
+                ? (nodes[effect.deviceId as AnyNode['id']] as DeviceNode | undefined)
+                : undefined
               if (!device) return null
               return (
                 <div
                   className="flex items-center gap-2 rounded-lg border border-border/30 bg-accent/10 px-2 py-1.5"
-                  key={effect.deviceId}
+                  key={`device-${effect.deviceId}-${idx}`}
                 >
                   <span className="min-w-0 flex-1 truncate text-xs text-foreground">
                     {(device.productName as string | undefined) ?? device.productId}
                   </span>
                   <span className="shrink-0 text-[10px] text-muted-foreground">
-                    {effect.state.on === false
-                      ? '关'
-                      : typeof effect.state.brightness === 'number'
-                        ? `${effect.state.brightness}%`
-                        : '开'}
+                    {stateText}
                   </span>
-                  <Button variant="ghost"
+                  <Button
+                    variant="ghost"
                     className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-red-400"
-                    onClick={() => removeSceneEffect(sceneId, effect.deviceId)}
+                    onClick={() =>
+                      removeSceneEffect(sceneId, effect.deviceId as string)
+                    }
                     title="移除"
                     type="button"
                   >
