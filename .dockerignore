@@ -1,0 +1,11 @@
+**/.next
+**/node_modules
+**/.turbo
+**/dist
+**/.git
+**/.gitignore
+**/.env.local
+**/.env*.local
+**/README.md
+**/Dockerfile
+**/.DS_Store

@@ -1,0 +1,58 @@
+# VilHil Studio — Docker Compose 生产配置
+#
+# 使用方式：
+#   1. 复制 apps/editor/.env.example 为 .env.production，填写所有环境变量
+#   2. docker compose --env-file .env.production up -d
+#
+# 注意：如果使用阿里云 RDS，删除 postgres 服务，并将 POSTGRES_URL 指向 RDS。
+
+services:
+  # ── Next.js 应用 ─────────────────────────────────────────────────
+  app:
+    build:
+      context: ..
+      dockerfile: apps/editor/Dockerfile
+      args:
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://studio.vilhil.cn}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"   # 只监听本地，由 Nginx 代理
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
+      - POSTGRES_URL=${POSTGRES_URL}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - vilhil
+
+  # ── PostgreSQL（如不用阿里云 RDS，使用此服务）────────────────────
+  # 如果用阿里云 RDS，注释掉整个 postgres 服务
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vilhil
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_in_prod}
+      POSTGRES_DB: vilhil_prod
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vilhil -d vilhil_prod"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "127.0.0.1:5432:5432"   # 只本地可访问
+    networks:
+      - vilhil
+
+volumes:
+  postgres_data:
+
+networks:
+  vilhil:
+    driver: bridge
