@@ -98,6 +98,18 @@ function LoginForm() {
           立即注册
         </Link>
       </p>
+
+      {/* 游客模式入口 —— 只有从编辑器跳来（redirect=/）或直接访问登录页时才显示 */}
+      {(redirectTo === '/' || redirectTo.startsWith('/?')) && (
+        <div className="mt-4 border-t border-border/40 pt-4 text-center">
+          <Link
+            className="text-sm text-muted-foreground/70 hover:text-muted-foreground transition-colors"
+            href="/"
+          >
+            先试试看，不登录继续 →
+          </Link>
+        </div>
+      )}
     </div>
   )
 }

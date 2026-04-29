@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { withSentryConfig } from '@sentry/nextjs'
 import type { NextConfig } from 'next'
 
 // Bun 对 monorepo peer 解析会基于"顶层消费者上下文"生成多份副本（apps/editor 和
@@ -80,4 +81,20 @@ const nextConfig: NextConfig = {
   },
 }
 
-export default nextConfig
+// Sentry：只在设置了 DSN 时才真正注入（dev / CI 无 DSN 时 zero-cost）
+const hasSentry = !!(process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN)
+
+export default hasSentry
+  ? withSentryConfig(nextConfig, {
+      // Sentry organization / project（CI 通过环境变量注入）
+      org: process.env.SENTRY_ORG,
+      project: process.env.SENTRY_PROJECT,
+      // 上传 sourcemap 时静默输出，避免 build 日志太杂
+      silent: true,
+      // 不把 sourcemap 打进 client bundle（安全）
+      sourcemaps: { disable: false, deleteSourcemapsAfterUpload: true },
+      // 关闭 tree-shaking 警告
+      disableLogger: true,
+      widenClientFileUpload: true,
+    })
+  : nextConfig

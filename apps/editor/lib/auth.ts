@@ -7,10 +7,14 @@
  * - 会话：Cookie-based
  */
 
+import { eq } from 'drizzle-orm'
+import { nanoid } from 'nanoid'
 import { betterAuth } from 'better-auth'
 import { admin } from 'better-auth/plugins'
 import { Resend } from 'resend'
-import { pool } from './db'
+import { SAMPLE_PROJECT_SLUG } from '../db/sample-scene'
+import { db, pool } from './db'
+import { projects } from './schema'
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
 const FROM = 'VilHil Studio <support@vilhil.cn>'
@@ -53,6 +57,37 @@ export const auth = betterAuth({
     },
   },
   plugins: [admin()],
+
+  /**
+   * 新用户注册后自动 fork 客厅样板间
+   *
+   * 如果 DB 里没有样板间（首次部署未跑 seed），静默跳过，不阻断注册。
+   */
+  databaseHooks: {
+    user: {
+      create: {
+        async after(user: { id: string; email: string; name?: string | null }) {
+          try {
+            const sample = await db.query.projects.findFirst({
+              where: eq(projects.slug, SAMPLE_PROJECT_SLUG),
+            })
+            if (!sample) return // seed 未运行，静默跳过
+
+            const slug = `客厅样板间-${nanoid(6)}`
+            await db.insert(projects).values({
+              ownerId: user.id,
+              name: '客厅样板间',
+              slug,
+              data: sample.data as any,
+            })
+          } catch (err) {
+            // 不阻断注册流程，仅打日志
+            console.error('[auth hook] auto-fork sample failed:', err)
+          }
+        },
+      },
+    },
+  },
 })
 
 export type AuthSession = typeof auth.$Infer.Session
