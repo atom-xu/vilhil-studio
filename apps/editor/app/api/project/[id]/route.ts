@@ -5,6 +5,7 @@
  * 获取或删除指定项目。
  */
 
+import * as Sentry from '@sentry/nextjs'
 import { eq } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
@@ -32,6 +33,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     return NextResponse.json({ project })
   } catch (err) {
+    Sentry.captureException(err)
     console.error('[API /project/[id] GET]', err)
     return NextResponse.json({ error: '获取失败' }, { status: 500 })
   }
@@ -62,6 +64,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
     return NextResponse.json({ success: true })
   } catch (err) {
+    Sentry.captureException(err)
     console.error('[API /project/[id] DELETE]', err)
     return NextResponse.json({ error: '删除失败' }, { status: 500 })
   }

@@ -4,6 +4,7 @@
  * 获取当前用户创建的分享链接列表。
  */
 
+import * as Sentry from '@sentry/nextjs'
 import { desc, eq } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
@@ -43,6 +44,7 @@ export async function GET(request: Request) {
       })),
     })
   } catch (err) {
+    Sentry.captureException(err)
     console.error('[API /share/list]', err)
     return NextResponse.json({ error: '获取分享列表失败' }, { status: 500 })
   }

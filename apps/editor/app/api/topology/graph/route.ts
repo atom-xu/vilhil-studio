@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs'
 import {
   buildTopology,
   type TopologyDeviceInput,
@@ -22,6 +23,7 @@ export async function POST(request: Request) {
       data: topology,
     })
   } catch (error) {
+    Sentry.captureException(error)
     return NextResponse.json(
       {
         ok: false,

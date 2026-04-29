@@ -7,6 +7,7 @@
  * - 返回分享 URL
  */
 
+import * as Sentry from '@sentry/nextjs'
 import { eq } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { NextResponse } from 'next/server'
@@ -162,6 +163,7 @@ export async function POST(request: Request) {
       hasPassword: !!password && !!password.trim(),
     })
   } catch (err) {
+    Sentry.captureException(err)
     console.error('[API /share]', err)
     return NextResponse.json({ error: '创建分享链接失败' }, { status: 500 })
   }

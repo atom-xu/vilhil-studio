@@ -4,6 +4,7 @@
  * 保存项目快照到云端。必须登录后才能保存。
  */
 
+import * as Sentry from '@sentry/nextjs'
 import { eq } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { NextResponse } from 'next/server'
@@ -83,6 +84,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ project })
   } catch (err) {
+    Sentry.captureException(err)
     console.error('[API /project/save]', err)
     return NextResponse.json({ error: '保存失败' }, { status: 500 })
   }

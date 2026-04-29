@@ -5,6 +5,7 @@
  * 仅允许创建者、项目所有者或管理员删除。
  */
 
+import * as Sentry from '@sentry/nextjs'
 import { eq } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
@@ -51,6 +52,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true })
   } catch (err) {
+    Sentry.captureException(err)
     console.error('[API /share/revoke]', err)
     return NextResponse.json({ error: '撤销分享失败' }, { status: 500 })
   }

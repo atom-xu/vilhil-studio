@@ -5,6 +5,7 @@
  * 匿名用户返回空列表（匿名项目通过 share_link token 访问）。
  */
 
+import * as Sentry from '@sentry/nextjs'
 import { desc, eq } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
@@ -37,6 +38,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({ projects: list })
   } catch (err) {
+    Sentry.captureException(err)
     console.error('[API /project/list]', err)
     return NextResponse.json({ error: '获取列表失败' }, { status: 500 })
   }

@@ -7,6 +7,7 @@
  * - 返回项目快照和权限信息
  */
 
+import * as Sentry from '@sentry/nextjs'
 import { eq } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
@@ -77,6 +78,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
       permission: link.permission,
     })
   } catch (err) {
+    Sentry.captureException(err)
     console.error('[API /share/[token]]', err)
     return NextResponse.json({ error: '获取分享内容失败' }, { status: 500 })
   }
