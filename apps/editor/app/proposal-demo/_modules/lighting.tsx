@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { RectAreaLightUniformsLib } from 'three/examples/jsm/lights/RectAreaLightUniformsLib.js'
 import { Html } from '@react-three/drei'
@@ -14,6 +14,7 @@ import type { RenderPreset } from './render-presets'
 import type { DeviceData, RoomCentroid } from './types'
 import { getIESPathForDevice } from './ies-registry'
 import { useIES } from './use-ies'
+import { LIGHTING_CONFIG } from './lighting-config'
 
 // RectAreaLight 需要全局 uniform table 初始化一次，否则材质上不响应它。
 // idempotent —— 多次调用安全。模块加载就跑一次。
@@ -29,7 +30,12 @@ if (typeof window !== 'undefined') ensureRectAreaLightUniforms()
 // 共享实现放在 packages/viewer/src/lib/color-temp.ts —— 灯带 / 点光源同一套 Tanner Helland。
 export { colorTempToColor, colorTempToWarmth }
 
-export interface LightState { on: boolean; brightness: number }
+export interface LightState {
+  on: boolean
+  brightness: number
+  /** 色温（K）—— 可选；缺省时使用 device.colorTemp（seed 加载时的初值） */
+  colorTemp?: number
+}
 
 // ─── 单灯点（RoomBaseLight 的子单元）─────────────────────────────────────────
 // 每个灯位一个实例：SpotLight（主光）+ PointLight（补光），共用 brightness 目标值。
@@ -51,10 +57,8 @@ export interface LightState { on: boolean; brightness: number }
  * 跟"真实场景里光强应该没这么强"对齐，把 budget 砍到 12（之前 22 仍在过曝），
  * 由 sqrt(N) 分摊给多盏灯。
  */
-const ROOM_LIGHT_BUDGET_SPOT = 12
-// PointLight omnidirectional 补光 —— 主要打侧墙/天花，最容易过曝。
-// 砍到 1，房间靠 SpotLight 主光，补光只是"防止角落全黑"的兜底。
-const ROOM_LIGHT_BUDGET_FILL = 1
+const ROOM_LIGHT_BUDGET_SPOT = LIGHTING_CONFIG.light.roomBaseSpotBudget
+const ROOM_LIGHT_BUDGET_FILL = LIGHTING_CONFIG.light.roomBaseFillBudget
 
 export function RoomLightPoint({
   px, pz, brightness, lightY, wallHeight, col, perRadius, lightCount,
@@ -254,24 +258,29 @@ export function RoomBaseLight({
           {onZoomIn && (
             <button
               type="button"
+              // 用 click（pointerdown 跟 OrbitControls 的 pointer capture 冲突会丢事件）
               onClick={(e) => { e.stopPropagation(); onZoomIn() }}
               aria-label="进入房间"
+              title="进入房间"
               style={{
+                position: 'relative',
                 marginLeft: 6,
-                paddingLeft: 6,
+                paddingLeft: 8,
                 borderLeft: '1px solid rgba(255,255,255,0.14)',
-                width: 20, height: 20,
+                // 命中区 28×28（足以可靠点击），视觉 icon 居中
+                width: 28, height: 26, padding: 0,
                 border: 'none', background: 'transparent',
                 color: hovered
                   ? (isOn ? 'rgba(255,240,180,1)' : 'rgba(220,230,250,1)')
-                  : (isOn ? 'rgba(255,230,160,0.8)' : 'rgba(180,195,220,0.7)'),
+                  : (isOn ? 'rgba(255,230,160,0.85)' : 'rgba(180,195,220,0.78)'),
                 cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'color 0.25s, transform 0.25s',
-                transform: hovered ? 'scale(1.15)' : 'scale(1)',
+                transition: 'color 0.25s, transform 0.2s',
+                transform: hovered ? 'scale(1.08)' : 'scale(1)',
+                pointerEvents: 'auto',
               }}
             >
-              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'relative', zIndex: 1 }}>
                 <circle cx="11" cy="11" r="7" />
                 <path d="M21 21l-4.35-4.35" />
                 <path d="M11 8v6M8 11h6" />
@@ -293,6 +302,7 @@ export function DemoLightBulb({
   preset,
   compactMarker = false,
   active = true,
+  onOpenPopup,
 }: {
   device: DeviceData
   state: LightState
@@ -304,16 +314,10 @@ export function DemoLightBulb({
    * "这盏灯位置在这里"的端点标记。回路视图下用，因为开关已经收敛到回路 pill。
    */
   compactMarker?: boolean
-  /**
-   * 是否激活（属于当前 detail 房间）。
-   * - true：state.on 时点亮；state.off 时熄灭（intensity → 0）
-   * - false：强制 intensity = 0，但 light.visible 仍保持 true
-   *
-   * 关键设计：visible 不切换，避免切房间时 Three.js 因 visible 灯数变化重编 shader。
-   * 30 盏灯里 5 盏 intensity>0 vs 全部 visible 但 25 盏 intensity=0 是同一个 shader 程序，
-   * 切房间只走 GPU uniform update，不触发 CPU 端的 shader compile（200-500ms 卡顿）。
-   */
   active?: boolean
+  /** compactMarker 模式下，点端点 dot 触发：打开属性 popup。
+      传了就启用 click，不传就保持原来的不可交互（向后兼容）。*/
+  onOpenPopup?: () => void
 }) {
   const lightRef  = useRef<THREE.SpotLight>(null!)
   const fillRef   = useRef<THREE.PointLight>(null!)
@@ -322,7 +326,9 @@ export function DemoLightBulb({
   const cur       = useRef(state.on ? state.brightness / 100 : 0)
   const [labelHovered, setLabelHovered] = useState(false)
 
-  const col = colorTempToColor(device.colorTemp)
+  // 色温优先从 lightStates（运行时）读，缺省回退 device.colorTemp（seed 初值）
+  const effectiveColorTemp = state.colorTemp ?? device.colorTemp
+  const col = useMemo(() => colorTempToColor(effectiveColorTemp), [effectiveColorTemp])
   const [px, py, pz] = device.position
   // 标记位置 = 灯具实体安装位置（吊顶下沿），不是房间中段。
   // 之前固定 1.15m 导致筒灯小圆点显示在墙腰，看上去"灯长在半空"，
@@ -383,26 +389,20 @@ export function DemoLightBulb({
     cur.current  += (target - cur.current) * Math.min(1, dt * 10)
     const i = cur.current
 
-    // Panel：RectAreaLight 朝下打面光。AgX 下从 1.4 回到 2.5（接近最初 4.0 的标定）。
+    // 所有强度从 LIGHTING_CONFIG 读，单一来源，禁止硬编码
     if (isPanel) {
       if (rectRef.current) {
-        rectRef.current.intensity = i * 2.5
-        // visible 永远 true（即使 intensity=0），保持 light count 稳定
+        rectRef.current.intensity = i * LIGHTING_CONFIG.light.panelRect
         rectRef.current.visible = true
       }
       if (fillRef.current) {
-        fillRef.current.intensity = 0
+        fillRef.current.intensity = i * LIGHTING_CONFIG.light.panelFill
         fillRef.current.visible = true
       }
       return
     }
-
-    // 非 panel：SpotLight 朝下。强度 9 cd —— 关掉 IES 后能量分布在 90° 全开锥里，
-    // 比 IES 24° 时更分散，需要把单灯强度降一档让热斑落到 ACES 线性区，
-    // 色温（暖白）才能显形而不是被压成白。多盏堆叠靠回路联动控制总数。
     if (lightRef.current) {
-      lightRef.current.intensity = i * 9
-      // visible 永远 true 避免 shader 重编（见 active prop 的注释）
+      lightRef.current.intensity = i * LIGHTING_CONFIG.light.downlightSpot
       lightRef.current.visible = true
     }
   })
@@ -466,9 +466,7 @@ export function DemoLightBulb({
         />
       )}
 
-      {/* panel 主灯：天花板矩形发光面。
-          【SelectiveBloom】<Select enabled={state.on}> 把发光面纳入 bloom 选区，
-          只有 panel 自身参与 bloom，被它照亮的墙面/地板不参与（不会爆白）。 */}
+      {/* panel 主灯发光面 + SelectiveBloom 选区 */}
       {isPanel && (
         <Select enabled={state.on}>
           <mesh position={[px, py - 0.005, pz]} rotation={[Math.PI / 2, 0, 0]}>
@@ -476,27 +474,24 @@ export function DemoLightBulb({
             <meshStandardMaterial
               color={state.on ? col : '#555'}
               emissive={col}
-              emissiveIntensity={state.on ? (state.brightness / 100) * 1.2 : 0}
+              emissiveIntensity={state.on ? (state.brightness / 100) * LIGHTING_CONFIG.emissive.panelFace : 0}
               transparent
-              opacity={state.on ? 0.92 : 0.25}
+              opacity={state.on ? 0.9 : 0.25}
               side={THREE.DoubleSide}
             />
           </mesh>
         </Select>
       )}
 
-      {/* 非 panel 灯（筒灯/射灯）：之前没有可见的灯具实体，现在加一个小发光圆盘
-          挂在吊顶下沿。SpotLight 朝下照地面，圆盘参与 SelectiveBloom 给筒灯一层
-          "光源辉光感"——之前用户满意的"筒灯有光晕"现在由这个圆盘的 bloom 提供。
-          被 SpotLight 照亮的地板/墙面不在 selection 里，不会爆。 */}
+      {/* 筒灯/射灯：贴顶 4cm 圆盘当"灯泡"，参与 SelectiveBloom 给柔和辉光 */}
       {!isPanel && (
         <Select enabled={state.on}>
           <mesh position={[px, py - 0.005, pz]} rotation={[Math.PI / 2, 0, 0]}>
-            <circleGeometry args={[0.06, 16]} />
+            <circleGeometry args={[0.04, 16]} />
             <meshStandardMaterial
               color={col}
               emissive={col}
-              emissiveIntensity={state.on ? (state.brightness / 100) * 2.5 : 0}
+              emissiveIntensity={state.on ? (state.brightness / 100) * LIGHTING_CONFIG.emissive.downlightBulb : 0}
               transparent
               opacity={state.on ? 0.95 : 0.0}
               side={THREE.DoubleSide}
@@ -516,13 +511,19 @@ export function DemoLightBulb({
             zIndexRange={[1, 5]}
             style={{ pointerEvents: 'none' }}
           >
-            <div style={{
-              width: 5, height: 5, borderRadius: '50%',
-              background: state.on ? pill.text : 'rgba(150,150,160,0.45)',
-              boxShadow: state.on ? `0 0 4px 1px ${pill.text}55` : 'none',
-              transition: 'background 0.4s, box-shadow 0.4s',
-              pointerEvents: 'none',
-            }} />
+            {/* 端点 dot —— 传了 onOpenPopup 就允许 click 打开属性面板 */}
+            <div
+              role={onOpenPopup ? 'button' : undefined}
+              onClick={onOpenPopup ? (e) => { e.stopPropagation(); onOpenPopup() } : undefined}
+              style={{
+                width: 9, height: 9, borderRadius: '50%',
+                background: state.on ? pill.text : 'rgba(150,150,160,0.55)',
+                boxShadow: state.on ? `0 0 5px 1px ${pill.text}88` : '0 0 0 1px rgba(0,0,0,0.18)',
+                transition: 'background 0.3s, box-shadow 0.3s, transform 0.15s',
+                pointerEvents: onOpenPopup ? 'auto' : 'none',
+                cursor: onOpenPopup ? 'pointer' : 'default',
+              }}
+            />
           </Html>
         )
       ) : (
@@ -586,13 +587,14 @@ export function DemoLightBulb({
 //
 // 单灯回路（单独一盏灯自成回路）也走这条路径，pill 显示"灯具名"+开关。
 export function CircuitOverlay({
-  members,        // 回路成员（DeviceData 列表，至少 1）
-  anyOn,          // 回路里有任意一盏开 → 视觉为亮
-  brightness,     // 回路里第一盏灯的亮度，仅用于 pill 副文本
+  members,
+  anyOn,
+  brightness,
   preset,
   isNight,
-  onToggle,       // 翻转整条回路（上层 toggleLight 已联动，传任一成员 id 即可）
-  label,          // 回路 pill 显示的主文案，"回路 N" / 单灯回路用灯名
+  onToggle,
+  label,
+  onOpenPopup,
 }: {
   members: DeviceData[]
   anyOn: boolean
@@ -601,6 +603,9 @@ export function CircuitOverlay({
   isNight: boolean
   onToggle: () => void
   label: string
+  /** 点 pill 触发：打开回路属性 popup（应用到所有成员）。
+      传了 = click 打开 popup；不传 = click 走 onToggle（向后兼容） */
+  onOpenPopup?: () => void
 }) {
   const [hovered, setHovered] = useState(false)
   const pill = getPillColors(preset.key, isNight, anyOn)
@@ -654,44 +659,77 @@ export function CircuitOverlay({
         zIndexRange={[1, 6]}
         style={{ pointerEvents: 'none' }}
       >
-        {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
+        {/* 复合 pill：左半 click = toggle on/off（保留快速开关），右半 ⚙ click = popup（详细调节） */}
         <div
-          onClick={(e) => { e.stopPropagation(); onToggle() }}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
           style={{
             pointerEvents: 'auto',
-            display: 'flex', alignItems: 'center', gap: 8,
-            padding: '6px 12px',
+            display: 'inline-flex', alignItems: 'stretch',
             borderRadius: 999,
-            background: anyOn ? `${pill.text}1f` : 'rgba(15, 18, 26, 0.78)',
+            // 直接用 pill.bg / pill.border / pill.text —— getPillColors 已经按 on/off
+            // 返回好两套完整配色。之前拼 `${pill.text}1f` 是无效 CSS，浏览器会忽略，
+            // 透出 3D 场景导致"开关一次后底色变了"的诡异现象。
+            background: pill.bg,
             backdropFilter: 'blur(14px)',
             WebkitBackdropFilter: 'blur(14px)',
-            border: `1px solid ${anyOn ? pill.text + '66' : 'rgba(255,255,255,0.12)'}`,
-            color: anyOn ? pill.text : 'rgba(229,240,255,0.85)',
+            border: `1px solid ${pill.border}`,
+            color: pill.text,
             fontFamily: 'system-ui, -apple-system, sans-serif',
             fontSize: 12, fontWeight: 600, letterSpacing: '0.02em',
             whiteSpace: 'nowrap',
-            cursor: 'pointer',
             boxShadow: hovered
-              ? `0 4px 16px ${anyOn ? pill.text + '44' : 'rgba(0,0,0,0.4)'}`
-              : '0 2px 8px rgba(0,0,0,0.25)',
+              ? '0 4px 16px rgba(0,0,0,0.35)'
+              : '0 2px 8px rgba(0,0,0,0.20)',
             transform: hovered ? 'scale(1.04)' : 'scale(1)',
             transition: 'transform 0.15s, box-shadow 0.2s, background 0.3s, border-color 0.3s, color 0.3s',
+            overflow: 'hidden',
           }}
         >
-          <span style={{
-            width: 6, height: 6, borderRadius: '50%',
-            background: anyOn ? pill.text : 'rgba(150,150,160,0.5)',
-            boxShadow: anyOn ? `0 0 6px 1px ${pill.text}88` : 'none',
-            transition: 'background 0.3s, box-shadow 0.3s',
-          }} />
-          <span>{label}</span>
-          <span style={{
-            opacity: 0.7, fontSize: 10, fontVariantNumeric: 'tabular-nums',
-          }}>
-            {anyOn ? `${brightness}%` : '关'}
-          </span>
+          {/* 左半：click = toggle */}
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onToggle() }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              padding: '7px 12px',
+              background: 'transparent', border: 'none', color: 'inherit',
+              font: 'inherit', cursor: 'pointer',
+            }}
+          >
+            <span style={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: anyOn ? pill.text : 'rgba(150,150,160,0.5)',
+              boxShadow: anyOn ? `0 0 6px 1px ${pill.border}` : 'none',
+              transition: 'background 0.3s, box-shadow 0.3s',
+            }} />
+            <span>{label}</span>
+            <span style={{
+              opacity: 0.75, fontSize: 10, fontVariantNumeric: 'tabular-nums',
+              color: pill.meta,
+            }}>
+              {anyOn ? `${brightness}%` : '关'}
+            </span>
+          </button>
+          {/* 右半：齿轮按钮 = 打开属性 popup */}
+          {onOpenPopup && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onOpenPopup() }}
+              title="调节亮度 / 色温"
+              style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                width: 28, padding: 0,
+                background: 'transparent',
+                border: 'none',
+                borderLeft: `1px solid ${pill.border}`,
+                color: 'inherit', cursor: 'pointer',
+                fontSize: 13, opacity: 0.85,
+              }}
+            >
+              ⚙
+            </button>
+          )}
         </div>
       </Html>
     </group>
@@ -709,15 +747,17 @@ export function DemoLightStripPill({
   onToggle,
   preset,
   isNight,
+  onOpenPopup,
 }: {
   node: DeviceNode
   onToggle: () => void
   preset: RenderPreset
   isNight: boolean
+  /** 齿轮按钮 click：打开属性 popup（亮度 + 色温） */
+  onOpenPopup?: () => void
 }) {
-  const [labelHovered, setLabelHovered] = useState(false)
+  const [hovered, setHovered] = useState(false)
 
-  // 从 useScene 读 state（DeviceRenderer 也读同一个源）
   const sceneState = useScene((s) => {
     const n = s.nodes[node.id as AnyNodeId] as DeviceNode | undefined
     return (n?.state ?? {}) as Record<string, unknown>
@@ -733,6 +773,7 @@ export function DemoLightStripPill({
   const cy = (node.position[1] ?? 2.6) + 0.25
 
   const pill = getPillColors(preset.key, isNight, on)
+  const label = (node.name as string | undefined) ?? (node.productName as string | undefined) ?? '灯带'
 
   return (
     <group position={[cx, cy, cz]}>
@@ -742,50 +783,69 @@ export function DemoLightStripPill({
         zIndexRange={[1, 5]}
         style={{ pointerEvents: 'none' }}
       >
-        {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions */}
+        {/* 复合 pill：左半 click = toggle，右半 ⚙ = popup（同回路 pill 模式） */}
         <div
-          onClick={(e) => {
-            e.stopPropagation()
-            onToggle()
-          }}
-          onMouseEnter={() => setLabelHovered(true)}
-          onMouseLeave={() => setLabelHovered(false)}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
           style={{
-            pointerEvents: 'auto', position: 'relative',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
-            cursor: 'pointer',
+            pointerEvents: 'auto',
+            display: 'inline-flex', alignItems: 'stretch',
+            borderRadius: 999,
+            background: pill.bg,
+            backdropFilter: 'blur(14px)',
+            WebkitBackdropFilter: 'blur(14px)',
+            border: `1px solid ${pill.border}`,
+            color: pill.text,
+            fontFamily: 'system-ui, -apple-system, sans-serif',
+            fontSize: 12, fontWeight: 600, letterSpacing: '0.02em',
+            whiteSpace: 'nowrap',
+            boxShadow: hovered
+              ? '0 4px 16px rgba(0,0,0,0.35)'
+              : '0 2px 8px rgba(0,0,0,0.20)',
+            transform: hovered ? 'scale(1.04)' : 'scale(1)',
+            transition: 'transform 0.15s, box-shadow 0.2s, background 0.3s, border-color 0.3s, color 0.3s',
+            overflow: 'hidden',
           }}
         >
-          {/* 灯带：横向短矩形（区分点光源的圆点） */}
-          <div style={{
-            width: 14, height: 4, borderRadius: 2,
-            background: on ? pill.text : 'rgba(150,150,160,0.5)',
-            boxShadow: on ? `0 0 8px 2px ${pill.text}55` : 'none',
-            transition: 'background 0.4s, box-shadow 0.4s',
-          }} />
-
-          {/* hover tooltip */}
-          <div style={{
-            position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)',
-            pointerEvents: 'none',
-            opacity: labelHovered ? 1 : 0,
-            transition: 'opacity 0.15s',
-            background: 'rgba(10,12,18,0.88)',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
-            border: '1px solid rgba(255,255,255,0.10)',
-            borderRadius: 8, padding: '4px 10px',
-            whiteSpace: 'nowrap',
-            fontFamily: 'system-ui, -apple-system, sans-serif',
-            display: 'flex', alignItems: 'center', gap: 6,
-          }}>
-            <span style={{ color: 'rgba(229,240,255,0.9)', fontSize: 11, fontWeight: 600, letterSpacing: '0.02em' }}>
-              {(node.productName as string | undefined) ?? '灯带'}
-            </span>
-            <span style={{ color: 'rgba(166,190,222,0.7)', fontSize: 10, fontVariantNumeric: 'tabular-nums' }}>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onToggle() }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              padding: '7px 12px',
+              background: 'transparent', border: 'none', color: 'inherit',
+              font: 'inherit', cursor: 'pointer',
+            }}
+          >
+            <span style={{
+              width: 14, height: 4, borderRadius: 2,
+              background: on ? pill.text : 'rgba(150,150,160,0.5)',
+              boxShadow: on ? `0 0 6px 1px ${pill.border}` : 'none',
+              transition: 'background 0.3s, box-shadow 0.3s',
+            }} />
+            <span>{label}</span>
+            <span style={{ opacity: 0.75, fontSize: 10, fontVariantNumeric: 'tabular-nums', color: pill.meta }}>
               {on ? `${brightness}%` : '关'}
             </span>
-          </div>
+          </button>
+          {onOpenPopup && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onOpenPopup() }}
+              title="调节亮度 / 色温"
+              style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                width: 28, padding: 0,
+                background: 'transparent',
+                border: 'none',
+                borderLeft: `1px solid ${pill.border}`,
+                color: 'inherit', cursor: 'pointer',
+                fontSize: 13, opacity: 0.85,
+              }}
+            >
+              ⚙
+            </button>
+          )}
         </div>
       </Html>
     </group>

@@ -978,9 +978,11 @@ const LightStripGeometry = ({
     return new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.0)
   }, [localPath])
 
-  // 灯带本体 emissive：AgX tonemap 下从 0.22 回到 0.55，灯带视觉感回归。
-  // AgX knee ~6.0，0.55 远在线性区，配合 SelectiveBloom（下一步）时也不会喂全屏 bloom。
-  const emissiveIntensity = on ? (brightness / 100) * 0.55 : 0
+  // 灯带 emissive ——【镜像 lighting-config.ts emissive.stripTube = 0.25】
+  // 灯带沿 path 是连续长表面，emissive 累计视觉总量远超单点；保持远低于 bloom threshold
+  // 【2026-04-29 三次校准】slider 100% 仍过曝 → 0.05 → 0.012
+  const STRIP_EMISSIVE = 0.012
+  const emissiveIntensity = on ? (brightness / 100) * STRIP_EMISSIVE : 0
 
   return (
     <group>
@@ -1017,16 +1019,20 @@ const LightStripGeometry = ({
 // 总数线性膨胀；超过 ~8 盏后 fragment shader 重编译开销显著。
 // 一条 5m 灯带原来 0.6m 间距 → 8 盏，4 条灯带 → 32 盏，整个场景帧率被拖。
 // 1.6m 间距：5m 灯带 3 盏，4 条 → 12 盏，可控。
-const STRIP_LIGHT_SPACING_M = 1.6
-// 距离从 2.5 → 1.2：灯带常贴顶（mount 2.55-2.6m，顶面 2.7m，间距仅 10cm），
-// distance=2.5 让 PointLight/SpotLight 在 1/d² 衰减下贴顶位置（d=0.1）爆出
-// ~100× 标称强度，整个顶面被打爆 + bloom 放大 → 看上去像"过曝"。
-// 限到 1.2m 直接砍掉远场无效散射，配合上偏移让灯不再紧贴顶。
-const STRIP_LIGHT_DISTANCE_M = 1.2
-// SpotLight 半角（度）—— up（灯槽）必须放宽角度，让光散在大片顶面而不是窄圆。
-// 45° 在距离 0.1m 时仅照亮 ~8cm² 的圆斑，单位面积亮度直接爆。
-const STRIP_SPOT_ANGLE_DEG_DOWN = 45
-const STRIP_SPOT_ANGLE_DEG_UP_WALL = 75
+// 【2026-04-29】1.6m → 0.6m。每 0.6m 一盏 SpotLight，5m 灯带 = 9 盏，光池间隔
+// 收紧到 60cm + 每盏 distance=1.2m → 重叠区充足 → wash 视觉连续不再"分池"。
+// 强度已经压到极弱，9 盏叠加也不会爆。
+// 【2026-04-29 模拟面光源】真 LED 灯带是 line emitter（≈ RectAreaLight），但 Three.js
+// 多个 RectAreaLight 在 fragment shader 里 ~16 samples × N 段会拖性能。这里用密集
+// SpotLight + 宽羽化 + 宽角让多个圆锥重叠融合成"连续线状 wash"，性能可控。
+//
+// 几何：spacing 0.4m + distance 1.5m → 同一表面同时被 3-4 个 SpotLight 覆盖 →
+// 圆斑边界互相消除 → 视觉上连续。
+const STRIP_LIGHT_SPACING_M = 0.4
+const STRIP_LIGHT_DISTANCE_M = 1.5
+// 半角放宽：down 45 → 70，up/wall 75 → 88（接近 spotlight 上限 90°）
+const STRIP_SPOT_ANGLE_DEG_DOWN = 70
+const STRIP_SPOT_ANGLE_DEG_UP_WALL = 88
 // 灯带光源相对几何中心向"反发光面"偏移，给光留扩散空间：
 // - 'up'（灯槽）：灯带在 2.55m，光源下移 0.25m 到 2.30m，target 仍在头顶 → 长光程让光柔和扩散
 // - 'omni'：下移 0.25m，避免 PointLight 紧贴顶发出爆炸光斑
@@ -1098,8 +1104,15 @@ const StripLightArray = ({
   const downAngleRad = (STRIP_SPOT_ANGLE_DEG_DOWN * Math.PI) / 180
   const upWallAngleRad = (STRIP_SPOT_ANGLE_DEG_UP_WALL * Math.PI) / 180
 
+  // 灯带光强 ——【镜像 lighting-config.ts light.stripPoint / light.stripSpot】
+  // 砍了 50%：装饰光不应该照亮房间，是筒灯/面板灯的工作
+  // 【2026-04-29 三次校准】slider 上限再砍 4×
+  const STRIP_POINT_INTENSITY = 0.00004
+  const STRIP_SPOT_DOWN = 0.00008
+  const STRIP_SPOT_UP = 0.00005
+  const STRIP_SPOT_WALL = 0.00006
+
   if (emissionDirection === 'omni') {
-    // AgX 下灯带强度回升：omni 0.03 → 0.08，给"装饰氛围"足够的可见度
     return (
       <>
         {samples.map((s, i) => (
@@ -1107,7 +1120,7 @@ const StripLightArray = ({
             key={i}
             position={s.pos}
             color={color}
-            intensity={baseIntensity * 0.08}
+            intensity={baseIntensity * STRIP_POINT_INTENSITY}
             distance={STRIP_LIGHT_DISTANCE_M}
             decay={2}
           />
@@ -1116,11 +1129,12 @@ const StripLightArray = ({
     )
   }
 
-  // 方向性 SpotLight：AgX 下回升，up/wall 0.10、down 0.15
   const isUpOrWall = emissionDirection === 'up' || emissionDirection === 'wall'
   const angleRad = isUpOrWall ? upWallAngleRad : downAngleRad
   const intensityFactor =
-    emissionDirection === 'up' ? 0.10 : emissionDirection === 'wall' ? 0.12 : 0.15
+    emissionDirection === 'up' ? STRIP_SPOT_UP
+    : emissionDirection === 'wall' ? STRIP_SPOT_WALL
+    : STRIP_SPOT_DOWN
   return (
     <>
       {samples.map((s, i) => (
@@ -1166,7 +1180,9 @@ const DirectionalSpotSample = ({
         distance={distance}
         decay={2}
         angle={angle}
-        penumbra={0.6}
+        // penumbra 0.6 → 0.95：圆斑边缘几乎全羽化，只有圆锥中心 5% 有"硬边"。
+        // 配合 spacing 0.4m 的密集采样 → 视觉上连成一条线，看不出独立圆斑。
+        penumbra={0.95}
       />
       <object3D ref={targetRef} position={tgt} />
     </>

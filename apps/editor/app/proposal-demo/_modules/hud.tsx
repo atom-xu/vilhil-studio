@@ -1,24 +1,23 @@
 'use client'
 
-import { forwardRef, useEffect, useMemo, useRef, useState } from 'react'
-import { useFrame } from '@react-three/fiber'
 import type { DeviceNode, Subsystem } from '@pascal-app/core'
-import { getDemoChromePalette, getPillColors, RENDER_PRESETS } from './render-presets'
-import type { RenderPreset, RenderPresetKey } from './render-presets'
-import type { DeviceData, AvailableLevel } from './types'
+import { forwardRef, useEffect, useMemo, useRef, useState } from 'react'
 import type { ModuleKey } from './camera'
+import type { RenderPreset, RenderPresetKey } from './render-presets'
+import { getDemoChromePalette, RENDER_PRESETS } from './render-presets'
+import type { AvailableLevel, DeviceData } from './types'
 
 // ─── FPS 计数器 ────────────────────────────────────────────────────────────────
 // 直接写 DOM（不走 React state），零 re-render 开销
 // 颜色：绿色 ≥55fps，黄色 30-54fps，红色 <30fps
 
 export function FpsBadge({ topBorder, topBg }: { topBorder: string; topBg: string }) {
-  const numRef  = useRef<HTMLSpanElement>(null)
-  const dotRef  = useRef<HTMLSpanElement>(null)
+  const numRef = useRef<HTMLSpanElement>(null)
+  const dotRef = useRef<HTMLSpanElement>(null)
 
   useEffect(() => {
     let frames = 0
-    let last   = performance.now()
+    let last = performance.now()
     let raf: number
 
     const tick = () => {
@@ -26,13 +25,13 @@ export function FpsBadge({ topBorder, topBg }: { topBorder: string; topBg: strin
       const now = performance.now()
       const delta = now - last
       if (delta >= 500) {
-        const fps = Math.round(frames * 1000 / delta)
+        const fps = Math.round((frames * 1000) / delta)
         frames = 0
-        last   = now
-        if (numRef.current)  numRef.current.textContent  = String(fps)
+        last = now
+        if (numRef.current) numRef.current.textContent = String(fps)
         const color = fps >= 55 ? '#4ade80' : fps >= 30 ? '#fbbf24' : '#f87171'
-        if (numRef.current)  numRef.current.style.color  = color
-        if (dotRef.current)  dotRef.current.style.background = color
+        if (numRef.current) numRef.current.style.color = color
+        if (dotRef.current) dotRef.current.style.background = color
       }
       raf = requestAnimationFrame(tick)
     }
@@ -44,9 +43,13 @@ export function FpsBadge({ topBorder, topBg }: { topBorder: string; topBg: strin
     <div
       style={{
         marginLeft: 4,
-        display: 'flex', alignItems: 'center', gap: 5,
-        height: 34, padding: '0 10px',
-        border: `1px solid ${topBorder}`, borderRadius: 7,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 5,
+        height: 34,
+        padding: '0 10px',
+        border: `1px solid ${topBorder}`,
+        borderRadius: 7,
         background: topBg,
         fontFamily: 'var(--font-jetbrains-mono), ui-monospace, monospace',
         flexShrink: 0,
@@ -55,14 +58,33 @@ export function FpsBadge({ topBorder, topBg }: { topBorder: string; topBg: strin
       {/* 状态点 */}
       <span
         ref={dotRef}
-        style={{ width: 5, height: 5, borderRadius: '50%', background: '#4ade80', flexShrink: 0, transition: 'background 0.6s' }}
+        style={{
+          width: 5,
+          height: 5,
+          borderRadius: '50%',
+          background: '#4ade80',
+          flexShrink: 0,
+          transition: 'background 0.6s',
+        }}
       />
       {/* 数字 */}
-      <span ref={numRef} style={{ fontSize: 11, fontWeight: 600, color: '#4ade80', minWidth: 22, textAlign: 'right', transition: 'color 0.6s' }}>
+      <span
+        ref={numRef}
+        style={{
+          fontSize: 11,
+          fontWeight: 600,
+          color: '#4ade80',
+          minWidth: 22,
+          textAlign: 'right',
+          transition: 'color 0.6s',
+        }}
+      >
         --
       </span>
       {/* 单位 */}
-      <span style={{ fontSize: 9, color: 'rgba(150,165,190,0.55)', letterSpacing: '0.04em' }}>FPS</span>
+      <span style={{ fontSize: 9, color: 'rgba(150,165,190,0.55)', letterSpacing: '0.04em' }}>
+        FPS
+      </span>
     </div>
   )
 }
@@ -106,6 +128,8 @@ const THEME_FIELD_LABEL: Record<ThemeFieldKey, string> = {
   wallMetalness: '墙体金属度',
   wallEnvMapIntensity: '墙体环境反射',
   wallOpacity: '墙体透明度',
+  wallMirrorRoughness: '墙体倒影粗糙度',
+  wallMirrorMetalness: '墙体倒影金属度',
   furnitureRoughness: '家具粗糙度',
   furnitureMetalness: '家具金属度',
   furnitureInteractiveColor: '家具交互高亮色',
@@ -131,8 +155,43 @@ const THEME_FIELD_HINT: Partial<Record<ThemeFieldKey, string>> = {
   overlayNight: '全局叠层光感（系统项）',
 }
 
+const FIELD_LINK_HINT: Partial<Record<ThemeFieldKey, string>> = {
+  wallColor: '联动：墙体、整体空间明暗感',
+  furnitureColorDay: '联动：家具主体可见层（白天）',
+  furnitureColorNight: '联动：家具主体可见层（夜晚）',
+  bgColorDay: '联动：场景背景、雾感与空间层次',
+  bgColorNight: '联动：场景背景、夜间深度感',
+  padColorDay: '联动：楼层遮挡关系和空间分层',
+  padColorNight: '联动：夜景楼层分层',
+  capColorA: '联动：楼层顶边识别度',
+  capColorB: '联动：楼层顶边渐变过渡',
+  windowColor: '联动：开口可读性（受透明度影响）',
+  doorColor: '联动：开口可读性（受透明度影响）',
+  panelBgDay: '系统项：影响 HUD 卡片底色',
+  panelBgNight: '系统项：影响 HUD 卡片底色',
+  overlayDay: '系统项：影响后期叠层风格',
+  overlayNight: '系统项：影响后期叠层风格',
+}
+
+const NUMERIC_FIELD_LINK_HINT: Partial<Record<keyof RenderPreset, string>> = {
+  exposure: '联动：全局亮度基线（所有颜色最终观感）',
+  envDay: '联动：白天环境氛围亮度',
+  envNight: '联动：夜晚环境氛围亮度',
+  hemiDay: '联动：白天阴影过渡与漫反射',
+  hemiNight: '联动：夜晚暗部细节',
+  sunDay: '联动：白天主光层次与体积感',
+  sunNight: '联动：夜晚轮廓光',
+  shadowMapSize: '系统项：阴影清晰度与性能开销',
+  shadowRadiusDay: '联动：白天阴影软硬',
+  shadowRadiusNight: '联动：夜晚阴影软硬',
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value))
+}
+
+function clonePresetDraft(preset: RenderPreset): RenderPreset {
+  return { ...preset, theme: { ...preset.theme } }
 }
 
 function parseHexColor(input: string) {
@@ -178,7 +237,9 @@ function parseHexColor(input: string) {
 }
 
 function parseRgbColor(input: string) {
-  const m = /^rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)(?:\s*,\s*([0-9.]+))?\s*\)$/i.exec(input.trim())
+  const m = /^rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)(?:\s*,\s*([0-9.]+))?\s*\)$/i.exec(
+    input.trim(),
+  )
   if (!m) return null
   const rToken = m[1]
   const gToken = m[2]
@@ -197,7 +258,10 @@ function parseEditableColor(input: string) {
 }
 
 function toHexInput(color: { r: number; g: number; b: number }) {
-  const to2 = (n: number) => Math.round(clamp(n, 0, 255)).toString(16).padStart(2, '0')
+  const to2 = (n: number) =>
+    Math.round(clamp(n, 0, 255))
+      .toString(16)
+      .padStart(2, '0')
   return `#${to2(color.r)}${to2(color.g)}${to2(color.b)}`
 }
 
@@ -213,15 +277,28 @@ function toCssColor(
 }
 
 export function DemoTopBar({
-  buildingName, levelName, wallCount,
-  displayHour, realHour, isPreviewing, isNight,
+  buildingName,
+  levelName,
+  wallCount,
+  displayHour,
+  realHour,
+  isPreviewing,
+  isNight,
   preset,
   presetCatalog,
-  activePresetKey, onPresetChange,
-  onPreviewPreset, onSavePreset, onResetPreset, hasPresetOverride,
-  onSliderChange, onSliderDown, onSyncNow,
-  uniformWall10cm, onToggleUniformWall10cm,
-  colorCalibrationMode, onToggleColorCalibrationMode,
+  activePresetKey,
+  onPresetChange,
+  onPreviewPreset,
+  onSavePreset,
+  onResetPreset,
+  hasPresetOverride,
+  onSliderChange,
+  onSliderDown,
+  onSyncNow,
+  uniformWall10cm,
+  onToggleUniformWall10cm,
+  colorCalibrationMode,
+  onToggleColorCalibrationMode,
 }: {
   buildingName: string
   levelName: string
@@ -248,7 +325,9 @@ export function DemoTopBar({
 }) {
   const fmt = (h: number) => {
     const hh = Math.floor(h).toString().padStart(2, '0')
-    const mm = Math.round((h % 1) * 60).toString().padStart(2, '0')
+    const mm = Math.round((h % 1) * 60)
+      .toString()
+      .padStart(2, '0')
     return `${hh}:${mm}`
   }
   const [tweaksOpen, setTweaksOpen] = useState(false)
@@ -256,27 +335,33 @@ export function DemoTopBar({
   const [editorMode, setEditorMode] = useState<EditorMode>('quick')
   const [editorScope, setEditorScope] = useState<EditorScope>('day')
   const [showUiSystemFields, setShowUiSystemFields] = useState(false)
-  const buildDraft = (p: RenderPreset): RenderPreset => ({ ...p, theme: { ...p.theme } })
-  const [draft, setDraft] = useState<RenderPreset>(buildDraft(presetCatalog[activePresetKey]))
+  const [referenceGuideOpen, setReferenceGuideOpen] = useState(true)
+  const [draft, setDraft] = useState<RenderPreset>(clonePresetDraft(presetCatalog[activePresetKey]))
 
   const chrome = getDemoChromePalette(isNight, preset)
-  const topBg     = chrome.bg
+  const topBg = chrome.bg
   const topBorder = chrome.border
-  const inkColor  = chrome.text
-  const ink2      = chrome.text2
-  const ink3      = chrome.text3
-  const trackBg   = chrome.track
+  const inkColor = chrome.text
+  const ink2 = chrome.text2
+  const ink3 = chrome.text3
+  const trackBg = chrome.track
 
   const swatchPalette: Record<RenderPresetKey, [string, string, string]> = {
-    opslab:   ['#18293d', '#24496f', '#5f7f9c'],
+    opslab: ['#18293d', '#24496f', '#5f7f9c'],
     balanced: ['#2a2f34', '#495562', '#7b8794'],
     showcase: ['#102437', '#1e3f58', '#4b697f'],
-    smooth:   ['#2e3136', '#4f5560', '#7a838e'],
-    night:    ['#231a30', '#44305d', '#6b4f88'],
+    smooth: ['#2e3136', '#4f5560', '#7a838e'],
+    night: ['#231a30', '#44305d', '#6b4f88'],
     'mist-warm-contrast': ['#d8e6fb', '#f0d9ba', '#f7f9fd'],
   }
 
-  const numericFields: Array<{ key: keyof RenderPreset; label: string; step: number; min?: number; max?: number }> = [
+  const numericFields: Array<{
+    key: keyof RenderPreset
+    label: string
+    step: number
+    min?: number
+    max?: number
+  }> = [
     { key: 'exposure', label: '曝光', step: 0.01, min: 0.2, max: 2.5 },
     { key: 'envDay', label: '环境 Day', step: 0.01, min: 0, max: 2 },
     { key: 'envNight', label: '环境 Night', step: 0.01, min: 0, max: 2 },
@@ -288,34 +373,125 @@ export function DemoTopBar({
     { key: 'shadowRadiusDay', label: '阴影半径 Day', step: 0.1, min: 0, max: 12 },
     { key: 'shadowRadiusNight', label: '阴影半径 Night', step: 0.1, min: 0, max: 12 },
   ]
-  const quickNumericFields: Array<{ key: keyof RenderPreset; label: string; step: number; min: number; max: number }> = [
-    { key: 'exposure', label: '曝光', step: 0.01, min: 0.3, max: 1.8 },
-    { key: 'envDay', label: '环境光 Day', step: 0.01, min: 0, max: 1.5 },
-    { key: 'envNight', label: '环境光 Night', step: 0.01, min: 0, max: 1.5 },
-    { key: 'hemiDay', label: '半球光 Day', step: 0.01, min: 0, max: 1.5 },
-    { key: 'hemiNight', label: '半球光 Night', step: 0.01, min: 0, max: 1.5 },
-    { key: 'sunDay', label: '主光 Day', step: 0.01, min: 0, max: 2.2 },
-    { key: 'sunNight', label: '主光 Night', step: 0.01, min: 0, max: 1.2 },
+  const quickNumericFields: Array<{
+    key: keyof RenderPreset
+    label: string
+    step: number
+    min: number
+    max: number
+    hint: string
+  }> = [
+    {
+      key: 'exposure',
+      label: '曝光',
+      step: 0.01,
+      min: 0.3,
+      max: 1.8,
+      hint: '联动：所有颜色最终亮度基线',
+    },
+    {
+      key: 'envDay',
+      label: '环境光 Day',
+      step: 0.01,
+      min: 0,
+      max: 1.5,
+      hint: '联动：白天整体氛围亮度',
+    },
+    {
+      key: 'envNight',
+      label: '环境光 Night',
+      step: 0.01,
+      min: 0,
+      max: 1.5,
+      hint: '联动：夜晚整体氛围亮度',
+    },
+    {
+      key: 'hemiDay',
+      label: '半球光 Day',
+      step: 0.01,
+      min: 0,
+      max: 1.5,
+      hint: '联动：阴影过渡与漫反射',
+    },
+    {
+      key: 'hemiNight',
+      label: '半球光 Night',
+      step: 0.01,
+      min: 0,
+      max: 1.5,
+      hint: '联动：夜景暗部细节',
+    },
+    {
+      key: 'sunDay',
+      label: '主光 Day',
+      step: 0.01,
+      min: 0,
+      max: 2.2,
+      hint: '联动：直射高光与体积层次',
+    },
+    {
+      key: 'sunNight',
+      label: '主光 Night',
+      step: 0.01,
+      min: 0,
+      max: 1.2,
+      hint: '联动：夜景轮廓与层次',
+    },
   ]
-  const quickDayThemeFields: ThemeFieldKey[] = [
-    'wallColor', 'furnitureColorDay', 'windowColor', 'doorColor',
-    'padColorDay', 'bgColorDay', 'capColorA', 'capColorB',
-  ]
+  const quickDayThemeFields: ThemeFieldKey[] = ['furnitureColorDay', 'padColorDay', 'bgColorDay']
   const quickNightThemeFields: ThemeFieldKey[] = [
-    'wallColor', 'furnitureColorNight', 'windowColor', 'doorColor',
-    'padColorNight', 'bgColorNight', 'capColorA', 'capColorB',
+    'furnitureColorNight',
+    'padColorNight',
+    'bgColorNight',
+  ]
+  const quickSharedThemeFields: ThemeFieldKey[] = [
+    'wallColor',
+    'windowColor',
+    'doorColor',
+    'capColorA',
+    'capColorB',
   ]
   const dayThemeFields: ThemeFieldKey[] = [
-    'skyDay', 'groundDay', 'sunColorDay', 'wallColor', 'furnitureColorDay',
-    'padColorDay', 'padEmissiveDay', 'bgColorDay',
+    'skyDay',
+    'groundDay',
+    'sunColorDay',
+    'wallColor',
+    'furnitureColorDay',
+    'padColorDay',
+    'padEmissiveDay',
+    'bgColorDay',
   ]
   const nightThemeFields: ThemeFieldKey[] = [
-    'skyNight', 'groundNight', 'sunColorNight', 'wallColor', 'furnitureColorNight',
-    'padColorNight', 'padEmissiveNight', 'bgColorNight',
+    'skyNight',
+    'groundNight',
+    'sunColorNight',
+    'wallColor',
+    'furnitureColorNight',
+    'padColorNight',
+    'padEmissiveNight',
+    'bgColorNight',
   ]
-  const uiDayThemeFields: ThemeFieldKey[] = ['overlayDay', 'panelBgDay', 'panelBorderDay']
-  const uiNightThemeFields: ThemeFieldKey[] = ['overlayNight', 'panelBgNight', 'panelBorderNight']
-  const sharedThemeFields: ThemeFieldKey[] = ['wallColor', 'windowColor', 'doorColor', 'capColorA', 'capColorB']
+  const uiDayThemeFields: ThemeFieldKey[] = ['overlayDay', 'panelBgDay']
+  const uiNightThemeFields: ThemeFieldKey[] = ['overlayNight', 'panelBgNight']
+  const sharedThemeFields: ThemeFieldKey[] = [
+    'wallColor',
+    'windowColor',
+    'doorColor',
+    'capColorA',
+    'capColorB',
+  ]
+
+  const quickNumericKeysByScope: Record<EditorScope, Set<keyof RenderPreset>> = {
+    day: new Set(['exposure', 'envDay', 'hemiDay', 'sunDay']),
+    night: new Set(['exposure', 'envNight', 'hemiNight', 'sunNight']),
+    global: new Set(['exposure']),
+  }
+
+  const advancedNumericKeysByScope: Record<EditorScope, Set<keyof RenderPreset>> = {
+    day: new Set(['shadowRadiusDay']),
+    night: new Set(['shadowRadiusNight']),
+    global: new Set(['shadowMapSize']),
+  }
 
   const isCssColorLike = (v: string) => /^#|^rgb|^hsl|^oklch|^color\(|^[a-z]+$/i.test(v.trim())
   const miniPreviewStyle = (v: string) => {
@@ -327,7 +503,7 @@ export function DemoTopBar({
   }
 
   useEffect(() => {
-    setDraft(buildDraft(presetCatalog[activePresetKey]))
+    setDraft(clonePresetDraft(presetCatalog[activePresetKey]))
   }, [activePresetKey, presetCatalog])
 
   useEffect(() => {
@@ -365,18 +541,26 @@ export function DemoTopBar({
   const renderThemeField = (key: ThemeFieldKey) => {
     const value = String(draft.theme[key])
     const parsed = parseEditableColor(value)
+    const linkHint = FIELD_LINK_HINT[key]
 
     return (
       <div
         key={key}
         className="rounded-md border p-2"
-        style={{ borderColor: topBorder, background: isNight ? 'rgba(16,24,38,0.45)' : 'rgba(255,255,255,0.55)' }}
+        style={{
+          borderColor: topBorder,
+          background: isNight ? 'rgba(16,24,38,0.45)' : 'rgba(255,255,255,0.55)',
+        }}
       >
         <div className="mb-1 flex items-center gap-2">
           <span style={{ minWidth: 96, color: ink2, fontSize: 11 }}>{THEME_FIELD_LABEL[key]}</span>
           <span
             style={{
-              width: 14, height: 14, borderRadius: 3, border: `1px solid ${topBorder}`, flexShrink: 0,
+              width: 14,
+              height: 14,
+              borderRadius: 3,
+              border: `1px solid ${topBorder}`,
+              flexShrink: 0,
               ...miniPreviewStyle(value),
             }}
           />
@@ -387,6 +571,11 @@ export function DemoTopBar({
             {THEME_FIELD_HINT[key]}
           </div>
         )}
+        {linkHint && (
+          <div className="mb-1" style={{ fontSize: 10, color: ink3 }}>
+            {linkHint}
+          </div>
+        )}
 
         <div className="flex items-center gap-2">
           <input
@@ -394,8 +583,13 @@ export function DemoTopBar({
             value={value}
             onChange={(e) => setThemeValue(key, e.target.value)}
             style={{
-              flex: 1, fontSize: 11, padding: '3px 6px', borderRadius: 6,
-              border: `1px solid ${topBorder}`, background: 'transparent', color: inkColor,
+              flex: 1,
+              fontSize: 11,
+              padding: '3px 6px',
+              borderRadius: 6,
+              border: `1px solid ${topBorder}`,
+              background: 'transparent',
+              color: inkColor,
             }}
           />
           <input
@@ -404,8 +598,12 @@ export function DemoTopBar({
             disabled={!parsed}
             onChange={(e) => setThemeHexColor(key, e.target.value)}
             style={{
-              width: 30, height: 26, padding: 0, borderRadius: 6,
-              border: `1px solid ${topBorder}`, background: 'transparent',
+              width: 30,
+              height: 26,
+              padding: 0,
+              borderRadius: 6,
+              border: `1px solid ${topBorder}`,
+              background: 'transparent',
               cursor: parsed ? 'pointer' : 'not-allowed',
               opacity: parsed ? 1 : 0.35,
             }}
@@ -431,7 +629,9 @@ export function DemoTopBar({
         </div>
         {!parsed && (
           <div className="mt-1.5 flex items-center gap-2">
-            <span style={{ fontSize: 10, color: ink3 }}>当前是复杂值（如 gradient），透明度请直接编辑文本中的 rgba alpha。</span>
+            <span style={{ fontSize: 10, color: ink3 }}>
+              当前是复杂值（如 gradient），透明度请直接编辑文本中的 rgba alpha。
+            </span>
           </div>
         )}
       </div>
@@ -441,26 +641,86 @@ export function DemoTopBar({
   return (
     <div
       className="flex shrink-0 items-center gap-0 px-5 z-20"
-      style={{ height: 56, background: topBg, borderBottom: `1px solid ${topBorder}`, transition: 'background 0.4s, border-color 0.4s' }}
+      style={{
+        height: 56,
+        background: topBg,
+        borderBottom: `1px solid ${topBorder}`,
+        transition: 'background 0.4s, border-color 0.4s',
+      }}
     >
       {/* Brand */}
-      <a href="/" className="flex items-center gap-2 no-underline" title="返回编辑器" style={{ color: inkColor, fontFamily: 'var(--font-inter), sans-serif' }}>
-        <div className="relative shrink-0" style={{ width: 14, height: 14, borderRadius: 3, background: '#006FFF' }}>
-          <div style={{ position: 'absolute', top: 3, right: 3, width: 4, height: 4, borderRadius: 1, background: '#fff' }} />
+      <a
+        href="/"
+        className="flex items-center gap-2 no-underline"
+        title="返回编辑器"
+        style={{ color: inkColor, fontFamily: 'var(--font-inter), sans-serif' }}
+      >
+        <div
+          className="relative shrink-0"
+          style={{ width: 14, height: 14, borderRadius: 3, background: '#006FFF' }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              top: 3,
+              right: 3,
+              width: 4,
+              height: 4,
+              borderRadius: 1,
+              background: '#fff',
+            }}
+          />
         </div>
         <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.02em' }}>VilHil</span>
-        <span style={{ fontSize: 11, fontWeight: 400, color: ink3, letterSpacing: '0.06em', marginLeft: 1 }}>STUDIO</span>
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 400,
+            color: ink3,
+            letterSpacing: '0.06em',
+            marginLeft: 1,
+          }}
+        >
+          STUDIO
+        </span>
       </a>
 
-      <div style={{ width: 1, height: 20, background: topBorder, margin: '0 16px', flexShrink: 0 }} />
+      <div
+        style={{ width: 1, height: 20, background: topBorder, margin: '0 16px', flexShrink: 0 }}
+      />
 
       {/* Project */}
-      <div className="flex items-center gap-2" style={{ fontFamily: 'var(--font-inter), sans-serif' }}>
-        <span style={{ fontSize: 11, fontWeight: 500, color: ink3, letterSpacing: '0.06em' }}>PROJECT</span>
-        <span style={{ fontFamily: 'var(--font-instrument-serif), Georgia, serif', fontStyle: 'italic', fontSize: 15, color: inkColor }}>{buildingName}</span>
+      <div
+        className="flex items-center gap-2"
+        style={{ fontFamily: 'var(--font-inter), sans-serif' }}
+      >
+        <span style={{ fontSize: 11, fontWeight: 500, color: ink3, letterSpacing: '0.06em' }}>
+          PROJECT
+        </span>
+        <span
+          style={{
+            fontFamily: 'var(--font-instrument-serif), Georgia, serif',
+            fontStyle: 'italic',
+            fontSize: 15,
+            color: inkColor,
+          }}
+        >
+          {buildingName}
+        </span>
         <span style={{ color: ink3, fontSize: 12 }}>·</span>
         <span style={{ fontSize: 13, color: ink2 }}>{levelName}</span>
-        <span style={{ fontSize: 10, fontWeight: 500, padding: '2px 6px', borderRadius: 4, background: 'rgba(0,111,255,0.10)', color: '#006FFF', letterSpacing: '0.04em', fontFamily: 'var(--font-jetbrains-mono), monospace' }}>
+        <span
+          style={{
+            fontSize: 10,
+            fontWeight: 500,
+            padding: '2px 6px',
+            borderRadius: 4,
+            background: 'rgba(0,111,255,0.10)',
+            color: '#006FFF',
+            letterSpacing: '0.04em',
+            fontFamily: 'var(--font-jetbrains-mono), monospace',
+          }}
+        >
           {wallCount}W
         </span>
       </div>
@@ -470,48 +730,126 @@ export function DemoTopBar({
       {/* Time slider widget */}
       <div
         className="relative flex items-center gap-2.5 px-3.5"
-        style={{ height: 34, border: `1px solid ${topBorder}`, borderRadius: 7, background: topBg, minWidth: 220, flexShrink: 0 }}
+        style={{
+          height: 34,
+          border: `1px solid ${topBorder}`,
+          borderRadius: 7,
+          background: topBg,
+          minWidth: 220,
+          flexShrink: 0,
+        }}
       >
         {isNight ? (
-          <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={ink3} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-            <path d="M20 14.5A8 8 0 119.5 4 6.5 6.5 0 0020 14.5z"/>
+          <svg
+            width={16}
+            height={16}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={ink3}
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ flexShrink: 0 }}
+          >
+            <path d="M20 14.5A8 8 0 119.5 4 6.5 6.5 0 0020 14.5z" />
           </svg>
         ) : (
-          <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={ink3} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-            <circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M5 12H3M21 12h-2M6 6l1.5 1.5M16.5 16.5L18 18M6 18l1.5-1.5M16.5 7.5L18 6"/>
+          <svg
+            width={16}
+            height={16}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={ink3}
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ flexShrink: 0 }}
+          >
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 3v2M12 19v2M5 12H3M21 12h-2M6 6l1.5 1.5M16.5 16.5L18 18M6 18l1.5-1.5M16.5 7.5L18 6" />
           </svg>
         )}
-        <div className="relative flex-1 cursor-pointer" style={{ height: 4, borderRadius: 2, background: trackBg }}>
-          <div style={{ position: 'absolute', inset: '0 auto 0 0', width: `${(displayHour / 24) * 100}%`, background: '#006FFF', borderRadius: 2 }} />
-          <div style={{
-            position: 'absolute', top: '50%', left: `${(displayHour / 24) * 100}%`,
-            width: 12, height: 12, borderRadius: '50%', background: '#006FFF',
-            transform: 'translate(-50%, -50%)',
-            boxShadow: `0 0 0 3px ${topBg}, 0 0 0 4px #006FFF`,
-            pointerEvents: 'none',
-          }} />
+        <div
+          className="relative flex-1 cursor-pointer"
+          style={{ height: 4, borderRadius: 2, background: trackBg }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              inset: '0 auto 0 0',
+              width: `${(displayHour / 24) * 100}%`,
+              background: '#006FFF',
+              borderRadius: 2,
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: `${(displayHour / 24) * 100}%`,
+              width: 12,
+              height: 12,
+              borderRadius: '50%',
+              background: '#006FFF',
+              transform: 'translate(-50%, -50%)',
+              boxShadow: `0 0 0 3px ${topBg}, 0 0 0 4px #006FFF`,
+              pointerEvents: 'none',
+            }}
+          />
           <input
-            type="range" min={0} max={24} step={0.25}
+            type="range"
+            min={0}
+            max={24}
+            step={0.25}
             value={displayHour}
             onPointerDown={onSliderDown}
             onChange={(e) => onSliderChange(Number(e.target.value))}
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer', margin: 0 }}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              opacity: 0,
+              cursor: 'pointer',
+              margin: 0,
+            }}
           />
         </div>
-        <span className="tabular-nums text-right shrink-0" style={{ minWidth: 38, fontSize: 11, color: ink2, fontFamily: '"JetBrains Mono",monospace' }}>
+        <span
+          className="tabular-nums text-right shrink-0"
+          style={{
+            minWidth: 38,
+            fontSize: 11,
+            color: ink2,
+            fontFamily: '"JetBrains Mono",monospace',
+          }}
+        >
           {fmt(displayHour)}
         </span>
         {isPreviewing && (
           <button
             type="button"
             onClick={onSyncNow}
-            style={{ fontSize: 10, color: '#006FFF', background: 'rgba(0,111,255,0.10)', border: 'none', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', flexShrink: 0 }}
+            style={{
+              fontSize: 10,
+              color: '#006FFF',
+              background: 'rgba(0,111,255,0.10)',
+              border: 'none',
+              borderRadius: 4,
+              padding: '2px 6px',
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
             title={`同步到现在 ${fmt(realHour)}`}
-          >↺</button>
+          >
+            ↺
+          </button>
         )}
       </div>
 
-      <div style={{ width: 1, height: 20, background: topBorder, margin: '0 12px', flexShrink: 0 }} />
+      <div
+        style={{ width: 1, height: 20, background: topBorder, margin: '0 12px', flexShrink: 0 }}
+      />
 
       {/* ⚙ Tweaks */}
       <div className="relative">
@@ -519,25 +857,65 @@ export function DemoTopBar({
           type="button"
           onClick={() => setTweaksOpen((o) => !o)}
           style={{
-            width: 34, height: 34, border: `1px solid ${topBorder}`, borderRadius: 7,
+            width: 34,
+            height: 34,
+            border: `1px solid ${topBorder}`,
+            borderRadius: 7,
             background: tweaksOpen ? (isNight ? '#1F2431' : '#F6F7F9') : topBg,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: tweaksOpen ? inkColor : ink2, cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: tweaksOpen ? inkColor : ink2,
+            cursor: 'pointer',
           }}
           title="渲染风格"
         >
-          <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+          <svg
+            width={16}
+            height={16}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33h0a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51h0a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v0a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
           </svg>
         </button>
         {tweaksOpen && (
           <div
             className="absolute right-0 top-full mt-2 rounded-xl border overflow-hidden z-30"
-            style={{ background: topBg, borderColor: topBorder, minWidth: 200, boxShadow: isNight ? '0 20px 60px rgba(2,8,18,.38)' : '0 20px 60px rgba(10,14,20,.12)' }}
+            style={{
+              background: topBg,
+              borderColor: topBorder,
+              minWidth: 200,
+              boxShadow: isNight
+                ? '0 20px 60px rgba(2,8,18,.38)'
+                : '0 20px 60px rgba(10,14,20,.12)',
+            }}
           >
-            <div className="flex items-center justify-between px-3.5 py-2.5 border-b" style={{ borderColor: topBorder }}>
+            <div
+              className="flex items-center justify-between px-3.5 py-2.5 border-b"
+              style={{ borderColor: topBorder }}
+            >
               <span style={{ fontSize: 13, fontWeight: 500, color: inkColor }}>渲染风格</span>
-              <button type="button" onClick={() => setTweaksOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: ink3, fontSize: 16, lineHeight: 1, padding: '0 2px' }}>×</button>
+              <button
+                type="button"
+                onClick={() => setTweaksOpen(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: ink3,
+                  fontSize: 16,
+                  lineHeight: 1,
+                  padding: '0 2px',
+                }}
+              >
+                ×
+              </button>
             </div>
             <div className="px-3.5 py-3">
               <div className="flex items-center gap-2.5">
@@ -550,10 +928,15 @@ export function DemoTopBar({
                     <button
                       key={p.key}
                       type="button"
-                      onClick={() => { onPresetChange(p.key) }}
+                      onClick={() => {
+                        onPresetChange(p.key)
+                      }}
                       className="relative transition-all duration-200"
                       style={{
-                        width: 28, height: 28, borderRadius: '50%', background: swatchBg,
+                        width: 28,
+                        height: 28,
+                        borderRadius: '50%',
+                        background: swatchBg,
                         border: `1px solid ${active ? 'rgba(41,74,112,0.9)' : 'rgba(110,132,158,0.34)'}`,
                         opacity: active ? 1 : 0.72,
                         transform: active ? 'scale(1.18)' : 'scale(1)',
@@ -562,21 +945,34 @@ export function DemoTopBar({
                       title={`${p.label} · ${p.description}`}
                     >
                       {active && (
-                        <span className="pointer-events-none absolute -inset-1 rounded-full border"
-                          style={{ borderColor: isNight ? 'rgba(186,210,238,0.82)' : 'rgba(78,124,178,0.72)' }} />
+                        <span
+                          className="pointer-events-none absolute -inset-1 rounded-full border"
+                          style={{
+                            borderColor: isNight
+                              ? 'rgba(186,210,238,0.82)'
+                              : 'rgba(78,124,178,0.72)',
+                          }}
+                        />
                       )}
                     </button>
                   )
                 })}
               </div>
-              <div className="mt-2 text-[10px]" style={{ color: ink3 }}>当前：{preset.label}</div>
+              <div className="mt-2 text-[10px]" style={{ color: ink3 }}>
+                当前：{preset.label}
+              </div>
               <div
                 className="mt-2 flex items-center justify-between gap-2 rounded-md border px-2 py-1.5"
-                style={{ borderColor: topBorder, background: isNight ? 'rgba(16,24,38,0.35)' : 'rgba(245,249,255,0.55)' }}
+                style={{
+                  borderColor: topBorder,
+                  background: isNight ? 'rgba(16,24,38,0.35)' : 'rgba(245,249,255,0.55)',
+                }}
               >
                 <div className="min-w-0">
                   <div style={{ fontSize: 11, color: ink2 }}>实验：统一墙厚 10cm</div>
-                  <div style={{ fontSize: 10, color: ink3 }}>作用于全部楼层与全部模块（可随时关闭）</div>
+                  <div style={{ fontSize: 10, color: ink3 }}>
+                    作用于全部楼层与全部模块（可随时关闭）
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -601,7 +997,7 @@ export function DemoTopBar({
                       width: 16,
                       height: 16,
                       borderRadius: '50%',
-                      background: uniformWall10cm ? '#006FFF' : (isNight ? '#8FA9CA' : '#A8B9CE'),
+                      background: uniformWall10cm ? '#006FFF' : isNight ? '#8FA9CA' : '#A8B9CE',
                       transition: 'left 0.18s ease',
                     }}
                   />
@@ -609,11 +1005,16 @@ export function DemoTopBar({
               </div>
               <div
                 className="mt-2 flex items-center justify-between gap-2 rounded-md border px-2 py-1.5"
-                style={{ borderColor: topBorder, background: isNight ? 'rgba(16,24,38,0.35)' : 'rgba(245,249,255,0.55)' }}
+                style={{
+                  borderColor: topBorder,
+                  background: isNight ? 'rgba(16,24,38,0.35)' : 'rgba(245,249,255,0.55)',
+                }}
               >
                 <div className="min-w-0">
                   <div style={{ fontSize: 11, color: ink2 }}>颜色校准模式</div>
-                  <div style={{ fontSize: 10, color: ink3 }}>中性光源 + 关闭后期，专门用于精确调色</div>
+                  <div style={{ fontSize: 10, color: ink3 }}>
+                    中性光源 + 关闭后期，专门用于精确调色
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -638,7 +1039,11 @@ export function DemoTopBar({
                       width: 16,
                       height: 16,
                       borderRadius: '50%',
-                      background: colorCalibrationMode ? '#006FFF' : (isNight ? '#8FA9CA' : '#A8B9CE'),
+                      background: colorCalibrationMode
+                        ? '#006FFF'
+                        : isNight
+                          ? '#8FA9CA'
+                          : '#A8B9CE',
                       transition: 'left 0.18s ease',
                     }}
                   />
@@ -653,7 +1058,11 @@ export function DemoTopBar({
                     borderRadius: 6,
                     border: `1px solid ${topBorder}`,
                     padding: '4px 8px',
-                    background: editorOpen ? (isNight ? 'rgba(72,122,200,0.2)' : 'rgba(0,111,255,0.12)') : 'transparent',
+                    background: editorOpen
+                      ? isNight
+                        ? 'rgba(72,122,200,0.2)'
+                        : 'rgba(0,111,255,0.12)'
+                      : 'transparent',
                     color: ink2,
                     cursor: 'pointer',
                   }}
@@ -678,11 +1087,57 @@ export function DemoTopBar({
                     正在编辑：{draft.label}（{draft.key}）
                   </div>
 
-                  <div className="flex items-center gap-1 rounded-md border p-1" style={{ borderColor: topBorder }}>
-                    {([
-                      ['quick', '快速调色'],
-                      ['advanced', '高级模式'],
-                    ] as Array<[EditorMode, string]>).map(([mode, label]) => (
+                  <div className="rounded-md border p-1" style={{ borderColor: topBorder }}>
+                    <div className="mb-1 px-1" style={{ fontSize: 10, color: ink3 }}>
+                      第 1 层：时段
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {(
+                        [
+                          ['day', '白天 Day'],
+                          ['night', '夜晚 Night'],
+                          ['global', '共享 Shared'],
+                        ] as Array<[EditorScope, string]>
+                      ).map(([scope, label]) => (
+                        <button
+                          key={scope}
+                          type="button"
+                          onClick={() => setEditorScope(scope)}
+                          style={{
+                            flex: 1,
+                            fontSize: 10,
+                            padding: '4px 6px',
+                            borderRadius: 6,
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: editorScope === scope ? '#006FFF' : ink2,
+                            background:
+                              editorScope === scope
+                                ? isNight
+                                  ? 'rgba(40,92,170,0.24)'
+                                  : 'rgba(0,111,255,0.12)'
+                                : 'transparent',
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div
+                    className="flex items-center gap-1 rounded-md border p-1"
+                    style={{ borderColor: topBorder }}
+                  >
+                    <div className="px-1" style={{ fontSize: 10, color: ink3 }}>
+                      第 2 层：编辑模式
+                    </div>
+                    {(
+                      [
+                        ['quick', '快速校色'],
+                        ['advanced', '高级精修'],
+                      ] as Array<[EditorMode, string]>
+                    ).map(([mode, label]) => (
                       <button
                         key={mode}
                         type="button"
@@ -695,7 +1150,12 @@ export function DemoTopBar({
                           border: 'none',
                           cursor: 'pointer',
                           color: editorMode === mode ? '#006FFF' : ink2,
-                          background: editorMode === mode ? (isNight ? 'rgba(40,92,170,0.24)' : 'rgba(0,111,255,0.12)') : 'transparent',
+                          background:
+                            editorMode === mode
+                              ? isNight
+                                ? 'rgba(40,92,170,0.24)'
+                                : 'rgba(0,111,255,0.12)'
+                              : 'transparent',
                         }}
                       >
                         {label}
@@ -705,203 +1165,285 @@ export function DemoTopBar({
 
                   {editorMode === 'quick' ? (
                     <>
-                      <div className="space-y-2">
-                        <div className="text-[10px]" style={{ color: ink3 }}>核心光照参数</div>
-                        {quickNumericFields.map((f) => (
-                          <div key={String(f.key)} className="rounded-md border px-2 py-1.5" style={{ borderColor: topBorder }}>
-                            <div className="mb-1 flex items-center justify-between gap-2">
-                              <span style={{ color: ink2, fontSize: 11 }}>{f.label}</span>
-                              <span style={{ fontSize: 10, color: ink3 }}>{Number((draft[f.key] as number).toFixed(2))}</span>
-                            </div>
-                            <input
-                              type="range"
-                              min={f.min}
-                              max={f.max}
-                              step={f.step}
-                              value={Number(draft[f.key] as number)}
-                              onChange={(e) => {
-                                const raw = Number(e.target.value)
-                                const next = { ...draft, [f.key]: Number.isFinite(raw) ? raw : (draft[f.key] as number) } as RenderPreset
-                                applyDraft(next)
-                              }}
-                              style={{ width: '100%' }}
-                            />
-                          </div>
-                        ))}
+                      <div
+                        className="rounded-md border px-2 py-1.5"
+                        style={{
+                          borderColor: topBorder,
+                          background: isNight ? 'rgba(16,24,38,0.35)' : 'rgba(255,255,255,0.5)',
+                        }}
+                      >
+                        <div style={{ fontSize: 11, color: ink2 }}>快速校色（只保留核心参数）</div>
+                        <div style={{ fontSize: 10, color: ink3, marginTop: 2 }}>
+                          先做可见结果：光照基线 → 主体颜色。不含精修项，避免混淆。
+                        </div>
                       </div>
-
-                      <label className="flex items-center justify-between gap-2">
-                        <span style={{ color: ink2, fontSize: 11 }}>边线透明度</span>
-                        <input
-                          type="number"
-                          step={0.01}
-                          min={0}
-                          max={1}
-                          value={draft.theme.capOpacity}
-                          onChange={(e) => {
-                            const raw = Number(e.target.value)
-                            const next = { ...draft, theme: { ...draft.theme, capOpacity: Number.isFinite(raw) ? raw : draft.theme.capOpacity } }
-                            applyDraft(next)
-                          }}
-                          style={{
-                            width: 92, fontSize: 11, padding: '3px 6px', borderRadius: 6,
-                            border: `1px solid ${topBorder}`, background: 'transparent', color: inkColor,
-                          }}
-                        />
-                      </label>
+                      <div className="space-y-2">
+                        <div className="text-[10px]" style={{ color: ink3 }}>
+                          光照类（快速）
+                        </div>
+                        {quickNumericFields
+                          .filter((f) => quickNumericKeysByScope[editorScope].has(f.key))
+                          .map((f) => (
+                            <div
+                              key={String(f.key)}
+                              className="rounded-md border px-2 py-1.5"
+                              style={{ borderColor: topBorder }}
+                            >
+                              <div className="mb-1 flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-1.5">
+                                  <span style={{ color: ink2, fontSize: 11 }}>{f.label}</span>
+                                </div>
+                                <span style={{ fontSize: 10, color: ink3 }}>
+                                  {Number((draft[f.key] as number).toFixed(2))}
+                                </span>
+                              </div>
+                              <div className="mb-1" style={{ fontSize: 10, color: ink3 }}>
+                                {f.hint}
+                              </div>
+                              <input
+                                type="range"
+                                min={f.min}
+                                max={f.max}
+                                step={f.step}
+                                value={Number(draft[f.key] as number)}
+                                onChange={(e) => {
+                                  const raw = Number(e.target.value)
+                                  const next = {
+                                    ...draft,
+                                    [f.key]: Number.isFinite(raw) ? raw : (draft[f.key] as number),
+                                  } as RenderPreset
+                                  applyDraft(next)
+                                }}
+                                style={{ width: '100%' }}
+                              />
+                            </div>
+                          ))}
+                      </div>
 
                       <div className="space-y-2">
                         <div className="text-[10px]" style={{ color: ink3 }}>
-                          快速色板：只保留常用可见色，避免调色噪音。
-                        </div>
-                        <div className="flex items-center gap-1 rounded-md border p-1" style={{ borderColor: topBorder }}>
-                          {([
-                            ['day', '白天'],
-                            ['night', '夜晚'],
-                          ] as Array<[EditorScope, string]>).map(([scope, label]) => (
-                            <button
-                              key={scope}
-                              type="button"
-                              onClick={() => setEditorScope(scope)}
-                              style={{
-                                flex: 1,
-                                fontSize: 10,
-                                padding: '4px 6px',
-                                borderRadius: 6,
-                                border: 'none',
-                                cursor: 'pointer',
-                                color: editorScope === scope ? '#006FFF' : ink2,
-                                background: editorScope === scope ? (isNight ? 'rgba(40,92,170,0.24)' : 'rgba(0,111,255,0.12)') : 'transparent',
-                              }}
-                            >
-                              {label}
-                            </button>
-                          ))}
+                          建筑与背景类（快速）
                         </div>
                         <div className="space-y-1.5">
                           {editorScope === 'day' && quickDayThemeFields.map(renderThemeField)}
                           {editorScope === 'night' && quickNightThemeFields.map(renderThemeField)}
+                          {editorScope === 'global' && quickSharedThemeFields.map(renderThemeField)}
+                        </div>
+                      </div>
+                      <div
+                        className="rounded-md border px-2 py-1.5"
+                        style={{
+                          borderColor: topBorder,
+                          background: isNight ? 'rgba(16,24,38,0.35)' : 'rgba(255,255,255,0.5)',
+                        }}
+                      >
+                        <div style={{ fontSize: 10, color: ink3 }}>
+                          需要更细参数（材质、系统 UI、后期）请切到“高级精修”。
                         </div>
                       </div>
                     </>
                   ) : (
                     <>
+                      <div
+                        className="rounded-md border p-2"
+                        style={{
+                          borderColor: topBorder,
+                          background: isNight ? 'rgba(16,24,38,0.35)' : 'rgba(255,255,255,0.5)',
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setReferenceGuideOpen((v) => !v)}
+                          style={{
+                            width: '100%',
+                            textAlign: 'left',
+                            fontSize: 11,
+                            border: 'none',
+                            background: 'transparent',
+                            color: ink2,
+                            cursor: 'pointer',
+                          }}
+                        >
+                          {referenceGuideOpen ? '收起' : '展开'} 参考图复刻助手
+                        </button>
+                        {referenceGuideOpen && (
+                          <div className="mt-2 space-y-1.5" style={{ fontSize: 10, color: ink3 }}>
+                            <div>1) 先校准光照（曝光 / 环境光 / 主光），只看明暗和层次。</div>
+                            <div>2) 再调必调主色（墙体 / 家具 / 背景 / 楼板 / 边线）。</div>
+                            <div>3) 最后用精修项修质感，再决定是否动系统项。</div>
+                          </div>
+                        )}
+                      </div>
+
                       <div className="space-y-1.5">
-                        <div className="text-[10px]" style={{ color: ink3 }}>基础参数</div>
-                        {numericFields.map((f) => (
-                          <label key={String(f.key)} className="flex items-center justify-between gap-2">
-                            <span style={{ color: ink2, fontSize: 11 }}>{f.label}</span>
-                            <input
-                              type="number"
-                              step={f.step}
-                              min={f.min}
-                              max={f.max}
-                              value={String(draft[f.key] as number)}
+                        <div className="text-[10px]" style={{ color: ink3 }}>
+                          光照类（高级）
+                        </div>
+                        {numericFields
+                          .filter((f) => advancedNumericKeysByScope[editorScope].has(f.key))
+                          .map((f) => (
+                            <div
+                              key={String(f.key)}
+                              className="rounded-md border p-2"
+                              style={{ borderColor: topBorder }}
+                            >
+                              <div className="mb-1 flex items-center justify-between gap-2">
+                                <span style={{ color: ink2, fontSize: 11 }}>{f.label}</span>
+                                <input
+                                  type="number"
+                                  step={f.step}
+                                  min={f.min}
+                                  max={f.max}
+                                  value={String(draft[f.key] as number)}
+                                  onChange={(e) => {
+                                    const raw = Number(e.target.value)
+                                    const next = {
+                                      ...draft,
+                                      [f.key]: Number.isFinite(raw)
+                                        ? raw
+                                        : (draft[f.key] as number),
+                                    } as RenderPreset
+                                    applyDraft(next)
+                                  }}
+                                  style={{
+                                    width: 92,
+                                    fontSize: 11,
+                                    padding: '3px 6px',
+                                    borderRadius: 6,
+                                    border: `1px solid ${topBorder}`,
+                                    background: 'transparent',
+                                    color: inkColor,
+                                  }}
+                                />
+                              </div>
+                              {NUMERIC_FIELD_LINK_HINT[f.key] && (
+                                <div style={{ fontSize: 10, color: ink3 }}>
+                                  {NUMERIC_FIELD_LINK_HINT[f.key]}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        {editorScope !== 'night' && (
+                          <label className="space-y-1">
+                            <span style={{ color: ink3, fontSize: 10 }}>环境 Day</span>
+                            <select
+                              value={draft.theme.envPresetDay}
                               onChange={(e) => {
-                                const raw = Number(e.target.value)
-                                const next = { ...draft, [f.key]: Number.isFinite(raw) ? raw : (draft[f.key] as number) } as RenderPreset
+                                const next = {
+                                  ...draft,
+                                  theme: {
+                                    ...draft.theme,
+                                    envPresetDay: e.target
+                                      .value as RenderPreset['theme']['envPresetDay'],
+                                  },
+                                }
                                 applyDraft(next)
                               }}
                               style={{
-                                width: 92, fontSize: 11, padding: '3px 6px', borderRadius: 6,
-                                border: `1px solid ${topBorder}`, background: 'transparent', color: inkColor,
+                                width: '100%',
+                                fontSize: 11,
+                                padding: '4px 6px',
+                                borderRadius: 6,
+                                border: `1px solid ${topBorder}`,
+                                background: 'transparent',
+                                color: inkColor,
                               }}
-                            />
+                            >
+                              <option value="apartment">apartment</option>
+                              <option value="city">city</option>
+                              <option value="studio">studio</option>
+                              <option value="warehouse">warehouse</option>
+                            </select>
                           </label>
-                        ))}
-                      </div>
-
-                      <label className="flex items-center justify-between gap-2">
-                        <span style={{ color: ink2, fontSize: 11 }}>边线透明度</span>
-                        <input
-                          type="number"
-                          step={0.01}
-                          min={0}
-                          max={1}
-                          value={draft.theme.capOpacity}
-                          onChange={(e) => {
-                            const raw = Number(e.target.value)
-                            const next = { ...draft, theme: { ...draft.theme, capOpacity: Number.isFinite(raw) ? raw : draft.theme.capOpacity } }
-                            applyDraft(next)
-                          }}
-                          style={{
-                            width: 92, fontSize: 11, padding: '3px 6px', borderRadius: 6,
-                            border: `1px solid ${topBorder}`, background: 'transparent', color: inkColor,
-                          }}
-                        />
-                      </label>
-
-                      <div className="grid grid-cols-2 gap-2">
-                    <label className="space-y-1">
-                      <span style={{ color: ink3, fontSize: 10 }}>环境 Day</span>
-                      <select
-                        value={draft.theme.envPresetDay}
-                        onChange={(e) => {
-                          const next = { ...draft, theme: { ...draft.theme, envPresetDay: e.target.value as RenderPreset['theme']['envPresetDay'] } }
-                          applyDraft(next)
-                        }}
-                        style={{ width: '100%', fontSize: 11, padding: '4px 6px', borderRadius: 6, border: `1px solid ${topBorder}`, background: 'transparent', color: inkColor }}
-                      >
-                        <option value="apartment">apartment</option>
-                        <option value="city">city</option>
-                        <option value="studio">studio</option>
-                        <option value="warehouse">warehouse</option>
-                      </select>
-                    </label>
-                    <label className="space-y-1">
-                      <span style={{ color: ink3, fontSize: 10 }}>环境 Night</span>
-                      <select
-                        value={draft.theme.envPresetNight}
-                        onChange={(e) => {
-                          const next = { ...draft, theme: { ...draft.theme, envPresetNight: e.target.value as RenderPreset['theme']['envPresetNight'] } }
-                          applyDraft(next)
-                        }}
-                        style={{ width: '100%', fontSize: 11, padding: '4px 6px', borderRadius: 6, border: `1px solid ${topBorder}`, background: 'transparent', color: inkColor }}
-                      >
-                        <option value="night">night</option>
-                        <option value="city">city</option>
-                        <option value="warehouse">warehouse</option>
-                        <option value="studio">studio</option>
-                      </select>
-                    </label>
+                        )}
+                        {editorScope !== 'day' && (
+                          <label className="space-y-1">
+                            <span style={{ color: ink3, fontSize: 10 }}>环境 Night</span>
+                            <select
+                              value={draft.theme.envPresetNight}
+                              onChange={(e) => {
+                                const next = {
+                                  ...draft,
+                                  theme: {
+                                    ...draft.theme,
+                                    envPresetNight: e.target
+                                      .value as RenderPreset['theme']['envPresetNight'],
+                                  },
+                                }
+                                applyDraft(next)
+                              }}
+                              style={{
+                                width: '100%',
+                                fontSize: 11,
+                                padding: '4px 6px',
+                                borderRadius: 6,
+                                border: `1px solid ${topBorder}`,
+                                background: 'transparent',
+                                color: inkColor,
+                              }}
+                            >
+                              <option value="night">night</option>
+                              <option value="city">city</option>
+                              <option value="warehouse">warehouse</option>
+                              <option value="studio">studio</option>
+                            </select>
+                          </label>
+                        )}
                       </div>
 
                       <div className="space-y-2">
                         <div style={{ fontSize: 10, color: ink3 }}>
-                          默认只展示“建筑和家具可见色”。系统 UI 色放在高级项，避免信息过载。
+                          建筑 / 环境 / 材质颜色（高级）
                         </div>
-                        <div className="flex items-center gap-1 rounded-md border p-1" style={{ borderColor: topBorder }}>
-                          {([
-                            ['day', '白天'],
-                            ['night', '夜晚'],
-                            ['global', '共享'],
-                          ] as Array<[EditorScope, string]>).map(([scope, label]) => (
-                            <button
-                              key={scope}
-                              type="button"
-                              onClick={() => setEditorScope(scope)}
-                              style={{
-                                flex: 1,
-                                fontSize: 10,
-                                padding: '4px 6px',
-                                borderRadius: 6,
-                                border: 'none',
-                                cursor: 'pointer',
-                                color: editorScope === scope ? '#006FFF' : ink2,
-                                background: editorScope === scope ? (isNight ? 'rgba(40,92,170,0.24)' : 'rgba(0,111,255,0.12)') : 'transparent',
-                              }}
-                            >
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-
                         <div className="space-y-1.5">
+                          {editorScope === 'global' && (
+                            <label
+                              className="flex items-center justify-between gap-2 rounded-md border p-2"
+                              style={{ borderColor: topBorder }}
+                            >
+                              <span style={{ color: ink2, fontSize: 11 }}>楼层边线透明度</span>
+                              <input
+                                type="number"
+                                step={0.01}
+                                min={0}
+                                max={1}
+                                value={draft.theme.capOpacity}
+                                onChange={(e) => {
+                                  const raw = Number(e.target.value)
+                                  const next = {
+                                    ...draft,
+                                    theme: {
+                                      ...draft.theme,
+                                      capOpacity: Number.isFinite(raw)
+                                        ? raw
+                                        : draft.theme.capOpacity,
+                                    },
+                                  }
+                                  applyDraft(next)
+                                }}
+                                style={{
+                                  width: 92,
+                                  fontSize: 11,
+                                  padding: '3px 6px',
+                                  borderRadius: 6,
+                                  border: `1px solid ${topBorder}`,
+                                  background: 'transparent',
+                                  color: inkColor,
+                                }}
+                              />
+                            </label>
+                          )}
                           {editorScope === 'day' && dayThemeFields.map(renderThemeField)}
                           {editorScope === 'night' && nightThemeFields.map(renderThemeField)}
                           {editorScope === 'global' && sharedThemeFields.map(renderThemeField)}
                           {(editorScope === 'day' || editorScope === 'night') && (
-                            <div className="rounded-md border p-2" style={{ borderColor: topBorder }}>
+                            <div
+                              className="rounded-md border p-2"
+                              style={{ borderColor: topBorder }}
+                            >
                               <button
                                 type="button"
                                 onClick={() => setShowUiSystemFields((v) => !v)}
@@ -920,7 +1462,8 @@ export function DemoTopBar({
                               {showUiSystemFields && (
                                 <div className="mt-2 space-y-1.5">
                                   {editorScope === 'day' && uiDayThemeFields.map(renderThemeField)}
-                                  {editorScope === 'night' && uiNightThemeFields.map(renderThemeField)}
+                                  {editorScope === 'night' &&
+                                    uiNightThemeFields.map(renderThemeField)}
                                 </div>
                               )}
                             </div>
@@ -934,13 +1477,18 @@ export function DemoTopBar({
                     <button
                       type="button"
                       onClick={() => {
-                        const fallback = buildDraft(presetCatalog[activePresetKey])
+                        const fallback = clonePresetDraft(presetCatalog[activePresetKey])
                         setDraft(fallback)
                         onPreviewPreset(null)
                       }}
                       style={{
-                        fontSize: 11, borderRadius: 6, padding: '4px 8px', cursor: 'pointer',
-                        border: `1px solid ${topBorder}`, background: 'transparent', color: ink2,
+                        fontSize: 11,
+                        borderRadius: 6,
+                        padding: '4px 8px',
+                        cursor: 'pointer',
+                        border: `1px solid ${topBorder}`,
+                        background: 'transparent',
+                        color: ink2,
                       }}
                     >
                       取消预览
@@ -949,13 +1497,18 @@ export function DemoTopBar({
                       type="button"
                       onClick={() => {
                         onResetPreset(activePresetKey)
-                        const fallback = buildDraft(RENDER_PRESETS[activePresetKey])
+                        const fallback = clonePresetDraft(RENDER_PRESETS[activePresetKey])
                         setDraft(fallback)
                         onPreviewPreset(null)
                       }}
                       style={{
-                        fontSize: 11, borderRadius: 6, padding: '4px 8px', cursor: 'pointer',
-                        border: `1px solid ${topBorder}`, background: 'transparent', color: '#ef4444',
+                        fontSize: 11,
+                        borderRadius: 6,
+                        padding: '4px 8px',
+                        cursor: 'pointer',
+                        border: `1px solid ${topBorder}`,
+                        background: 'transparent',
+                        color: '#ef4444',
                       }}
                     >
                       恢复默认
@@ -964,8 +1517,13 @@ export function DemoTopBar({
                       type="button"
                       onClick={() => onSavePreset(activePresetKey, draft)}
                       style={{
-                        fontSize: 11, borderRadius: 6, padding: '4px 8px', cursor: 'pointer',
-                        border: `1px solid rgba(0,111,255,0.45)`, background: 'rgba(0,111,255,0.12)', color: '#006FFF',
+                        fontSize: 11,
+                        borderRadius: 6,
+                        padding: '4px 8px',
+                        cursor: 'pointer',
+                        border: `1px solid rgba(0,111,255,0.45)`,
+                        background: 'rgba(0,111,255,0.12)',
+                        color: '#006FFF',
                       }}
                     >
                       保存覆盖
@@ -1003,123 +1561,242 @@ export function DemoRail({
   onOverviewClick: () => void
 }) {
   const chrome = getDemoChromePalette(isNight, preset)
-  const railBg     = chrome.bg
+  const railBg = chrome.bg
   const railBorder = chrome.border
-  const ink3       = chrome.text3
+  const ink3 = chrome.text3
 
-  type RailEntry = { id: string; tip: string; color: string; icon: React.ReactNode; active?: boolean }
+  type RailEntry = {
+    id: string
+    tip: string
+    color: string
+    icon: React.ReactNode
+    active?: boolean
+  }
 
   const entries: (RailEntry | null)[] = [
     {
-      id: 'overview', tip: '全屋总览', color: '#006AFF',
+      id: 'overview',
+      tip: '全屋总览',
+      color: '#006AFF',
       icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" width={20} height={20}>
-          <path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1z"/>
-          <path d="M9 21V14h6v7"/>
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          width={20}
+          height={20}
+        >
+          <path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1z" />
+          <path d="M9 21V14h6v7" />
         </svg>
       ),
     },
     null,
     {
-      id: 'architecture', tip: '架构', color: '#94a3b8',
+      id: 'architecture',
+      tip: '架构',
+      color: '#94a3b8',
       icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" width={20} height={20}>
-          <rect x="7" y="7" width="10" height="10" rx="2"/>
-          <line x1="7" y1="10" x2="4" y2="10"/><line x1="7" y1="14" x2="4" y2="14"/>
-          <line x1="17" y1="10" x2="20" y2="10"/><line x1="17" y1="14" x2="20" y2="14"/>
-          <line x1="10" y1="7" x2="10" y2="4"/><line x1="14" y1="7" x2="14" y2="4"/>
-          <line x1="10" y1="17" x2="10" y2="20"/><line x1="14" y1="17" x2="14" y2="20"/>
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          width={20}
+          height={20}
+        >
+          <rect x="7" y="7" width="10" height="10" rx="2" />
+          <line x1="7" y1="10" x2="4" y2="10" />
+          <line x1="7" y1="14" x2="4" y2="14" />
+          <line x1="17" y1="10" x2="20" y2="10" />
+          <line x1="17" y1="14" x2="20" y2="14" />
+          <line x1="10" y1="7" x2="10" y2="4" />
+          <line x1="14" y1="7" x2="14" y2="4" />
+          <line x1="10" y1="17" x2="10" y2="20" />
+          <line x1="14" y1="17" x2="14" y2="20" />
         </svg>
       ),
     },
     {
-      id: 'lighting', tip: '灯光', color: '#d4a853',
+      id: 'lighting',
+      tip: '灯光',
+      color: '#d4a853',
       icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" width={20} height={20}>
-          <path d="M9 18h6"/>
-          <path d="M10 21h4"/>
-          <path d="M9 18c-1.2-1-3-3.2-3-6a6 6 0 1112 0c0 2.8-1.8 5-3 6"/>
-          <path d="M12 2v1.5" opacity="0.5"/>
-          <path d="M18.5 5.5l-1 1" opacity="0.5"/>
-          <path d="M5.5 5.5l1 1" opacity="0.5"/>
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          width={20}
+          height={20}
+        >
+          <path d="M9 18h6" />
+          <path d="M10 21h4" />
+          <path d="M9 18c-1.2-1-3-3.2-3-6a6 6 0 1112 0c0 2.8-1.8 5-3 6" />
+          <path d="M12 2v1.5" opacity="0.5" />
+          <path d="M18.5 5.5l-1 1" opacity="0.5" />
+          <path d="M5.5 5.5l1 1" opacity="0.5" />
         </svg>
       ),
     },
     {
-      id: 'panel', tip: '面板', color: '#c8b8a0',
+      id: 'panel',
+      tip: '面板',
+      color: '#c8b8a0',
       icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" width={20} height={20}>
-          <rect x="4" y="4" width="16" height="16" rx="2.5"/>
-          <line x1="12" y1="6" x2="12" y2="18"/>
-          <circle cx="8" cy="10" r="1"/>
-          <circle cx="16" cy="14" r="1"/>
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          width={20}
+          height={20}
+        >
+          <rect x="4" y="4" width="16" height="16" rx="2.5" />
+          <line x1="12" y1="6" x2="12" y2="18" />
+          <circle cx="8" cy="10" r="1" />
+          <circle cx="16" cy="14" r="1" />
         </svg>
       ),
     },
     {
-      id: 'sensor', tip: '传感器', color: '#4ade80',
+      id: 'sensor',
+      tip: '传感器',
+      color: '#4ade80',
       icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" width={20} height={20}>
-          <circle cx="12" cy="12" r="2"/>
-          <path d="M16.24 7.76a6 6 0 010 8.49"/>
-          <path d="M19.07 4.93a10 10 0 010 14.14"/>
-          <path d="M7.76 16.24a6 6 0 010-8.49"/>
-          <path d="M4.93 19.07a10 10 0 010-14.14"/>
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+          width={20}
+          height={20}
+        >
+          <circle cx="12" cy="12" r="2" />
+          <path d="M16.24 7.76a6 6 0 010 8.49" />
+          <path d="M19.07 4.93a10 10 0 010 14.14" />
+          <path d="M7.76 16.24a6 6 0 010-8.49" />
+          <path d="M4.93 19.07a10 10 0 010-14.14" />
         </svg>
       ),
     },
     {
-      id: 'curtain', tip: '遮阳', color: '#3dd9b6',
+      id: 'curtain',
+      tip: '遮阳',
+      color: '#3dd9b6',
       icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" width={20} height={20}>
-          <line x1="3" y1="4" x2="21" y2="4"/>
-          <line x1="5" y1="4" x2="5" y2="6"/><line x1="19" y1="4" x2="19" y2="6"/>
-          <line x1="5" y1="8" x2="19" y2="8"/>
-          <line x1="5" y1="12" x2="19" y2="12"/>
-          <line x1="5" y1="16" x2="19" y2="16"/>
-          <line x1="5" y1="20" x2="19" y2="20"/>
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          width={20}
+          height={20}
+        >
+          <line x1="3" y1="4" x2="21" y2="4" />
+          <line x1="5" y1="4" x2="5" y2="6" />
+          <line x1="19" y1="4" x2="19" y2="6" />
+          <line x1="5" y1="8" x2="19" y2="8" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+          <line x1="5" y1="16" x2="19" y2="16" />
+          <line x1="5" y1="20" x2="19" y2="20" />
         </svg>
       ),
     },
     {
-      id: 'hvac', tip: '暖通', color: '#9b7bea',
+      id: 'hvac',
+      tip: '暖通',
+      color: '#9b7bea',
       icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" width={20} height={20}>
-          <path d="M10 17.66V6a2 2 0 014 0v11.66a4 4 0 11-4 0z"/>
-          <line x1="12" y1="17" x2="12" y2="10"/>
-          <path d="M18 9a3 3 0 010 4" opacity="0.5"/>
-          <path d="M20.5 7.5a6 6 0 010 7" opacity="0.3"/>
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          width={20}
+          height={20}
+        >
+          <path d="M10 17.66V6a2 2 0 014 0v11.66a4 4 0 11-4 0z" />
+          <line x1="12" y1="17" x2="12" y2="10" />
+          <path d="M18 9a3 3 0 010 4" opacity="0.5" />
+          <path d="M20.5 7.5a6 6 0 010 7" opacity="0.3" />
         </svg>
       ),
     },
     {
-      id: 'av', tip: '影音', color: '#5ba0f5',
+      id: 'av',
+      tip: '影音',
+      color: '#5ba0f5',
       icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" width={20} height={20}>
-          <rect x="2" y="4" width="20" height="13" rx="2"/>
-          <line x1="8" y1="21" x2="16" y2="21"/>
-          <line x1="12" y1="17" x2="12" y2="21"/>
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          width={20}
+          height={20}
+        >
+          <rect x="2" y="4" width="20" height="13" rx="2" />
+          <line x1="8" y1="21" x2="16" y2="21" />
+          <line x1="12" y1="17" x2="12" y2="21" />
         </svg>
       ),
     },
     {
-      id: 'security', tip: '安防', color: '#f59e0b',
+      id: 'security',
+      tip: '安防',
+      color: '#f59e0b',
       icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" width={20} height={20}>
-          <path d="M12 3L4 7v4c0 5 3.3 9.3 8 11 4.7-1.7 8-6 8-11V7l-8-4z"/>
-          <circle cx="12" cy="12" r="2.5"/>
-          <circle cx="12" cy="12" r="0.8"/>
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          width={20}
+          height={20}
+        >
+          <path d="M12 3L4 7v4c0 5 3.3 9.3 8 11 4.7-1.7 8-6 8-11V7l-8-4z" />
+          <circle cx="12" cy="12" r="2.5" />
+          <circle cx="12" cy="12" r="0.8" />
         </svg>
       ),
     },
     {
-      id: 'network', tip: '网络', color: '#60a5fa',
+      id: 'network',
+      tip: '网络',
+      color: '#60a5fa',
       icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" width={20} height={20}>
-          <circle cx="12" cy="19" r="1.5"/>
-          <path d="M8.5 15.5a5 5 0 017 0"/>
-          <path d="M5.5 12.5a9 9 0 0113 0"/>
-          <path d="M2.5 9.5a13 13 0 0119 0"/>
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+          width={20}
+          height={20}
+        >
+          <circle cx="12" cy="19" r="1.5" />
+          <path d="M8.5 15.5a5 5 0 017 0" />
+          <path d="M5.5 12.5a9 9 0 0113 0" />
+          <path d="M2.5 9.5a13 13 0 0119 0" />
         </svg>
       ),
     },
@@ -1128,14 +1805,20 @@ export function DemoRail({
   return (
     <div
       className="flex shrink-0 flex-col py-3 z-10"
-      style={{ width: 64, background: railBg, borderRight: `1px solid ${railBorder}`, transition: 'background 0.4s' }}
+      style={{
+        width: 64,
+        background: railBg,
+        borderRight: `1px solid ${railBorder}`,
+        transition: 'background 0.4s',
+      }}
     >
       {entries.map((entry, i) => {
         if (entry === null) {
           return <div key={i} style={{ height: 1, background: railBorder, margin: '6px 12px' }} />
         }
         const { id, tip, color, icon } = entry
-        const isActive = id === 'overview' ? isGlobalOverview : (!isGlobalOverview && id === activeModule)
+        const isActive =
+          id === 'overview' ? isGlobalOverview : !isGlobalOverview && id === activeModule
         const activeBg = `color-mix(in srgb, ${color} ${isNight ? '14%' : '8%'}, transparent)`
         const handleClick = () => {
           if (id === 'overview') {
@@ -1148,21 +1831,34 @@ export function DemoRail({
           <div key={id} className="group relative flex justify-center">
             {/* v0.3 left-border active indicator */}
             {isActive && (
-              <div style={{
-                position: 'absolute', left: 0, top: 9, height: 26, width: 2.5,
-                borderRadius: '0 2px 2px 0', background: color, pointerEvents: 'none',
-              }} />
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 9,
+                  height: 26,
+                  width: 2.5,
+                  borderRadius: '0 2px 2px 0',
+                  background: color,
+                  pointerEvents: 'none',
+                }}
+              />
             )}
             <button
               type="button"
               onClick={handleClick}
               style={{
-                width: 44, height: 44, borderRadius: 9,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: 44,
+                height: 44,
+                borderRadius: 9,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
                 border: 'none',
                 color: isActive ? color : ink3,
                 background: isActive ? activeBg : 'transparent',
-                cursor: 'pointer', position: 'relative',
+                cursor: 'pointer',
+                position: 'relative',
                 transition: 'background 0.15s, color 0.15s',
               }}
               onMouseEnter={(e) => {
@@ -1186,11 +1882,17 @@ export function DemoRail({
             <div
               className="opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
               style={{
-                position: 'absolute', left: 56, top: '50%', transform: 'translateY(-50%)',
+                position: 'absolute',
+                left: 56,
+                top: '50%',
+                transform: 'translateY(-50%)',
                 background: chrome.bg,
                 color: chrome.text,
                 border: `1px solid ${chrome.border}`,
-                padding: '4px 8px', borderRadius: 5, fontSize: 11, whiteSpace: 'nowrap' as const,
+                padding: '4px 8px',
+                borderRadius: 5,
+                fontSize: 11,
+                whiteSpace: 'nowrap' as const,
                 zIndex: 30,
               }}
             >
@@ -1209,8 +1911,8 @@ export interface SceneConfig {
   id: string
   label: string
   icon: React.ReactNode
-  roomBrightness: number                                          // 0-100，控制 base lighting 层亮度
-  getStates: (devices: DeviceData[]) => Record<string, { on: boolean; brightness: number }>  // 控制已配置灯具（可以没有）
+  roomBrightness: number // 0-100，控制 base lighting 层亮度
+  getStates: (devices: DeviceData[]) => Record<string, { on: boolean; brightness: number }> // 控制已配置灯具（可以没有）
 }
 
 export const DEMO_SCENES: SceneConfig[] = [
@@ -1218,43 +1920,132 @@ export const DEMO_SCENES: SceneConfig[] = [
     id: 'arrive',
     label: '回家',
     roomBrightness: 75,
-    icon: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width={16} height={16}><path d="M2 7L8 2l6 5v7H2z" /><path d="M6 14V9h4v5" /></svg>,
-    getStates: (devices) => Object.fromEntries(devices.map(d => [d.id, { on: true, brightness: 75 }])),
+    icon: (
+      <svg
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        width={16}
+        height={16}
+      >
+        <path d="M2 7L8 2l6 5v7H2z" />
+        <path d="M6 14V9h4v5" />
+      </svg>
+    ),
+    getStates: (devices) =>
+      Object.fromEntries(devices.map((d) => [d.id, { on: true, brightness: 75 }])),
   },
   {
     id: 'leave',
     label: '离家',
     roomBrightness: 0,
-    icon: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width={16} height={16}><path d="M10 11l4-3-4-3" /><path d="M14 8H6" /><path d="M6 13H3a1 1 0 01-1-1V4a1 1 0 011-1h3" /></svg>,
-    getStates: (devices) => Object.fromEntries(devices.map(d => [d.id, { on: false, brightness: 0 }])),
+    icon: (
+      <svg
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        width={16}
+        height={16}
+      >
+        <path d="M10 11l4-3-4-3" />
+        <path d="M14 8H6" />
+        <path d="M6 13H3a1 1 0 01-1-1V4a1 1 0 011-1h3" />
+      </svg>
+    ),
+    getStates: (devices) =>
+      Object.fromEntries(devices.map((d) => [d.id, { on: false, brightness: 0 }])),
   },
   {
     id: 'morning',
     label: '晨起',
     roomBrightness: 45,
-    icon: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width={16} height={16}><circle cx="8" cy="8" r="3" /><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M11.5 4.5l1.4-1.4M3.1 12.9l1.4-1.4" /></svg>,
-    getStates: (devices) => Object.fromEntries(devices.map(d => [d.id, { on: true, brightness: 45 }])),
+    icon: (
+      <svg
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        width={16}
+        height={16}
+      >
+        <circle cx="8" cy="8" r="3" />
+        <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M11.5 4.5l1.4-1.4M3.1 12.9l1.4-1.4" />
+      </svg>
+    ),
+    getStates: (devices) =>
+      Object.fromEntries(devices.map((d) => [d.id, { on: true, brightness: 45 }])),
   },
   {
     id: 'dining',
     label: '用餐',
     roomBrightness: 92,
-    icon: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width={16} height={16}><path d="M5 2v5a2 2 0 002 2v5M9 2v12M11 2v4a2 2 0 002 2v6" /></svg>,
-    getStates: (devices) => Object.fromEntries(devices.map(d => [d.id, { on: true, brightness: 92 }])),
+    icon: (
+      <svg
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        width={16}
+        height={16}
+      >
+        <path d="M5 2v5a2 2 0 002 2v5M9 2v12M11 2v4a2 2 0 002 2v6" />
+      </svg>
+    ),
+    getStates: (devices) =>
+      Object.fromEntries(devices.map((d) => [d.id, { on: true, brightness: 92 }])),
   },
   {
     id: 'cinema',
     label: '观影',
     roomBrightness: 8,
-    icon: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width={16} height={16}><rect x="1" y="3" width="14" height="10" rx="1" /><path d="M8 13v2M5 15h6" /></svg>,
-    getStates: (devices) => Object.fromEntries(devices.map((d, i) => [d.id, { on: i === 0, brightness: 12 }])),
+    icon: (
+      <svg
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        width={16}
+        height={16}
+      >
+        <rect x="1" y="3" width="14" height="10" rx="1" />
+        <path d="M8 13v2M5 15h6" />
+      </svg>
+    ),
+    getStates: (devices) =>
+      Object.fromEntries(devices.map((d, i) => [d.id, { on: i === 0, brightness: 12 }])),
   },
   {
     id: 'sleep',
     label: '睡眠',
     roomBrightness: 0,
-    icon: <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width={16} height={16}><path d="M12 8A6 6 0 014 4a6 6 0 108 8z" /></svg>,
-    getStates: (devices) => Object.fromEntries(devices.map(d => [d.id, { on: false, brightness: 0 }])),
+    icon: (
+      <svg
+        viewBox="0 0 16 16"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        width={16}
+        height={16}
+      >
+        <path d="M12 8A6 6 0 014 4a6 6 0 108 8z" />
+      </svg>
+    ),
+    getStates: (devices) =>
+      Object.fromEntries(devices.map((d) => [d.id, { on: false, brightness: 0 }])),
   },
 ]
 
@@ -1371,24 +2162,189 @@ const SUBSYSTEM_TILE_ORDER: Array<{
   color: string
   svg: React.ReactNode
 }> = [
-  { id: 'architecture', label: '架构', color: '#94a3b8',
-    svg: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" width={18} height={18}><rect x="7" y="7" width="10" height="10" rx="2"/><line x1="7" y1="10" x2="4" y2="10"/><line x1="7" y1="14" x2="4" y2="14"/><line x1="17" y1="10" x2="20" y2="10"/><line x1="17" y1="14" x2="20" y2="14"/></svg> },
-  { id: 'lighting', label: '灯光', color: '#d4a853',
-    svg: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" width={18} height={18}><path d="M9 18h6"/><path d="M10 21h4"/><path d="M9 18c-1.2-1-3-3.2-3-6a6 6 0 1112 0c0 2.8-1.8 5-3 6"/></svg> },
-  { id: 'panel', label: '面板', color: '#c8b8a0',
-    svg: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" width={18} height={18}><rect x="4" y="4" width="16" height="16" rx="2.5"/><line x1="12" y1="6" x2="12" y2="18"/><circle cx="8" cy="10" r="1"/><circle cx="16" cy="14" r="1"/></svg> },
-  { id: 'sensor', label: '传感', color: '#4ade80',
-    svg: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" width={18} height={18}><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 010 8.49"/><path d="M7.76 16.24a6 6 0 010-8.49"/></svg> },
-  { id: 'curtain', label: '遮阳', color: '#3dd9b6',
-    svg: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" width={18} height={18}><line x1="3" y1="4" x2="21" y2="4"/><line x1="5" y1="8" x2="19" y2="8"/><line x1="5" y1="12" x2="19" y2="12"/><line x1="5" y1="16" x2="19" y2="16"/><line x1="5" y1="20" x2="19" y2="20"/></svg> },
-  { id: 'hvac', label: '暖通', color: '#9b7bea',
-    svg: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" width={18} height={18}><path d="M10 17.66V6a2 2 0 014 0v11.66a4 4 0 11-4 0z"/><line x1="12" y1="17" x2="12" y2="10"/></svg> },
-  { id: 'av', label: '影音', color: '#5ba0f5',
-    svg: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" width={18} height={18}><rect x="2" y="4" width="20" height="13" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/></svg> },
-  { id: 'security', label: '安防', color: '#f59e0b',
-    svg: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" width={18} height={18}><path d="M12 3L4 7v4c0 5 3.3 9.3 8 11 4.7-1.7 8-6 8-11V7l-8-4z"/><circle cx="12" cy="12" r="2.5"/></svg> },
-  { id: 'network', label: '网络', color: '#60a5fa',
-    svg: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" width={18} height={18}><circle cx="12" cy="19" r="1.5"/><path d="M8.5 15.5a5 5 0 017 0"/><path d="M5.5 12.5a9 9 0 0113 0"/><path d="M2.5 9.5a13 13 0 0119 0"/></svg> },
+  {
+    id: 'architecture',
+    label: '架构',
+    color: '#94a3b8',
+    svg: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        width={18}
+        height={18}
+      >
+        <rect x="7" y="7" width="10" height="10" rx="2" />
+        <line x1="7" y1="10" x2="4" y2="10" />
+        <line x1="7" y1="14" x2="4" y2="14" />
+        <line x1="17" y1="10" x2="20" y2="10" />
+        <line x1="17" y1="14" x2="20" y2="14" />
+      </svg>
+    ),
+  },
+  {
+    id: 'lighting',
+    label: '灯光',
+    color: '#d4a853',
+    svg: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        width={18}
+        height={18}
+      >
+        <path d="M9 18h6" />
+        <path d="M10 21h4" />
+        <path d="M9 18c-1.2-1-3-3.2-3-6a6 6 0 1112 0c0 2.8-1.8 5-3 6" />
+      </svg>
+    ),
+  },
+  {
+    id: 'panel',
+    label: '面板',
+    color: '#c8b8a0',
+    svg: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        width={18}
+        height={18}
+      >
+        <rect x="4" y="4" width="16" height="16" rx="2.5" />
+        <line x1="12" y1="6" x2="12" y2="18" />
+        <circle cx="8" cy="10" r="1" />
+        <circle cx="16" cy="14" r="1" />
+      </svg>
+    ),
+  },
+  {
+    id: 'sensor',
+    label: '传感',
+    color: '#4ade80',
+    svg: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        width={18}
+        height={18}
+      >
+        <circle cx="12" cy="12" r="2" />
+        <path d="M16.24 7.76a6 6 0 010 8.49" />
+        <path d="M7.76 16.24a6 6 0 010-8.49" />
+      </svg>
+    ),
+  },
+  {
+    id: 'curtain',
+    label: '遮阳',
+    color: '#3dd9b6',
+    svg: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        width={18}
+        height={18}
+      >
+        <line x1="3" y1="4" x2="21" y2="4" />
+        <line x1="5" y1="8" x2="19" y2="8" />
+        <line x1="5" y1="12" x2="19" y2="12" />
+        <line x1="5" y1="16" x2="19" y2="16" />
+        <line x1="5" y1="20" x2="19" y2="20" />
+      </svg>
+    ),
+  },
+  {
+    id: 'hvac',
+    label: '暖通',
+    color: '#9b7bea',
+    svg: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        width={18}
+        height={18}
+      >
+        <path d="M10 17.66V6a2 2 0 014 0v11.66a4 4 0 11-4 0z" />
+        <line x1="12" y1="17" x2="12" y2="10" />
+      </svg>
+    ),
+  },
+  {
+    id: 'av',
+    label: '影音',
+    color: '#5ba0f5',
+    svg: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        width={18}
+        height={18}
+      >
+        <rect x="2" y="4" width="20" height="13" rx="2" />
+        <line x1="8" y1="21" x2="16" y2="21" />
+      </svg>
+    ),
+  },
+  {
+    id: 'security',
+    label: '安防',
+    color: '#f59e0b',
+    svg: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        width={18}
+        height={18}
+      >
+        <path d="M12 3L4 7v4c0 5 3.3 9.3 8 11 4.7-1.7 8-6 8-11V7l-8-4z" />
+        <circle cx="12" cy="12" r="2.5" />
+      </svg>
+    ),
+  },
+  {
+    id: 'network',
+    label: '网络',
+    color: '#60a5fa',
+    svg: (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        width={18}
+        height={18}
+      >
+        <circle cx="12" cy="19" r="1.5" />
+        <path d="M8.5 15.5a5 5 0 017 0" />
+        <path d="M5.5 12.5a9 9 0 0113 0" />
+        <path d="M2.5 9.5a13 13 0 0119 0" />
+      </svg>
+    ),
+  },
 ]
 
 export function DashboardPanel({
@@ -1431,7 +2387,10 @@ export function DashboardPanel({
   // 当前场景已运行时长（分:秒，每秒更新）
   const [elapsed, setElapsed] = useState('')
   useEffect(() => {
-    if (activeSceneStartedAt == null) { setElapsed(''); return }
+    if (activeSceneStartedAt == null) {
+      setElapsed('')
+      return
+    }
     const tick = () => {
       const sec = Math.floor((Date.now() - activeSceneStartedAt) / 1000)
       const m = Math.floor(sec / 60)
@@ -1487,15 +2446,29 @@ export function DashboardPanel({
         {lightsTotal != null && lightsTotal > 0 && (
           <div
             style={{
-              display: 'flex', alignItems: 'center', gap: 4,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
               fontSize: 10.5,
               color: textSecondary,
               marginTop: 6,
               fontVariantNumeric: 'tabular-nums',
             }}
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" width={11} height={11} style={{ flexShrink: 0 }}>
-              <path d="M9 18h6"/><path d="M10 21h4"/><path d="M9 18c-1.2-1-3-3.2-3-6a6 6 0 1112 0c0 2.8-1.8 5-3 6"/>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              width={11}
+              height={11}
+              style={{ flexShrink: 0 }}
+            >
+              <path d="M9 18h6" />
+              <path d="M10 21h4" />
+              <path d="M9 18c-1.2-1-3-3.2-3-6a6 6 0 1112 0c0 2.8-1.8 5-3 6" />
             </svg>
             {lightsOn ?? 0}/{lightsTotal} 亮
           </div>
@@ -1506,12 +2479,20 @@ export function DashboardPanel({
       <div style={{ display: 'flex', justifyContent: 'center', margin: '4px 0 16px' }}>
         <svg width={size} height={size}>
           <circle
-            cx={size / 2} cy={size / 2} r={r}
-            fill="none" stroke={isNight ? '#2a313d' : '#e5e7eb'} strokeWidth={stroke}
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke={isNight ? '#2a313d' : '#e5e7eb'}
+            strokeWidth={stroke}
           />
           <circle
-            cx={size / 2} cy={size / 2} r={r}
-            fill="none" stroke="#006AFF" strokeWidth={stroke}
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke="#006AFF"
+            strokeWidth={stroke}
             strokeLinecap="round"
             strokeDasharray={circumference}
             strokeDashoffset={dashOffset}
@@ -1519,16 +2500,23 @@ export function DashboardPanel({
             style={{ transition: 'stroke-dashoffset 600ms ease' }}
           />
           <text
-            x={size / 2} y={size / 2 - 2}
-            textAnchor="middle" dominantBaseline="middle"
-            fontSize={24} fontWeight={600} fill={textPrimary}
+            x={size / 2}
+            y={size / 2 - 2}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fontSize={24}
+            fontWeight={600}
+            fill={textPrimary}
           >
             {coverage}%
           </text>
           <text
-            x={size / 2} y={size / 2 + 18}
-            textAnchor="middle" dominantBaseline="middle"
-            fontSize={10} fill={textSecondary}
+            x={size / 2}
+            y={size / 2 + 18}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fontSize={10}
+            fill={textSecondary}
           >
             方案完整度
           </text>
@@ -1557,12 +2545,16 @@ export function DashboardPanel({
               <div style={{ color: active ? s.color : textSecondary, marginBottom: 2 }}>
                 {s.svg}
               </div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: active ? textPrimary : textSecondary }}>
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: active ? textPrimary : textSecondary,
+                }}
+              >
                 {count}
               </div>
-              <div style={{ fontSize: 9.5, color: textSecondary, marginTop: 1 }}>
-                {s.label}
-              </div>
+              <div style={{ fontSize: 9.5, color: textSecondary, marginTop: 1 }}>{s.label}</div>
             </div>
           )
         })}
@@ -1583,7 +2575,9 @@ export function DashboardPanel({
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
             <span style={{ fontSize: 13, fontWeight: 600 }}>{activeSceneLabel}</span>
             {elapsed && (
-              <span style={{ fontSize: 11, color: textSecondary, fontVariantNumeric: 'tabular-nums' }}>
+              <span
+                style={{ fontSize: 11, color: textSecondary, fontVariantNumeric: 'tabular-nums' }}
+              >
                 {elapsed}
               </span>
             )}
@@ -1610,10 +2604,10 @@ export function SceneDock({
   onAllOff: () => void
 }) {
   const chrome = getDemoChromePalette(isNight, preset)
-  const panelBg     = chrome.bg
+  const panelBg = chrome.bg
   const panelBorder = chrome.border
-  const textColor   = chrome.text
-  const mutedColor  = chrome.text3
+  const textColor = chrome.text
+  const mutedColor = chrome.text3
 
   return (
     <div className="pointer-events-none absolute bottom-5 left-0 right-0 z-10 flex justify-center">
@@ -1630,14 +2624,16 @@ export function SceneDock({
               onClick={() => onExecute(scene)}
               className="flex flex-col items-center gap-1.5 rounded-xl px-3.5 py-2 transition-all duration-200"
               style={{
-                background:  isActive ? chrome.chip : 'transparent',
-                border:      `1px solid ${isActive ? chrome.chipBorder : 'transparent'}`,
-                color:       isActive ? '#006FFF' : textColor,
-                minWidth:    52,
+                background: isActive ? chrome.chip : 'transparent',
+                border: `1px solid ${isActive ? chrome.chipBorder : 'transparent'}`,
+                color: isActive ? '#006FFF' : textColor,
+                minWidth: 52,
               }}
             >
               <div style={{ opacity: isActive ? 1 : 0.6 }}>{scene.icon}</div>
-              <span className="font-medium text-[10px] leading-none tracking-[0.03em]">{scene.label}</span>
+              <span className="font-medium text-[10px] leading-none tracking-[0.03em]">
+                {scene.label}
+              </span>
             </button>
           )
         })}
@@ -1648,11 +2644,24 @@ export function SceneDock({
           type="button"
           onClick={onAllOn}
           className="flex flex-col items-center gap-1.5 rounded-xl px-3 py-2 transition-all duration-200"
-          onMouseEnter={(e) => { e.currentTarget.style.background = chrome.hover }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = chrome.hover
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent'
+          }}
           style={{ color: mutedColor, minWidth: 40 }}
         >
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width={15} height={15}>
+          <svg
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            width={15}
+            height={15}
+          >
             <circle cx="8" cy="8" r="3" fill="currentColor" fillOpacity={0.25} />
             <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.1 3.1l1.4 1.4M11.5 11.5l1.4 1.4M11.5 4.5l1.4-1.4M3.1 12.9l1.4-1.4" />
           </svg>
@@ -1663,12 +2672,26 @@ export function SceneDock({
           type="button"
           onClick={onAllOff}
           className="flex flex-col items-center gap-1.5 rounded-xl px-3 py-2 transition-all duration-200"
-          onMouseEnter={(e) => { e.currentTarget.style.background = chrome.hover }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = chrome.hover
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent'
+          }}
           style={{ color: mutedColor, minWidth: 40 }}
         >
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" width={15} height={15}>
-            <circle cx="8" cy="8" r="5" /><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" />
+          <svg
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            width={15}
+            height={15}
+          >
+            <circle cx="8" cy="8" r="5" />
+            <path d="M5.5 5.5l5 5M10.5 5.5l-5 5" />
           </svg>
           <span className="text-[9px] leading-none tracking-[0.03em]">全关</span>
         </button>
@@ -1684,46 +2707,55 @@ export function SceneDock({
 // needleRef 传给 Canvas 内的 CompassUpdater，后者通过 useFrame 直接写
 // CSS transform，无需 React re-render，完全跟手。
 
-export const Compass = forwardRef<HTMLDivElement, { isNight: boolean }>(
-  function Compass({ isNight }, needleRef) {
-    const fg   = isNight ? 'rgba(220,228,240,0.92)' : 'rgba(25,35,55,0.88)'
-    const bg   = isNight ? 'rgba(14,24,44,0.72)'    : 'rgba(255,255,255,0.76)'
-    const ring = isNight ? 'rgba(180,200,230,0.18)'  : 'rgba(40,60,100,0.12)'
+export const Compass = forwardRef<HTMLDivElement, { isNight: boolean }>(function Compass(
+  { isNight },
+  needleRef,
+) {
+  const fg = isNight ? 'rgba(220,228,240,0.92)' : 'rgba(25,35,55,0.88)'
+  const bg = isNight ? 'rgba(14,24,44,0.72)' : 'rgba(255,255,255,0.76)'
+  const ring = isNight ? 'rgba(180,200,230,0.18)' : 'rgba(40,60,100,0.12)'
 
-    return (
+  return (
+    <div
+      className="pointer-events-none"
+      style={{
+        position: 'absolute',
+        bottom: 24,
+        right: 24,
+        zIndex: 15,
+        width: 52,
+        height: 52,
+        borderRadius: '50%',
+        background: bg,
+        border: `1px solid ${ring}`,
+        backdropFilter: 'blur(12px)',
+        boxShadow: '0 2px 12px rgba(0,0,0,0.18)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      {/* 旋转指针（由 CompassUpdater 写入 transform） */}
       <div
-        className="pointer-events-none"
+        ref={needleRef}
         style={{
           position: 'absolute',
-          bottom: 24,
-          right: 24,
-          zIndex: 15,
-          width: 52,
-          height: 52,
-          borderRadius: '50%',
-          background: bg,
-          border: `1px solid ${ring}`,
-          backdropFilter: 'blur(12px)',
-          boxShadow: '0 2px 12px rgba(0,0,0,0.18)',
+          inset: 0,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
-        {/* 旋转指针（由 CompassUpdater 写入 transform） */}
-        <div
-          ref={needleRef}
-          style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-        >
-          <svg width={28} height={28} viewBox="0 0 28 28" fill="none">
-            {/* 北针（红）：指向 12 点钟 = 屏幕上方 = 计算得到的北向 */}
-            <polygon points="14,2 11,14 14,12 17,14" fill="#ef4444" opacity={0.9} />
-            {/* 南针（灰） */}
-            <polygon points="14,26 11,14 14,16 17,14" fill={fg} opacity={0.45} />
-          </svg>
-        </div>
-        {/* N 标签固定在指针组件外，始终在顶部 */}
-        <span style={{
+        <svg width={28} height={28} viewBox="0 0 28 28" fill="none">
+          {/* 北针（红）：指向 12 点钟 = 屏幕上方 = 计算得到的北向 */}
+          <polygon points="14,2 11,14 14,12 17,14" fill="#ef4444" opacity={0.9} />
+          {/* 南针（灰） */}
+          <polygon points="14,26 11,14 14,16 17,14" fill={fg} opacity={0.45} />
+        </svg>
+      </div>
+      {/* N 标签固定在指针组件外，始终在顶部 */}
+      <span
+        style={{
           position: 'absolute',
           top: 4,
           left: 0,
@@ -1736,8 +2768,10 @@ export const Compass = forwardRef<HTMLDivElement, { isNight: boolean }>(
           lineHeight: 1,
           pointerEvents: 'none',
           userSelect: 'none',
-        }}>N</span>
-      </div>
-    )
-  }
-)
+        }}
+      >
+        N
+      </span>
+    </div>
+  )
+})
