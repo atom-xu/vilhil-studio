@@ -27,6 +27,7 @@
 - `DATA-SCHEMA.md`: 项目/楼层/设备/场景的数据契约。
 - `CODE-REVIEW.md`: PR 评审标准与风险分级。
 - `UI-STANDARD.md`: UI 单一标准源（SSOT）。
+- `PROPOSAL-STYLE-SYSTEM.md`: Proposal Demo 风格参数化体系（token 分层与扩展协议）。
 
 ## 4. AI 协作入口
 
