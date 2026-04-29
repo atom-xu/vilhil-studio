@@ -58,6 +58,187 @@ export type RenderPreset = {
   shadowRadiusDay: number
   shadowRadiusNight: number
   theme: RenderTheme
+  styleExtensions?: RenderStyleExtensions
+}
+
+export type RenderStyleExtensions = {
+  devicePalette?: {
+    coreDay?: string
+    coreNight?: string
+    sensorDay?: string
+    sensorNight?: string
+    actuatorDay?: string
+    actuatorNight?: string
+    alert?: string
+    success?: string
+    offline?: string
+  }
+  modulePalette?: Partial<Record<ModuleStyleKey, string>>
+  postFx?: {
+    overlayOpacityDay?: number
+    overlayOpacityNight?: number
+    vignetteOpacityDay?: number
+    vignetteOpacityNight?: number
+    grainOpacityDay?: number
+    grainOpacityNight?: number
+  }
+}
+
+export type ModuleStyleKey =
+  | 'overview'
+  | 'architecture'
+  | 'lighting'
+  | 'panel'
+  | 'sensor'
+  | 'curtain'
+  | 'hvac'
+  | 'av'
+  | 'security'
+  | 'network'
+
+export type StyleTokenLayer =
+  | 'foundation'
+  | 'material'
+  | 'environment'
+  | 'structure'
+  | 'opening'
+  | 'furniture'
+  | 'floorpad'
+  | 'fx'
+  | 'ui'
+  | 'module'
+  | 'device'
+
+export type StyleTokenType = 'color' | 'number' | 'enum' | 'gradient'
+
+export type StyleTokenSpec = {
+  id: string
+  path: string
+  label: string
+  layer: StyleTokenLayer
+  type: StyleTokenType
+  dayNight?: 'day' | 'night' | 'both'
+  min?: number
+  max?: number
+  step?: number
+  description?: string
+}
+
+export const STYLE_TOKEN_CATALOG: StyleTokenSpec[] = [
+  { id: 'exposure', path: 'exposure', label: '曝光', layer: 'foundation', type: 'number', min: 0.2, max: 2.5, step: 0.01 },
+  { id: 'toneMapping', path: 'toneMapping', label: '色调映射', layer: 'foundation', type: 'enum' },
+  { id: 'envDay', path: 'envDay', label: '环境强度 Day', layer: 'environment', type: 'number', dayNight: 'day', min: 0, max: 2, step: 0.01 },
+  { id: 'envNight', path: 'envNight', label: '环境强度 Night', layer: 'environment', type: 'number', dayNight: 'night', min: 0, max: 2, step: 0.01 },
+  { id: 'hemiDay', path: 'hemiDay', label: '半球光 Day', layer: 'environment', type: 'number', dayNight: 'day', min: 0, max: 2, step: 0.01 },
+  { id: 'hemiNight', path: 'hemiNight', label: '半球光 Night', layer: 'environment', type: 'number', dayNight: 'night', min: 0, max: 2, step: 0.01 },
+  { id: 'sunDay', path: 'sunDay', label: '主光 Day', layer: 'environment', type: 'number', dayNight: 'day', min: 0, max: 3, step: 0.01 },
+  { id: 'sunNight', path: 'sunNight', label: '主光 Night', layer: 'environment', type: 'number', dayNight: 'night', min: 0, max: 3, step: 0.01 },
+
+  { id: 'skyDay', path: 'theme.skyDay', label: '天空 Day', layer: 'environment', type: 'color', dayNight: 'day' },
+  { id: 'skyNight', path: 'theme.skyNight', label: '天空 Night', layer: 'environment', type: 'color', dayNight: 'night' },
+  { id: 'groundDay', path: 'theme.groundDay', label: '地面反照 Day', layer: 'environment', type: 'color', dayNight: 'day' },
+  { id: 'groundNight', path: 'theme.groundNight', label: '地面反照 Night', layer: 'environment', type: 'color', dayNight: 'night' },
+  { id: 'sunColorDay', path: 'theme.sunColorDay', label: '主光色 Day', layer: 'environment', type: 'color', dayNight: 'day' },
+  { id: 'sunColorNight', path: 'theme.sunColorNight', label: '主光色 Night', layer: 'environment', type: 'color', dayNight: 'night' },
+
+  { id: 'wallColor', path: 'theme.wallColor', label: '墙体主色', layer: 'structure', type: 'color', dayNight: 'both' },
+  { id: 'wallRoughness', path: 'theme.wallRoughness', label: '墙体粗糙度', layer: 'material', type: 'number', min: 0, max: 1, step: 0.01 },
+  { id: 'wallMetalness', path: 'theme.wallMetalness', label: '墙体金属度', layer: 'material', type: 'number', min: 0, max: 1, step: 0.01 },
+  { id: 'wallEnvMapIntensity', path: 'theme.wallEnvMapIntensity', label: '墙体环境反射', layer: 'material', type: 'number', min: 0, max: 2, step: 0.01 },
+  { id: 'wallOpacity', path: 'theme.wallOpacity', label: '墙体透明度', layer: 'material', type: 'number', min: 0, max: 1, step: 0.01 },
+  { id: 'capColorA', path: 'theme.capColorA', label: '楼层顶边 A', layer: 'structure', type: 'color', dayNight: 'both' },
+  { id: 'capColorB', path: 'theme.capColorB', label: '楼层顶边 B', layer: 'structure', type: 'color', dayNight: 'both' },
+  { id: 'capOpacity', path: 'theme.capOpacity', label: '楼层顶边透明度', layer: 'structure', type: 'number', min: 0, max: 1, step: 0.01 },
+
+  { id: 'windowColor', path: 'theme.windowColor', label: '窗体色', layer: 'opening', type: 'color', dayNight: 'both' },
+  { id: 'doorColor', path: 'theme.doorColor', label: '门体色', layer: 'opening', type: 'color', dayNight: 'both' },
+
+  { id: 'furnitureColorDay', path: 'theme.furnitureColorDay', label: '家具 Day', layer: 'furniture', type: 'color', dayNight: 'day' },
+  { id: 'furnitureColorNight', path: 'theme.furnitureColorNight', label: '家具 Night', layer: 'furniture', type: 'color', dayNight: 'night' },
+  { id: 'furnitureRoughness', path: 'theme.furnitureRoughness', label: '家具粗糙度', layer: 'material', type: 'number', min: 0, max: 1, step: 0.01 },
+  { id: 'furnitureMetalness', path: 'theme.furnitureMetalness', label: '家具金属度', layer: 'material', type: 'number', min: 0, max: 1, step: 0.01 },
+  { id: 'furnitureInteractiveColor', path: 'theme.furnitureInteractiveColor', label: '家具交互高亮', layer: 'furniture', type: 'color', dayNight: 'both' },
+
+  { id: 'padColorDay', path: 'theme.padColorDay', label: '楼板 Day', layer: 'floorpad', type: 'color', dayNight: 'day' },
+  { id: 'padColorNight', path: 'theme.padColorNight', label: '楼板 Night', layer: 'floorpad', type: 'color', dayNight: 'night' },
+  { id: 'padEmissiveDay', path: 'theme.padEmissiveDay', label: '楼板发光 Day', layer: 'floorpad', type: 'color', dayNight: 'day' },
+  { id: 'padEmissiveNight', path: 'theme.padEmissiveNight', label: '楼板发光 Night', layer: 'floorpad', type: 'color', dayNight: 'night' },
+
+  { id: 'bgColorDay', path: 'theme.bgColorDay', label: '背景 Day', layer: 'environment', type: 'gradient', dayNight: 'day' },
+  { id: 'bgColorNight', path: 'theme.bgColorNight', label: '背景 Night', layer: 'environment', type: 'gradient', dayNight: 'night' },
+  { id: 'overlayDay', path: 'theme.overlayDay', label: '叠层 Day', layer: 'fx', type: 'gradient', dayNight: 'day' },
+  { id: 'overlayNight', path: 'theme.overlayNight', label: '叠层 Night', layer: 'fx', type: 'gradient', dayNight: 'night' },
+
+  { id: 'panelBgDay', path: 'theme.panelBgDay', label: '面板底 Day', layer: 'ui', type: 'color', dayNight: 'day' },
+  { id: 'panelBgNight', path: 'theme.panelBgNight', label: '面板底 Night', layer: 'ui', type: 'color', dayNight: 'night' },
+  { id: 'panelBorderDay', path: 'theme.panelBorderDay', label: '面板边框 Day', layer: 'ui', type: 'color', dayNight: 'day' },
+  { id: 'panelBorderNight', path: 'theme.panelBorderNight', label: '面板边框 Night', layer: 'ui', type: 'color', dayNight: 'night' },
+
+  { id: 'moduleLighting', path: 'styleExtensions.modulePalette.lighting', label: '模块色·灯光', layer: 'module', type: 'color' },
+  { id: 'moduleSecurity', path: 'styleExtensions.modulePalette.security', label: '模块色·安防', layer: 'module', type: 'color' },
+  { id: 'moduleNetwork', path: 'styleExtensions.modulePalette.network', label: '模块色·网络', layer: 'module', type: 'color' },
+
+  { id: 'deviceCoreDay', path: 'styleExtensions.devicePalette.coreDay', label: '设备核心 Day', layer: 'device', type: 'color', dayNight: 'day' },
+  { id: 'deviceCoreNight', path: 'styleExtensions.devicePalette.coreNight', label: '设备核心 Night', layer: 'device', type: 'color', dayNight: 'night' },
+  { id: 'deviceSensorDay', path: 'styleExtensions.devicePalette.sensorDay', label: '设备传感 Day', layer: 'device', type: 'color', dayNight: 'day' },
+  { id: 'deviceSensorNight', path: 'styleExtensions.devicePalette.sensorNight', label: '设备传感 Night', layer: 'device', type: 'color', dayNight: 'night' },
+  { id: 'deviceActuatorDay', path: 'styleExtensions.devicePalette.actuatorDay', label: '设备执行 Day', layer: 'device', type: 'color', dayNight: 'day' },
+  { id: 'deviceActuatorNight', path: 'styleExtensions.devicePalette.actuatorNight', label: '设备执行 Night', layer: 'device', type: 'color', dayNight: 'night' },
+]
+
+function getPathValue<T = unknown>(obj: unknown, path: string): T | undefined {
+  const steps = path.split('.')
+  let current: unknown = obj
+  for (const step of steps) {
+    if (typeof current !== 'object' || current === null || !(step in current)) return undefined
+    current = (current as Record<string, unknown>)[step]
+  }
+  return current as T
+}
+
+function setPathValue(obj: Record<string, unknown>, path: string, value: unknown) {
+  const steps = path.split('.')
+  let current: Record<string, unknown> = obj
+  for (let i = 0; i < steps.length; i += 1) {
+    const step = steps[i]
+    if (!step) continue
+    if (i === steps.length - 1) {
+      current[step] = value
+      return
+    }
+    const next = current[step]
+    if (typeof next === 'object' && next !== null) {
+      current = next as Record<string, unknown>
+      continue
+    }
+    const created: Record<string, unknown> = {}
+    current[step] = created
+    current = created
+  }
+}
+
+export function getStyleTokenSnapshot(preset: RenderPreset) {
+  const entries = STYLE_TOKEN_CATALOG.map((spec) => [spec.id, getPathValue(preset, spec.path)] as const)
+  return Object.fromEntries(entries)
+}
+
+export function patchPresetByStyleTokens(preset: RenderPreset, patch: Partial<Record<string, unknown>>): RenderPreset {
+  const next: RenderPreset = {
+    ...preset,
+    theme: { ...preset.theme },
+    styleExtensions: {
+      ...(preset.styleExtensions ?? {}),
+      modulePalette: { ...(preset.styleExtensions?.modulePalette ?? {}) },
+      devicePalette: { ...(preset.styleExtensions?.devicePalette ?? {}) },
+      postFx: { ...(preset.styleExtensions?.postFx ?? {}) },
+    },
+  }
+  for (const [id, value] of Object.entries(patch)) {
+    const spec = STYLE_TOKEN_CATALOG.find((s) => s.id === id)
+    if (!spec) continue
+    setPathValue(next as unknown as Record<string, unknown>, spec.path, value)
+  }
+  return next
 }
 
 export const RENDER_PRESETS: Record<RenderPresetKey, RenderPreset> = {
@@ -67,8 +248,10 @@ export const RENDER_PRESETS: Record<RenderPresetKey, RenderPreset> = {
     description: '白蓝孪生',
     toneMapping: THREE.AgXToneMapping,
     // 白天基线收敛 —— 之前 sun/env/hemi 叠加 + 半透墙让光透到室内地板，
-    // global 视图下整层都被烧白。降到下面这套值，墙地家具能看出材质感而非纯白。
-    exposure: 0.62,
+    // global 视图下整层都被烧白。
+    // 【AgX 校准】AgX 比 ACES 更宽松（knee ~6.0 vs 1.5），同样的 exposure 在 AgX 下
+    // 等效曝光更亮。原 0.62 是为 ACES 调的，迁到 AgX 后过曝。砍到 0.40 = AgX 等效。
+    exposure: 0.40,
     envDay: 0.30,
     envNight: 0.18,
     hemiDay: 0.22,
@@ -114,7 +297,7 @@ export const RENDER_PRESETS: Record<RenderPresetKey, RenderPreset> = {
     label: '平衡',
     description: '居住演示',
     toneMapping: THREE.AgXToneMapping,
-    exposure: 0.88,
+    exposure: 0.55,
     envDay: 0.52,
     envNight: 0.15,
     hemiDay: 0.45,
@@ -162,7 +345,7 @@ export const RENDER_PRESETS: Record<RenderPresetKey, RenderPreset> = {
     label: '命令中心',
     description: '数字孪生驾驶舱',
     toneMapping: THREE.AgXToneMapping,
-    exposure: 0.96,
+    exposure: 0.60,
     envDay: 0.75,
     envNight: 0.3,
     hemiDay: 0.38,
@@ -208,7 +391,7 @@ export const RENDER_PRESETS: Record<RenderPresetKey, RenderPreset> = {
     label: '巡检轻量',
     description: '移动交互优先',
     toneMapping: THREE.NeutralToneMapping,
-    exposure: 0.82,
+    exposure: 0.50,
     envDay: 0.3,
     envNight: 0.14,
     hemiDay: 0.52,
@@ -254,7 +437,7 @@ export const RENDER_PRESETS: Record<RenderPresetKey, RenderPreset> = {
     label: '夜间运维',
     description: '告警与监控',
     toneMapping: THREE.AgXToneMapping,
-    exposure: 0.72,
+    exposure: 0.45,
     envDay: 0.44,
     envNight: 0.42,
     hemiDay: 0.28,
@@ -300,7 +483,7 @@ export const RENDER_PRESETS: Record<RenderPresetKey, RenderPreset> = {
     label: '晨雾暖层',
     description: '适合白天展示的数字孪生户型风格：墙体冷透、家具偏暖、背景更淡、边线更亮，拉开建筑/家居/背景层次。',
     toneMapping: THREE.AgXToneMapping,
-    exposure: 1.04,
+    exposure: 0.65,
     envDay: 0.92,
     envNight: 0.26,
     hemiDay: 0.58,
@@ -351,7 +534,9 @@ export function parsePresetKey(value: string | null): RenderPresetKey {
 
 export function getDemoChromePalette(isNight: boolean, preset?: RenderPreset) {
   const bg = preset ? (isNight ? preset.theme.panelBgNight : preset.theme.panelBgDay) : (isNight ? '#0E1C33' : '#FFFFFF')
-  const border = preset ? (isNight ? preset.theme.panelBorderNight : preset.theme.panelBorderDay) : (isNight ? '#274A73' : '#D7E5F7')
+  // 页面框线固定中性值，避免被 preset 调色器联动影响整页层级边界。
+  // panelBorder* 仍保留在 theme 中，供后续做“局部卡片边框”单独使用。
+  const border = isNight ? '#274A73' : '#D7E5F7'
   return isNight
     ? {
         bg,

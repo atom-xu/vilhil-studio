@@ -75,9 +75,11 @@ export interface StructureProps {
   floorRenderOrderBase?: number
   /** 倒影开关（墙体 / 家具 / pad 镜面）—— 关掉后楼板下完全干净 */
   reflectionsEnabled?: boolean
+  /** 打开灯具属性 popup（点单灯端点 dot / 回路 pill 触发） */
+  onOpenLightPopup?: (mode: 'single' | 'circuit', ids: string[], title: string, subtitle?: string) => void
 }
 
-export function DemoStructure({ walls, openingsByWall, devices, slabs, items, roomCentroids, roomStates, lightStates, bbox, lightPos, isNight, preset, onToggleLight, onToggleRoom, view, onEnterLightingDetail, isMultiFloor = false, showGroundShadow = true, floorRenderOrderBase = 0, reflectionsEnabled = false }: StructureProps) {
+export function DemoStructure({ walls, openingsByWall, devices, slabs, items, roomCentroids, roomStates, lightStates, bbox, lightPos, isNight, preset, onToggleLight, onToggleRoom, view, onEnterLightingDetail, isMultiFloor = false, showGroundShadow = true, floorRenderOrderBase = 0, reflectionsEnabled = false, onOpenLightPopup }: StructureProps) {
   const { bodyGeo, capGeo } = useMemo(() => buildWallGeo(walls, openingsByWall), [walls, openingsByWall])
   const padGeo = useMemo(() => buildPadGeo(slabs), [slabs])
   const { padSideGeo, padTopGeo } = useMemo(() => {
@@ -174,13 +176,13 @@ export function DemoStructure({ walls, openingsByWall, devices, slabs, items, ro
   const wallMirrorMat = useMemo(() => {
     const base = new THREE.MeshStandardMaterial({
       color: new THREE.Color(preset.theme.wallColor),
-      roughness: 0.24,
-      metalness: 0.03,
+      roughness: preset.theme.wallMirrorRoughness ?? 0.24,
+      metalness: preset.theme.wallMirrorMetalness ?? 0.03,
     })
     const m = makeMirrorMaterial(base)
     base.dispose()
     return m
-  }, [preset.theme.wallColor])
+  }, [preset.theme.wallColor, preset.theme.wallMirrorRoughness, preset.theme.wallMirrorMetalness])
 
   // 地板 Pad 侧面材质 — 实心，让 10cm 台阶从所有角度可见
   const padMat = useMemo(() => new THREE.MeshStandardMaterial({
@@ -471,6 +473,11 @@ export function DemoStructure({ walls, openingsByWall, devices, slabs, items, ro
                   isNight={isNight}
                   preset={preset}
                   compactMarker
+                  onOpenPopup={
+                    onOpenLightPopup
+                      ? () => onOpenLightPopup('single', [d.id], d.name, '单灯')
+                      : undefined
+                  }
                 />
               ))}
               <CircuitOverlay
@@ -481,6 +488,17 @@ export function DemoStructure({ walls, openingsByWall, devices, slabs, items, ro
                 isNight={isNight}
                 onToggle={() => onToggleLight(refMember.id)}
                 label={label}
+                onOpenPopup={
+                  onOpenLightPopup
+                    ? () =>
+                        onOpenLightPopup(
+                          members.length > 1 ? 'circuit' : 'single',
+                          members.map((m) => m.id),
+                          label,
+                          members.length > 1 ? `回路 · ${members.length} 灯` : '单灯',
+                        )
+                    : undefined
+                }
               />
             </group>
           )

@@ -85,3 +85,15 @@
 1. 先在 `mist-warm-contrast` 下调到接近目标。
 2. 如仍偏差，开启 `颜色校准模式` 确认材质本色是否正确。
 3. 回到 `mist-warm-contrast` 做最后验收（确保真实展示链路也成立）。
+
+
+## 参数体系升级（2026-04-28）
+
+当前 `proposal-demo` 已引入统一 token catalog 与 path 化补丁能力：
+
+- Token 目录：`STYLE_TOKEN_CATALOG`
+- 快照：`getStyleTokenSnapshot(preset)`
+- 回写：`patchPresetByStyleTokens(preset, patch)`
+- 扩展域：`RenderPreset.styleExtensions`（device/module/postFx）
+
+详见：`docs/PROPOSAL-STYLE-SYSTEM.md`

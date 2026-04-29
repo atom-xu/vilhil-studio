@@ -24,6 +24,9 @@ import type { SceneSeed, ConvertedWall } from './_modules/types'
 import { FloorAnimator, FLOOR_ANIM_DUR } from './_modules/floor-animator'
 import type { LightState } from './_modules/lighting'
 import { DemoLightStripPill, LightingShaderWarmup } from './_modules/lighting'
+import { LightPropertyPopup, useLightPopup } from './_modules/light-property-popup'
+import { CurtainPropertyPopup, useCurtainPopup } from './_modules/curtain-property-popup'
+import { CurtainOverlay } from './_modules/curtain-overlay'
 import {
   CameraRig, ShaderPreheat, CompassUpdater,
   resolvePoseForView, estimateShotDuration,
@@ -146,8 +149,10 @@ export default function ProposalDemoPage() {
   // 倒影开关 —— 控制 1F 楼板下的镜面倒影（墙体 / 家具 / pad）。
   // 默认 false：客户演示时倒影是"加分项"而不是默认就有，避免设计意图不清时的视觉噪音。
   const [reflectionsEnabled, setReflectionsEnabled] = useState(false)
-  // Bloom 开关 —— 调试用。怀疑过曝是 bloom 反馈造成时关掉直接看真实场景。
-  const [bloomEnabled, setBloomEnabled] = useState(true)
+  // 灯具属性 popup ——单灯/回路/房间共用。点端点 dot / 回路 pill 触发。
+  const lightPopup = useLightPopup()
+  // 窗帘属性 popup ——单窗帘 / 房间联动。点窗帘 pill 触发。
+  const curtainPopup = useCurtainPopup()
 
   // 多楼层共同旋转轴心：所有楼层 bbox 合并后的中心，避免各层绕自身轴旋转时漂移
   const globalPivot = useMemo(() => {
@@ -352,6 +357,50 @@ export default function ProposalDemoPage() {
     // 用户点亮房间 = 推到完全亮（80），关 = 0；和 base 默认 40 区分开
     setRoomStates((prev) => ({ ...prev, [roomId]: (prev[roomId] ?? 0) > 0 ? 0 : 80 }))
   }, [view.level])
+
+  // 窗帘快速开关：0% ↔ 100%。读 store 当前值为基准翻转。
+  const toggleCurtain = useCallback((id: string) => {
+    const node = useScene.getState().nodes[id as keyof ReturnType<typeof useScene.getState>['nodes']]
+    const curPos =
+      ((node as { state?: { position?: number } } | undefined)?.state?.position) ?? 0
+    const nextPos = curPos > 5 ? 0 : 100
+    setDeviceState(id as never, { position: nextPos })
+  }, [])
+
+  // 窗帘 popup 打开器
+  const handleOpenCurtainPopup = useCallback(
+    (mode: 'single' | 'room', ids: string[], title: string, subtitle?: string) => {
+      curtainPopup.api.open({ mode, ids, title, subtitle })
+    },
+    [curtainPopup.api],
+  )
+
+  // 灯具属性 popup 触发器：从子组件透传上来
+  const handleOpenLightPopup = useCallback(
+    (mode: 'single' | 'circuit', ids: string[], title: string, subtitle?: string) => {
+      lightPopup.api.open({ mode, ids, title, subtitle })
+    },
+    [lightPopup.api],
+  )
+
+  // popup 改属性时同步本地 lightStates，让 RoomBaseLight / DemoLightBulb 立刻响应
+  const handlePopupApplyToLocal = useCallback(
+    (ids: string[], patch: Partial<LightState> & { colorTemp?: number }) => {
+      setLightStates((prev) => {
+        const next = { ...prev }
+        for (const id of ids) {
+          const cur = prev[id] ?? { on: false, brightness: 100 }
+          next[id] = {
+            on: patch.on ?? cur.on,
+            brightness: patch.brightness ?? cur.brightness,
+            colorTemp: patch.colorTemp ?? cur.colorTemp,
+          }
+        }
+        return next
+      })
+    },
+    [],
+  )
 
   const toggleLight = useCallback((id: string) => {
     // 回路联动：点一盏灯 = 同回路所有灯一起开/关。
@@ -1199,24 +1248,6 @@ export default function ProposalDemoPage() {
           >
             {reflectionsEnabled ? '倒影 ON' : '倒影 OFF'}
           </button>
-          {/* Bloom 开关 — 调试过曝问题用 */}
-          <button
-            type="button"
-            onClick={() => setBloomEnabled((v) => !v)}
-            onPointerDown={(e) => e.stopPropagation()}
-            style={{
-              position: 'absolute', bottom: 152, right: 20, zIndex: 15,
-              padding: '4px 10px', borderRadius: 8,
-              background: isNight ? 'rgba(14,24,44,0.72)' : 'rgba(255,255,255,0.76)',
-              border: `1px solid ${isNight ? 'rgba(180,200,230,0.18)' : 'rgba(40,60,100,0.12)'}`,
-              backdropFilter: 'blur(12px)', fontSize: 11, fontWeight: 600,
-              color: isNight ? 'rgba(220,228,240,0.92)' : 'rgba(25,35,55,0.88)',
-              cursor: 'pointer',
-            }}
-          >
-            {bloomEnabled ? 'Bloom ON' : 'Bloom OFF'}
-          </button>
-
           {/* 南北仪表盘 */}
           <Compass ref={compassNeedle} isNight={isNight} />
 
@@ -1304,6 +1335,7 @@ export default function ProposalDemoPage() {
                       showGroundShadow={isFocused || (activeAllFloorIdx === null && idx === 0)}
                       floorRenderOrderBase={isFocused ? 0 : idx * 10}
                       reflectionsEnabled={reflectionsEnabled}
+                      onOpenLightPopup={handleOpenLightPopup}
                     />
                   </FloorAnimator>
                 )
@@ -1329,6 +1361,7 @@ export default function ProposalDemoPage() {
                 onEnterLightingDetail={enterLightingDetail}
                 isMultiFloor={false}
                 reflectionsEnabled={reflectionsEnabled}
+                onOpenLightPopup={handleOpenLightPopup}
               />
             )}
             {/*
@@ -1373,6 +1406,33 @@ export default function ProposalDemoPage() {
                       onToggle={() => toggleLight(n.id)}
                       preset={activePreset}
                       isNight={isNight}
+                      onOpenPopup={() =>
+                        handleOpenLightPopup(
+                          'single',
+                          [n.id],
+                          (n.name as string | undefined) ?? '灯带',
+                          '灯带',
+                        )
+                      }
+                    />
+                  ))}
+              {/* 窗帘 pill —— 仅 detail + curtain 板块时显示 */}
+              {view.level === 'detail' && view.module === 'curtain' &&
+                seed.allDeviceNodes
+                  .filter((n) => n.subsystem === 'curtain')
+                  .map((n) => (
+                    <CurtainOverlay
+                      key={`curtain-pill-${n.id}`}
+                      node={n}
+                      onQuickToggle={() => toggleCurtain(n.id)}
+                      onOpenPopup={() =>
+                        handleOpenCurtainPopup(
+                          'single',
+                          [n.id],
+                          (n.name as string | undefined) ?? '窗帘',
+                          (n.renderType as string | undefined) ?? '',
+                        )
+                      }
                     />
                   ))}
               <NetworkHeatmapOverlay />
@@ -1415,7 +1475,7 @@ export default function ProposalDemoPage() {
               }
             />
             {/* Bloom 只在 overview/detail 跑 */}
-            {view.level === 'detail' && bloomEnabled && <DemoBloomLayer isNight={isNight} />}
+            {view.level === 'detail' && <DemoBloomLayer isNight={isNight} />}
             {/* 灯光懒预热：用户进入"灯光"板块后才挂载，为每种 unique 灯数编译 shader 变种。
                 完成后切房间不再有 200-500ms 的同步编译卡顿。一开始的 overview 不挂载，不挡用户。 */}
             {lightingWarmupTriggered && !lightingWarmupDone && lightingUniqueCounts.length > 0 && (
@@ -1430,6 +1490,21 @@ export default function ProposalDemoPage() {
             )}
             </Selection>
           </Canvas>
+          {/* 灯具属性 popup —— 单灯 / 回路 / 房间共用，浮在 Canvas 上 */}
+          {lightPopup.target && (
+            <LightPropertyPopup
+              target={lightPopup.target}
+              onClose={lightPopup.api.close}
+              onApplyToLocal={handlePopupApplyToLocal}
+            />
+          )}
+          {/* 窗帘属性 popup */}
+          {curtainPopup.target && (
+            <CurtainPropertyPopup
+              target={curtainPopup.target}
+              onClose={curtainPopup.api.close}
+            />
+          )}
           {/* 灯光预热进度 chip —— 角落小条，不挡操作 */}
           {lightingWarmupProgress && !lightingWarmupDone && (
             <div

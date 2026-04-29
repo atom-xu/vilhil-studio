@@ -19,21 +19,21 @@
  */
 
 import { EffectComposer, SelectiveBloom } from '@react-three/postprocessing'
+import { LIGHTING_CONFIG } from './lighting-config'
 
 export function DemoBloomLayer({ isNight }: { isNight: boolean }) {
-  // intensity：emitter 周围辉光的强度。
-  // threshold：emitter 的 emissive luminance 必须 > 这个值才 bloom。
-  //   panel mesh emissive 1.2、downlight bulb 2.5 —— 1.0 阈值都能触发。
-  // smoothing：阈值附近的过渡软度。
-  // 不传 selection / lights，SelectiveBloom 自动从 <Selection> context 拿 selected。
-  const intensity = isNight ? 0.65 : 0.40
+  // SelectiveBloom 的 selection 由 <Selection> context 注入 —— 仅 <Select enabled>
+  // 包住的 emitter mesh 进 bloom 输入。被光照亮的墙面/地板物理上不进 bloom。
+  // 所有数值从 LIGHTING_CONFIG.bloom 读，单一来源。
+  const cfg = LIGHTING_CONFIG.bloom
+  const intensity = isNight ? cfg.intensityNight : cfg.intensityDay
   return (
     <EffectComposer multisampling={0}>
       <SelectiveBloom
         intensity={intensity}
-        luminanceThreshold={1.0}
-        luminanceSmoothing={0.4}
-        mipmapBlur
+        luminanceThreshold={cfg.luminanceThreshold}
+        luminanceSmoothing={cfg.luminanceSmoothing}
+        mipmapBlur={cfg.mipmapBlur}
       />
     </EffectComposer>
   )
