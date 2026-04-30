@@ -4892,6 +4892,133 @@ function FloorplanLightStripDraft({
   )
 }
 
+/**
+ * 窗帘 2 点画线 draft 渲染（仅 curtain-side-open）—— 视觉风格故意区别灯带：
+ *   - 灯带：折线 polyline + 多端点 + 十字准星
+ *   - 窗帘：单段实线 + 起点圆环 + 鼠标端方括号 + 实时宽度数
+ *
+ * 数据：从 useEditor.curtainDraft 读 wallId + t1 + point1 + hoverT
+ * 锁定的墙 wallNode 用于算 hoverPoint 世界坐标 + 中点宽度数标位置
+ */
+function FloorplanCurtainDraft({
+  draft,
+  walls,
+  worldUnitsPerPixel,
+}: {
+  draft: { wallId: string; t1: number; point1: [number, number]; hoverT: number | null }
+  walls: WallNode[]
+  worldUnitsPerPixel: number
+}) {
+  const wall = walls.find((w) => w.id === draft.wallId)
+  if (!wall) return null
+
+  const stroke = Math.max(0.04, worldUnitsPerPixel * 3)
+  const ringR = Math.max(0.10, worldUnitsPerPixel * 8)
+  const ringStroke = Math.max(0.012, worldUnitsPerPixel * 1.4)
+  const labelOffset = Math.max(0.18, worldUnitsPerPixel * 16)
+  const fontSize = Math.max(0.14, worldUnitsPerPixel * 12)
+
+  // SVG 坐标系：toSvgX = -x, toSvgY = -y
+  const ax = -draft.point1[0]
+  const ay = -draft.point1[1]
+
+  // 计算 hover 端世界坐标
+  const wDx = wall.end[0] - wall.start[0]
+  const wDz = wall.end[1] - wall.start[1]
+  const wallLen = Math.hypot(wDx, wDz)
+
+  let hx: number | null = null
+  let hy: number | null = null
+  let widthM: number | null = null
+  let labelX: number | null = null
+  let labelY: number | null = null
+  if (draft.hoverT !== null && wallLen > 0.001) {
+    const hxWorld = wall.start[0] + wDx * draft.hoverT
+    const hyWorld = wall.start[1] + wDz * draft.hoverT
+    hx = -hxWorld
+    hy = -hyWorld
+    widthM = Math.abs(draft.hoverT - draft.t1) * wallLen
+    // label 在 ghost 段的中点，沿墙法线偏一段
+    const midX = (ax + hx) / 2
+    const midY = (ay + hy) / 2
+    const normX = -wDz / wallLen
+    const normZ = wDx / wallLen
+    labelX = midX + (-normX) * labelOffset
+    labelY = midY + (-normZ) * labelOffset
+  }
+
+  const accent = '#5fb1ff' // 窗帘统一蓝（区别灯带的橙）
+
+  return (
+    <g pointerEvents="none">
+      {/* 起点环 —— 第 1 点已锁定的视觉锚 */}
+      <circle
+        cx={ax}
+        cy={ay}
+        r={ringR}
+        fill="rgba(95,177,255,0.12)"
+        stroke={accent}
+        strokeWidth={ringStroke}
+      />
+      <circle cx={ax} cy={ay} r={ringR * 0.3} fill={accent} />
+
+      {hx !== null && hy !== null && (
+        <>
+          {/* ghost 段 —— 实线（区别灯带的虚线）+ 半透明 + 端点方括号风 */}
+          <line
+            x1={ax}
+            y1={ay}
+            x2={hx}
+            y2={hy}
+            stroke={accent}
+            strokeWidth={stroke}
+            opacity={0.85}
+            strokeLinecap="round"
+          />
+          {/* hover 端的方括号指示（区别灯带的圆点） */}
+          <circle
+            cx={hx}
+            cy={hy}
+            r={ringR * 0.7}
+            fill="none"
+            stroke={accent}
+            strokeWidth={ringStroke * 1.2}
+            opacity={0.9}
+          />
+          <circle cx={hx} cy={hy} r={ringR * 0.25} fill={accent} />
+          {/* 实时宽度数标 */}
+          {widthM !== null && labelX !== null && labelY !== null && widthM > 0.05 && (
+            <g>
+              <rect
+                x={labelX - fontSize * 1.6}
+                y={labelY - fontSize * 0.8}
+                width={fontSize * 3.2}
+                height={fontSize * 1.4}
+                rx={fontSize * 0.3}
+                fill="rgba(15,18,26,0.85)"
+                stroke={accent}
+                strokeWidth={ringStroke * 0.8}
+              />
+              <text
+                x={labelX}
+                y={labelY}
+                fill="rgba(229,240,255,0.95)"
+                fontSize={fontSize}
+                fontFamily="system-ui, sans-serif"
+                fontWeight={600}
+                textAnchor="middle"
+                dominantBaseline="middle"
+              >
+                {widthM.toFixed(2)}m
+              </text>
+            </g>
+          )}
+        </>
+      )}
+    </g>
+  )
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 //  FloorplanDeviceGhost —— 设备工具激活时的鼠标预览
 //
@@ -6034,6 +6161,7 @@ export function FloorplanPanel() {
   const setSelectedDevice = useEditor((s) => s.setSelectedDevice)
   // 灯带画线 draft —— 用 selector 订阅，每次 push 顶点 / hover 移动都重渲染
   const lightStripDraftState = useEditor((s) => s.lightStripDraft)
+  const curtainDraftState = useEditor((s) => s.curtainDraft)
   const [wallEndpointDraft, setWallEndpointDraft] = useState<WallEndpointDraft | null>(null)
   const [hoveredOpeningId, setHoveredOpeningId] = useState<OpeningNode['id'] | null>(null)
   const [hoveredWallId, setHoveredWallId] = useState<WallNode['id'] | null>(null)
@@ -6098,9 +6226,15 @@ export function FloorplanPanel() {
       const editorState = useEditor.getState()
       const isStripDraft =
         editorState.selectedDevice?.lightType === 'line' && editorState.lightStripDraft
+      const isCurtainDraft =
+        editorState.selectedDevice?.subsystem === 'curtain' && editorState.curtainDraft
       if (e.key === 'Escape') {
         if (isStripDraft) {
           editorState.setLightStripDraft(null)
+          return
+        }
+        if (isCurtainDraft) {
+          editorState.setCurtainDraft(null)
           return
         }
         setMode('select')
@@ -6902,6 +7036,10 @@ export function FloorplanPanel() {
       if (useEditor.getState().lightStripDraft) {
         useEditor.getState().setLightStripDraft(null)
       }
+      // 同样清掉窗帘草稿
+      if (useEditor.getState().curtainDraft) {
+        useEditor.getState().setCurtainDraft(null)
+      }
       return
     }
 
@@ -6910,11 +7048,15 @@ export function FloorplanPanel() {
     }
   }, [fittedViewport, levelId])
 
-  // tool 变化时，若离开 'item'（设备放置工具），清掉残留的灯带草稿。
-  // 不然切到 wall 工具后，SVG 上还画着灯带的 ghost 线和已点的顶点，视觉噪音。
+  // tool 变化时，若离开 'item'（设备放置工具），清掉残留的灯带 / 窗帘草稿。
   useEffect(() => {
-    if (tool !== 'item' && useEditor.getState().lightStripDraft) {
-      useEditor.getState().setLightStripDraft(null)
+    if (tool !== 'item') {
+      if (useEditor.getState().lightStripDraft) {
+        useEditor.getState().setLightStripDraft(null)
+      }
+      if (useEditor.getState().curtainDraft) {
+        useEditor.getState().setCurtainDraft(null)
+      }
     }
   }, [tool])
 
@@ -8943,6 +9085,137 @@ export function FloorplanPanel() {
         }
       }
 
+      // ── 窗帘放置 —— 按子类型分两种交互 ──
+      // 对开帘：墙上 2 点画宽度（帘杆可宽于窗）
+      // 卷帘 / 百叶 / 罗马帘：1 点击中窗户 → 装在窗框内 → 自动适配窗户尺寸
+      {
+        const editorState = useEditor.getState()
+        const sd = editorState.selectedDevice
+        const isBuildMode = editorState.mode === 'build'
+        const isItemTool = editorState.tool === 'item'
+        const currentLevelId = useViewer.getState().selection.levelId
+        if (isBuildMode && isItemTool && sd && sd.subsystem === 'curtain' && currentLevelId) {
+          const isSideOpen = sd.subtype === 'curtain-side-open'
+
+          if (isSideOpen) {
+            // ── 对开帘：墙上 2 点画线 ──
+            const hit = findClosestWallPoint(planPoint, walls, 1.0)
+            if (!hit) return
+            const placement = computeWallPlacement(hit.wall, planPoint)
+            if (!placement) return
+
+            const draft = editorState.curtainDraft
+            if (!draft || draft.wallId !== hit.wall.id) {
+              editorState.setCurtainDraft({
+                wallId: hit.wall.id,
+                t1: placement.t,
+                point1: placement.position,
+                hoverT: null,
+              })
+              sfxEmitter.emit('sfx:item-pick')
+              return
+            }
+
+            const t1 = draft.t1
+            const t2 = placement.t
+            if (Math.abs(t2 - t1) < 0.01) return
+
+            const ws = hit.wall.start
+            const we = hit.wall.end
+            const wallDx = we[0] - ws[0]
+            const wallDz = we[1] - ws[1]
+            const wallLen = Math.hypot(wallDx, wallDz)
+            const midT = (t1 + t2) / 2
+            const midX = ws[0] + wallDx * midT
+            const midZ = ws[1] + wallDz * midT
+            const width = Math.abs(t2 - t1) * wallLen
+            const wallAngleDeg = Math.atan2(wallDz, wallDx) * (180 / Math.PI)
+            const y = sd.defaultH ?? 2.5
+
+            placeDevice(
+              currentLevelId,
+              sd.catalogId,
+              [midX, y, midZ],
+              {
+                wallId: hit.wall.id,
+                wallT: midT,
+                wallSide: placement.side,
+                curtainWidth: width,
+                direction: wallAngleDeg,
+              } as Partial<import('@pascal-app/core').DeviceParams>,
+            )
+            editorState.setCurtainDraft(null)
+            sfxEmitter.emit('sfx:item-place')
+            return
+          }
+
+          // ── 卷帘 / 百叶 / 罗马帘：1 点击中窗户 ──
+          // 在 1m 半径内找最近的 window node；找不到 → 静默忽略（强制点窗户）
+          const allNodes = useScene.getState().nodes
+          const wallSet = new Set<string>()
+          for (const n of Object.values(allNodes)) {
+            const nn = n as { type?: string; id?: string; parentId?: string | null }
+            if (nn.type === 'wall' && nn.parentId === currentLevelId && nn.id) {
+              wallSet.add(nn.id)
+            }
+          }
+          let bestWindow: { id: string; cx: number; cz: number; wallId: string; wallStart: [number, number]; wallEnd: [number, number]; t: number; width: number; height: number; cy: number } | null = null
+          let bestDist2 = 1.0 * 1.0
+          for (const n of Object.values(allNodes)) {
+            const nn = n as {
+              type?: string; id?: string; wallId?: string;
+              position?: [number, number, number];
+              width?: number; height?: number;
+            }
+            if (nn.type !== 'window' || !nn.id || !nn.wallId) continue
+            if (!wallSet.has(nn.wallId)) continue
+            const wall = allNodes[nn.wallId as keyof typeof allNodes] as
+              | { start?: [number, number]; end?: [number, number] }
+              | undefined
+            if (!wall?.start || !wall?.end) continue
+            const wlen = Math.hypot(wall.end[0] - wall.start[0], wall.end[1] - wall.start[1])
+            if (wlen < 0.001) continue
+            const u = (nn.position?.[0] ?? 0) / wlen
+            const cx = wall.start[0] + (wall.end[0] - wall.start[0]) * u
+            const cz = wall.start[1] + (wall.end[1] - wall.start[1]) * u
+            const dx = planPoint[0] - cx
+            const dz = planPoint[1] - cz
+            const d2 = dx * dx + dz * dz
+            if (d2 < bestDist2) {
+              bestDist2 = d2
+              bestWindow = {
+                id: nn.id, cx, cz, wallId: nn.wallId,
+                wallStart: wall.start, wallEnd: wall.end, t: u,
+                width: nn.width ?? 1.5,
+                height: nn.height ?? 1.4,
+                cy: nn.position?.[1] ?? 1.2,
+              }
+            }
+          }
+          if (!bestWindow) return // 没点中窗户，静默
+
+          const wDx = bestWindow.wallEnd[0] - bestWindow.wallStart[0]
+          const wDz = bestWindow.wallEnd[1] - bestWindow.wallStart[1]
+          const wallAngleDeg = Math.atan2(wDz, wDx) * (180 / Math.PI)
+          const y = sd.defaultH ?? bestWindow.cy
+
+          placeDevice(
+            currentLevelId,
+            sd.catalogId,
+            [bestWindow.cx, y, bestWindow.cz],
+            {
+              openingId: bestWindow.id,
+              wallId: bestWindow.wallId,
+              wallT: bestWindow.t,
+              curtainWidth: bestWindow.width,
+              direction: wallAngleDeg,
+            } as Partial<import('@pascal-app/core').DeviceParams>,
+          )
+          sfxEmitter.emit('sfx:item-place')
+          return
+        }
+      }
+
       // ── 2D 设备放置 —— 只在 build 模式下允许 ──
       //
       // 【重要】用"点击瞬间的 click 坐标重新算 snap"，不复用上一次 pointermove
@@ -10146,6 +10419,42 @@ export function FloorplanPanel() {
         return
       }
 
+      // 窗帘 hover —— 所有 4 类窗帘都不走标准 wall ghost。
+      // - 对开帘 (curtain-side-open)：维护 curtainDraft.hoverT 给 2D 画线 ghost
+      // - 卷帘/百叶/罗马 (-roller / -venetian / -roman)：1 点击中窗户，先不画 hover 预览
+      //   （未来可加"附近窗户高亮"，当前只确保不显示标准 ghost 误导用户）
+      if (
+        mode === 'build' &&
+        tool === 'item' &&
+        selectedDevice?.subsystem === 'curtain' &&
+        !panStateRef.current
+      ) {
+        if (selectedDevice.subtype === 'curtain-side-open') {
+          const draft = useEditor.getState().curtainDraft
+          if (draft) {
+            const pp = getPlanPointFromClientPoint(event.clientX, event.clientY)
+            if (pp) {
+              const hit = findClosestWallPoint(pp, walls, 0.6)
+              if (hit && hit.wall.id === draft.wallId) {
+                const placement = computeWallPlacement(hit.wall, pp)
+                if (placement) {
+                  useEditor.getState().setCurtainDraft({
+                    ...draft,
+                    hoverT: placement.t,
+                  })
+                }
+              } else if (draft.hoverT !== null) {
+                useEditor.getState().setCurtainDraft({ ...draft, hoverT: null })
+              }
+            }
+          }
+        }
+        // 关键：所有窗帘类型都清掉标准设备 ghost，避免"鼠标跟着出现一个错误的小圆点"
+        if (devicePlacementPreview !== null) setDevicePlacementPreview(null)
+        handlePointerMove(event)
+        return
+      }
+
       // 设备工具激活时（且处于 build 模式），按 mountType 计算预览位置：
       //   - wall / wall_switch → 吸附到最近的墙边（1m 吸附半径）+ 识别侧别（front/back）
       //   - ceiling / floor / 其他 → 自由放置（raw plan point，不做网格吸附）
@@ -10953,10 +11262,13 @@ export function FloorplanPanel() {
               palette={palette}
             />
             {/* Ghost 圆点 —— 仅在 build 模式 + tool==='item' 放置预览时显示。
-                灯带模式下不显示（用 strip draft）；切到 wall/slab 等工具时也不显示。*/}
+                灯带 / 窗帘 都有自己的 draft 视觉（不需要也不该显示这个标准圆点）。*/}
             <FloorplanDeviceGhost
               point={
-                mode === 'build' && tool === 'item' && selectedDevice?.lightType !== 'line'
+                mode === 'build' &&
+                tool === 'item' &&
+                selectedDevice?.lightType !== 'line' &&
+                selectedDevice?.subsystem !== 'curtain'
                   ? (devicePlacementPreview?.point ?? null)
                   : null
               }
@@ -10975,6 +11287,19 @@ export function FloorplanPanel() {
                 <FloorplanLightStripDraft
                   draft={lightStripDraftState}
                   color={getSubsystemColor(selectedDevice.subsystem)}
+                  worldUnitsPerPixel={floorplanWorldUnitsPerPixel}
+                />
+              )}
+
+            {/* 窗帘画线 draft —— 仅对开帘 2 点画线流程 */}
+            {mode === 'build' &&
+              tool === 'item' &&
+              selectedDevice?.subsystem === 'curtain' &&
+              selectedDevice?.subtype === 'curtain-side-open' &&
+              curtainDraftState && (
+                <FloorplanCurtainDraft
+                  draft={curtainDraftState}
+                  walls={walls}
                   worldUnitsPerPixel={floorplanWorldUnitsPerPixel}
                 />
               )}

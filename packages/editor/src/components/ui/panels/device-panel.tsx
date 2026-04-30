@@ -533,12 +533,15 @@ function hasOnOff(c: DeviceClass): boolean {
 
 /** 决定是否应该显示"朝向"（direction） */
 function hasDirection(c: DeviceClass, node: DeviceNode): boolean {
-  // 明确有方向的：摄像头、定向 AP、窗帘（朝向房间的方向）、壁灯、HVAC 出风口
+  // 明确有方向的：摄像头、定向 AP、壁灯、HVAC 出风口
+  // 注意：窗帘的方向在 2 点画线放置时已经从墙方向自动算出，不需要再让用户改
   if (c.isCamera) return true
-  if (c.isCurtain) return true
   if (c.isHvac && node.productId !== 'HVAC-THERMOSTAT') return true
-  // 壁挂设备普遍有方向（背靠墙朝房间）
-  if (node.mountType === 'wall' || node.mountType === 'wall_switch') return true
+  if (node.mountType === 'wall' || node.mountType === 'wall_switch') {
+    // 但窗帘的"贴墙"是固定的（绑定哪面墙），不开放朝向 slider
+    if (c.isCurtain) return false
+    return true
+  }
   return false
 }
 
@@ -565,90 +568,14 @@ type CurtainRenderType = (typeof CURTAIN_TYPE_OPTIONS)[number]['value']
 
 function CurtainConfigPanel({ node }: { node: DeviceNode }) {
   const updateNode = useScene((s) => s.updateNode)
-  const sceneNodes = useScene((s) => s.nodes)
-
-  // 当前楼层（curtain 的 parentId 就是 level id）
-  const levelId = node.parentId as string | null
-
-  // 找当前楼层所有 window 节点：window.wallId → wall.parentId === levelId
-  const windowsOnLevel = useScene((s) => {
-    if (!levelId) return [] as Array<{ id: string; name: string; wallId: string }>
-    const allNodes = Object.values(s.nodes)
-    const wallsOnLevel = new Set<string>()
-    for (const n of allNodes) {
-      if ((n as { type?: string }).type === 'wall' && (n as { parentId?: string }).parentId === levelId) {
-        wallsOnLevel.add((n as { id: string }).id)
-      }
-    }
-    const out: Array<{ id: string; name: string; wallId: string }> = []
-    for (const n of allNodes) {
-      const nn = n as { type?: string; id?: string; name?: string; wallId?: string }
-      if (nn.type !== 'window' || !nn.id || !nn.wallId) continue
-      if (!wallsOnLevel.has(nn.wallId)) continue
-      out.push({ id: nn.id, name: nn.name ?? `窗 ${nn.id.slice(-4)}`, wallId: nn.wallId })
-    }
-    return out
-  })
-
   const currentType = (node.renderType ?? 'curtain-side-open') as CurtainRenderType
-  const currentOpeningId = (node.params?.openingId as string | undefined) ?? null
 
   const handleChangeType = useCallback(
     (v: CurtainRenderType) => {
+      // 切换只改 renderType，不动 productId（保留出厂规格）
       updateNode(node.id as never, { renderType: v } as never)
     },
     [updateNode, node.id],
-  )
-
-  /**
-   * 【硬绑定】绑窗户时同步：
-   *   1. 写 params.openingId
-   *   2. 把 curtain.position 移到窗户世界中心（解绑后位置一致，不会跳回最初点）
-   *   3. 把 params.curtainWidth 锁到窗户宽度（unbind 后宽度也对）
-   */
-  const handleBindWindow = useCallback(
-    (windowId: string | null) => {
-      const nextParams = { ...(node.params ?? {}) } as Record<string, unknown>
-      if (!windowId) {
-        // 解绑：仅删 openingId，position/width 保留（用户可后续自调）
-        delete nextParams.openingId
-        setDeviceParams(node.id as never, nextParams as never)
-        return
-      }
-      // 绑定：先算窗户世界中心 + 宽度
-      const win = sceneNodes[windowId as keyof typeof sceneNodes] as
-        | { type?: string; wallId?: string; position?: [number, number, number]; width?: number; height?: number }
-        | undefined
-      if (!win || win.type !== 'window' || !win.wallId) {
-        // 数据异常 fallback：只写 openingId
-        nextParams.openingId = windowId
-        setDeviceParams(node.id as never, nextParams as never)
-        return
-      }
-      const wall = sceneNodes[win.wallId as keyof typeof sceneNodes] as
-        | { type?: string; start?: [number, number]; end?: [number, number] }
-        | undefined
-      if (!wall || wall.type !== 'wall' || !wall.start || !wall.end) {
-        nextParams.openingId = windowId
-        setDeviceParams(node.id as never, nextParams as never)
-        return
-      }
-      // 沿墙距起点 (window.position[0]) → 世界 XZ 中心
-      const [sx, sz] = wall.start
-      const [ex, ez] = wall.end
-      const wallLen = Math.hypot(ex - sx, ez - sz)
-      const u = wallLen > 0.001 ? (win.position?.[0] ?? 0) / wallLen : 0
-      const cx = sx + (ex - sx) * u
-      const cz = sz + (ez - sz) * u
-      const cy = win.position?.[1] ?? 1.2
-
-      nextParams.openingId = windowId
-      nextParams.curtainWidth = win.width ?? 1.8
-      setDeviceParams(node.id as never, nextParams as never)
-      // 同步位置 —— updateNode 会触发渲染重计算 + 持久化到 store
-      updateNode(node.id as never, { position: [cx, cy, cz] } as never)
-    },
-    [sceneNodes, node.id, node.params, updateNode],
   )
 
   return (
@@ -661,52 +588,9 @@ function CurtainConfigPanel({ node }: { node: DeviceNode }) {
         />
       </PanelSection>
 
-      <PanelSection title="关联窗户">
-        {windowsOnLevel.length === 0 ? (
-          <p className="px-1 py-2 text-[11px] text-muted-foreground">
-            当前楼层没有窗户。先去结构工具画一扇窗，再回来绑定。
-          </p>
-        ) : (
-          <div className="space-y-1">
-            {/* 解绑选项 —— 让用户能把窗帘"脱离"窗户回到原始位置 */}
-            <Button
-              variant="ghost"
-              className={cn(
-                'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors',
-                !currentOpeningId
-                  ? 'bg-accent/40 ring-1 ring-accent text-foreground'
-                  : 'text-muted-foreground hover:bg-accent/30',
-              )}
-              onClick={() => handleBindWindow(null)}
-              type="button"
-            >
-              <Unlink className="h-3 w-3 shrink-0" />
-              <span className="flex-1 truncate text-[11px] font-medium">未绑定</span>
-            </Button>
-            {windowsOnLevel.map((w) => {
-              const isSelected = currentOpeningId === w.id
-              return (
-                <Button
-                  variant="ghost"
-                  className={cn(
-                    'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors',
-                    isSelected
-                      ? 'bg-emerald-500/15 ring-1 ring-emerald-500/30 text-foreground'
-                      : 'text-muted-foreground hover:bg-accent/30',
-                  )}
-                  key={w.id}
-                  onClick={() => handleBindWindow(w.id)}
-                  type="button"
-                >
-                  <Link2 className="h-3 w-3 shrink-0" />
-                  <span className="flex-1 truncate text-[11px] font-medium">{w.name}</span>
-                  {isSelected && <Zap className="h-3 w-3 shrink-0 text-emerald-400" />}
-                </Button>
-              )
-            })}
-          </div>
-        )}
-      </PanelSection>
+      {/* 关联窗户 列表 —— 已下线。新的放置流程是"墙上 2 点画宽度"，
+          自动绑定 wallId + curtainWidth + direction，不再需要手动选窗户。
+          openingId 字段保留用于历史数据/未来高级模式。 */}
     </>
   )
 }

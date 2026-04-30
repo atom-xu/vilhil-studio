@@ -669,7 +669,7 @@ export default function Editor({
   const activeSidebarPanel = useEditor((s) => normalizePanelId(s.activeSidebarPanel))
   const isDeviceMode = activeSidebarPanel === 'device'
   const isTopologyMode = activeSidebarPanel === 'topology'
-  const isWorkspaceMode = isTopologyMode || isDeviceMode
+  const isWorkspaceMode = isTopologyMode
 
   const show2d = viewMode === '2d' || viewMode === 'split'
   const show3d = viewMode === '3d' || viewMode === 'split'
@@ -731,7 +731,7 @@ export default function Editor({
     </div>
   )
 
-  const mainContent = isTopologyMode ? topologyWorkspace : isDeviceMode ? deviceWorkspace : viewerCanvas
+  const mainContent = isTopologyMode ? topologyWorkspace : viewerCanvas
 
   // ── V2 layout ──
   if (layoutVersion === 'v2') {

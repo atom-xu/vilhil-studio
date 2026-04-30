@@ -1,61 +1,68 @@
 'use client'
 
-import { type AnyNode, type AnyNodeId, DeviceNode, generateId, resolveLevelId, useScene } from '@pascal-app/core'
+import {
+  type AnyNode,
+  type AnyNodeId,
+  DeviceNode,
+  generateId,
+  resolveLevelId,
+  useScene,
+} from '@pascal-app/core'
 import { useViewer } from '@pascal-app/viewer'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  SUBSYSTEM_META,
+  SUBSYSTEM_ORDER,
+  getSubsystemColor,
+  getSubsystemLabel,
+} from '@vilhil/smarthome'
+import {
+  Building2,
+  ChevronDown,
+  ChevronUp,
+  Cpu,
+  GripHorizontal,
+  Layers,
+  Lightbulb,
+  Music,
+  Network,
+  Package,
+  Radio,
+  RefreshCw,
+  Search,
+  Shield,
+  Thermometer,
+  ToggleLeft,
+  Wifi,
+  Wind,
+  X,
+  Zap,
+} from 'lucide-react'
+import { type LucideIcon, type LucideProps } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { cn } from '../../lib/utils'
+
+// ─── Types ─────────────────────────────────────────────────────────────────
 
 type LinkMedium = 'wired' | 'wireless'
 type NetworkType = 'lan' | 'wan'
+type Subsystem = keyof typeof SUBSYSTEM_META
 
-type TopologyNode = {
-  deviceId: string
-  x: number
-  y: number
-}
-
-type TopologyEdge = {
-  id: string
-  from: string
-  to: string
-  medium: LinkMedium
-  network: NetworkType
-}
-
-type TopologyDraft = {
-  placed: Record<string, TopologyNode>
-  edges: TopologyEdge[]
-}
+type TopologyNode = { deviceId: string; x: number; y: number }
+type TopologyEdge = { id: string; from: string; to: string; medium: LinkMedium; network: NetworkType }
+type TopologyDraft = { placed: Record<string, TopologyNode>; edges: TopologyEdge[] }
 
 type SceneDevice = {
-  id: string
-  name: string
-  brand: string
-  subsystem: string
-  levelId: string | null
-  protocol: string
-  renderType: string
-  mountType: string
+  id: string; name: string; brand: string; subsystem: string
+  levelId: string | null; protocol: string; renderType: string; mountType: string
 }
 
 type ApiTopologyController = {
-  deviceId: string
-  name: string
-  levelId: string | null
-  protocol: string
-  maxChildren: number
-  usedChildren: number
-  availableChildren: number
-  childIds: string[]
+  deviceId: string; name: string; levelId: string | null; protocol: string
+  maxChildren: number; usedChildren: number; availableChildren: number; childIds: string[]
 }
-
 type ApiTopologyAssignment = {
-  childId: string
-  parentId: string
-  slotIndex: number
-  assignedAt: number
-  reason: 'auto' | 'manual-lock'
+  childId: string; parentId: string; slotIndex: number; assignedAt: number; reason: 'auto' | 'manual-lock'
 }
-
 type ApiTopologyData = {
   generatedAt: number
   controllers: ApiTopologyController[]
@@ -63,13 +70,28 @@ type ApiTopologyData = {
   unassigned: string[]
 }
 
+// ─── Subsystem icons ────────────────────────────────────────────────────────
+
+const SUBSYSTEM_ICONS: Record<string, LucideIcon> = {
+  architecture: Building2,
+  lighting: Lightbulb,
+  panel: ToggleLeft,
+  sensor: Radio,
+  curtain: Layers,
+  hvac: Wind,
+  av: Music,
+  security: Shield,
+  network: Wifi,
+}
+
+// ─── Constants ─────────────────────────────────────────────────────────────
+
 const TOPOLOGY_DRAFT_KEY = 'vilhil-topology-editor-v2'
-const SMART_ITEM_IDS = new Set([
-  'apple-homepod',
-  'security-camera-dome',
-  'security-camera-bullet',
-  'smart-switch',
-])
+const SMART_ITEM_IDS = new Set(['apple-homepod', 'security-camera-dome', 'security-camera-bullet', 'smart-switch'])
+const NODE_W = 160
+const NODE_H = 86
+
+// ─── Helpers ───────────────────────────────────────────────────────────────
 
 function toSceneDevice(raw: any): SceneDevice {
   return {
@@ -86,7 +108,7 @@ function toSceneDevice(raw: any): SceneDevice {
 
 function inferItemSubsystem(item: any): string {
   const id = `${item?.asset?.id ?? ''}`.toLowerCase()
-  const tags = (item?.asset?.tags ?? []).map((tag: string) => tag.toLowerCase())
+  const tags = (item?.asset?.tags ?? []).map((t: string) => t.toLowerCase())
   if (id.includes('camera') || tags.includes('security')) return 'security'
   if (id.includes('homepod') || tags.includes('audio') || tags.includes('electronics')) return 'av'
   if (id.includes('switch') || tags.includes('electrical')) return 'panel'
@@ -136,22 +158,507 @@ function toSceneDeviceFromItem(raw: any, nodes: Record<string, any>): SceneDevic
 
 function smartItemDeviceProfile(item: any) {
   const assetId = `${item?.asset?.id ?? ''}`.toLowerCase()
-  if (assetId.includes('homepod')) {
-    return { subsystem: 'av', protocol: 'matter', renderType: 'homepod', brand: 'Apple' } as const
-  }
-  if (assetId.includes('camera')) {
-    return { subsystem: 'security', protocol: 'wifi', renderType: 'camera', brand: 'Generic' } as const
-  }
-  if (assetId.includes('switch')) {
-    return { subsystem: 'panel', protocol: 'zigbee', renderType: 'switch_1key', brand: 'Generic' } as const
-  }
+  if (assetId.includes('homepod')) return { subsystem: 'av', protocol: 'matter', renderType: 'homepod', brand: 'Apple' } as const
+  if (assetId.includes('camera')) return { subsystem: 'security', protocol: 'wifi', renderType: 'camera', brand: 'Generic' } as const
+  if (assetId.includes('switch')) return { subsystem: 'panel', protocol: 'zigbee', renderType: 'switch_1key', brand: 'Generic' } as const
   return { subsystem: 'network', protocol: 'wifi', renderType: assetId || 'item_smart', brand: 'Generic' } as const
 }
 
-function usageLabel(count: number, total: number) {
-  if (total <= 0) return `${count}`
-  return `${count}/${total}`
+// ─── DeviceCard ─────────────────────────────────────────────────────────────
+
+interface DeviceCardProps {
+  device: SceneDevice
+  x: number; y: number
+  selected: boolean
+  isPendingFrom: boolean
+  controller: ApiTopologyController | undefined
+  assignment: ApiTopologyAssignment | undefined
+  parentName: string | null
+  onConnect: () => void
+  onPointerDown: (e: React.PointerEvent) => void
+  onRemove: () => void
 }
+
+function DeviceCard({
+  device, x, y, selected, isPendingFrom,
+  controller, assignment, parentName,
+  onConnect, onPointerDown, onRemove,
+}: DeviceCardProps) {
+  const color = getSubsystemColor(device.subsystem as Subsystem) ?? '#888'
+  const label = getSubsystemLabel(device.subsystem as Subsystem)
+  const Icon: LucideIcon = SUBSYSTEM_ICONS[device.subsystem] ?? Cpu
+
+  const statusColor = controller ? '#60a5fa' : assignment ? '#4ade80' : '#fbbf24'
+  const statusText = controller
+    ? `控制器 ${controller.usedChildren}/${controller.maxChildren}`
+    : assignment
+    ? `→ ${parentName ?? assignment.parentId}`
+    : device.protocol
+
+  const isHighlighted = selected || isPendingFrom
+
+  return (
+    <div
+      data-topology-card
+      className={cn(
+        'absolute flex flex-col rounded-xl border bg-card/95 shadow-sm backdrop-blur-sm transition-all duration-150',
+        isHighlighted
+          ? 'shadow-lg ring-2'
+          : 'border-border/50 hover:border-border hover:shadow-md',
+      )}
+      style={{
+        left: x,
+        top: y,
+        width: NODE_W,
+        borderLeftWidth: 3,
+        borderLeftColor: color,
+        // ring color via CSS variable trick
+        ...(isHighlighted ? { '--tw-ring-color': color } as React.CSSProperties : {}),
+      }}
+    >
+      {/* Header row: subsystem pill + actions */}
+      <div className="flex items-center justify-between px-2.5 pt-2">
+        <span
+          className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider"
+          style={{ backgroundColor: `${color}1a`, color }}
+        >
+          {label}
+        </span>
+        <div className="flex items-center gap-0.5">
+          <button
+            className="cursor-grab rounded p-0.5 text-muted-foreground/30 transition-colors hover:text-muted-foreground"
+            onPointerDown={onPointerDown}
+            type="button"
+          >
+            <GripHorizontal className="h-3 w-3" />
+          </button>
+          <button
+            className="rounded p-0.5 text-muted-foreground/30 transition-colors hover:text-red-400"
+            onClick={onRemove}
+            type="button"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      </div>
+
+      {/* Body: icon + name, click to connect */}
+      <button
+        className="flex items-start gap-2.5 px-2.5 pb-2.5 pt-1.5 text-left"
+        onClick={onConnect}
+        type="button"
+      >
+        <div
+          className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+          style={{ backgroundColor: `${color}18` }}
+        >
+          <Icon className="h-4 w-4" style={{ color }} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-xs font-semibold text-foreground">{device.name}</div>
+          <div className="truncate text-[10px] text-muted-foreground">{device.brand}</div>
+          <div className="mt-1 flex items-center gap-1">
+            <div className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: statusColor }} />
+            <span className="truncate text-[10px] text-muted-foreground/70">{statusText}</span>
+          </div>
+        </div>
+      </button>
+    </div>
+  )
+}
+
+// ─── Edge SVG ──────────────────────────────────────────────────────────────
+
+function EdgeLayer({
+  edges,
+  placed,
+  selectedEdgeId,
+  onSelectEdge,
+}: {
+  edges: TopologyEdge[]
+  placed: Record<string, TopologyNode>
+  selectedEdgeId: string | null
+  onSelectEdge: (id: string) => void
+}) {
+  return (
+    <svg className="pointer-events-none absolute inset-0 h-full w-full overflow-visible">
+      <defs>
+        {['wired', 'wireless'].map((m) => (
+          <marker
+            key={m}
+            id={`arrow-${m}`}
+            markerHeight="6"
+            markerWidth="6"
+            orient="auto"
+            refX="5"
+            refY="3"
+          >
+            <path
+              d="M0,0 L0,6 L6,3 z"
+              fill={m === 'wired' ? '#006FFF' : '#10b981'}
+              opacity={0.75}
+            />
+          </marker>
+        ))}
+      </defs>
+
+      {edges.map((edge) => {
+        const fromNode = placed[edge.from]
+        const toNode = placed[edge.to]
+        if (!fromNode || !toNode) return null
+
+        const x1 = fromNode.x + NODE_W / 2
+        const y1 = fromNode.y + NODE_H / 2
+        const x2 = toNode.x + NODE_W / 2
+        const y2 = toNode.y + NODE_H / 2
+
+        // Quadratic bezier control point: perpendicular offset for curve
+        const dx = x2 - x1
+        const dy = y2 - y1
+        const len = Math.hypot(dx, dy) || 1
+        const curveOffset = Math.min(80, len * 0.35)
+        const px = (-dy / len) * curveOffset
+        const py = (dx / len) * curveOffset
+        const cx = (x1 + x2) / 2 + px
+        const cy = (y1 + y2) / 2 + py
+
+        const d = `M${x1},${y1} Q${cx},${cy} ${x2},${y2}`
+        const selected = edge.id === selectedEdgeId
+        const color = edge.medium === 'wired' ? '#006FFF' : '#10b981'
+
+        return (
+          <g key={edge.id}>
+            {/* Wide invisible hit target */}
+            <path
+              className="pointer-events-auto cursor-pointer"
+              d={d}
+              fill="none"
+              onClick={() => onSelectEdge(edge.id)}
+              stroke="transparent"
+              strokeWidth={14}
+            />
+            {/* Visible line */}
+            <path
+              className="pointer-events-none"
+              d={d}
+              fill="none"
+              markerEnd={`url(#arrow-${edge.medium})`}
+              opacity={selected ? 1 : 0.55}
+              stroke={color}
+              strokeDasharray={edge.medium === 'wireless' ? '7 4' : undefined}
+              strokeWidth={selected ? 2.5 : 1.5}
+            />
+            {/* Label */}
+            <text
+              dominantBaseline="middle"
+              fill={color}
+              fontSize="9"
+              fontWeight={selected ? 700 : 500}
+              opacity={selected ? 1 : 0.7}
+              textAnchor="middle"
+              x={cx}
+              y={cy - 9}
+            >
+              {edge.network.toUpperCase()}
+            </text>
+          </g>
+        )
+      })}
+    </svg>
+  )
+}
+
+// ─── DevicePoolPanel ────────────────────────────────────────────────────────
+
+interface DevicePoolPanelProps {
+  devices: SceneDevice[]
+  placedIds: Set<string>
+  query: string
+  onQuery: (q: string) => void
+  mediumFilter: 'all' | LinkMedium
+  onMediumFilter: (v: 'all' | LinkMedium) => void
+  brands: string[]
+  brandFilter: 'all' | string
+  onBrandFilter: (v: string) => void
+  onDragStart: (e: React.DragEvent, deviceId: string) => void
+  onAddAll: () => void
+}
+
+function DevicePoolPanel({
+  devices, placedIds, query, onQuery,
+  mediumFilter, onMediumFilter, brands, brandFilter, onBrandFilter,
+  onDragStart, onAddAll,
+}: DevicePoolPanelProps) {
+  return (
+    <div className="flex flex-col overflow-hidden rounded-2xl border border-border/60 bg-background/96 shadow-xl backdrop-blur-md"
+         style={{ width: 296, maxHeight: 440 }}>
+      <div className="flex shrink-0 items-center justify-between border-b border-border/40 px-3 py-2.5">
+        <span className="text-xs font-semibold text-foreground">设备池</span>
+        <button
+          className="rounded-lg bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/20"
+          onClick={onAddAll}
+          type="button"
+        >
+          全部上图
+        </button>
+      </div>
+
+      {/* Filters */}
+      <div className="flex shrink-0 gap-1.5 border-b border-border/40 px-3 py-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground/40" />
+          <input
+            className="h-7 w-full rounded-lg border border-border/50 bg-muted/40 pl-6 pr-2 text-[11px] outline-none focus:border-primary/40"
+            onChange={(e) => onQuery(e.target.value)}
+            placeholder="搜索设备…"
+            value={query}
+          />
+        </div>
+        <select
+          className="h-7 rounded-lg border border-border/50 bg-muted/40 px-1.5 text-[11px] outline-none"
+          onChange={(e) => onMediumFilter(e.target.value as 'all' | LinkMedium)}
+          value={mediumFilter}
+        >
+          <option value="all">全部</option>
+          <option value="wired">有线</option>
+          <option value="wireless">无线</option>
+        </select>
+      </div>
+
+      {/* Subsystem group tabs */}
+      <div className="shrink-0 overflow-x-auto px-2 pt-1.5 scrollbar-none">
+        <div className="flex gap-1 pb-1">
+          <button
+            className={cn(
+              'shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium transition-colors',
+              brandFilter === 'all' ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent',
+            )}
+            onClick={() => onBrandFilter('all')}
+            type="button"
+          >
+            全部品牌
+          </button>
+          {brands.map((b) => (
+            <button
+              key={b}
+              className={cn(
+                'shrink-0 rounded-md px-2 py-0.5 text-[10px] font-medium whitespace-nowrap transition-colors',
+                brandFilter === b ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent',
+              )}
+              onClick={() => onBrandFilter(b)}
+              type="button"
+            >
+              {b}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Device list */}
+      <div className="flex-1 overflow-y-auto px-2 pb-2">
+        {devices.length === 0 ? (
+          <div className="py-6 text-center text-[11px] text-muted-foreground/40">
+            没有符合条件的设备
+          </div>
+        ) : (
+          <div className="space-y-0.5 pt-1">
+            {devices.map((d) => {
+              const color = getSubsystemColor(d.subsystem as Subsystem) ?? '#888'
+              const Icon = SUBSYSTEM_ICONS[d.subsystem] ?? Cpu
+              const isPlaced = placedIds.has(d.id)
+              return (
+                <div
+                  key={d.id}
+                  className={cn(
+                    'flex cursor-grab items-center gap-2 rounded-xl px-2 py-1.5 text-xs transition-colors',
+                    isPlaced
+                      ? 'opacity-40'
+                      : 'hover:bg-accent/60 active:bg-accent',
+                  )}
+                  draggable={!isPlaced}
+                  onDragStart={isPlaced ? undefined : (e) => onDragStart(e, d.id)}
+                >
+                  <div
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                    style={{ backgroundColor: `${color}18` }}
+                  >
+                    <Icon className="h-3.5 w-3.5" style={{ color }} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-medium text-foreground">{d.name}</div>
+                    <div className="truncate text-[10px] text-muted-foreground/60">{d.brand} · {d.protocol}</div>
+                  </div>
+                  {isPlaced && (
+                    <span className="shrink-0 rounded bg-muted px-1 text-[9px] text-muted-foreground">已上图</span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── SelectionPanel ─────────────────────────────────────────────────────────
+
+interface SelectionPanelProps {
+  selectedNode: SceneDevice | null
+  selectedEdge: TopologyEdge | null
+  deviceById: Map<string, SceneDevice>
+  controllerById: Map<string, ApiTopologyController>
+  assignmentByChildId: Map<string, ApiTopologyAssignment>
+  onRemoveEdge: (id: string) => void
+  onUpdateEdge: (id: string, patch: Partial<Pick<TopologyEdge, 'medium' | 'network'>>) => void
+  onClose: () => void
+}
+
+function SelectionPanel({
+  selectedNode, selectedEdge, deviceById,
+  controllerById, assignmentByChildId,
+  onRemoveEdge, onUpdateEdge, onClose,
+}: SelectionPanelProps) {
+  return (
+    <div className="flex h-full w-[280px] shrink-0 flex-col border-l border-border/50 bg-sidebar">
+      <div className="flex shrink-0 items-center justify-between border-b border-border/40 px-3 py-2.5">
+        <span className="text-xs font-semibold text-foreground">
+          {selectedNode ? '设备详情' : '连接详情'}
+        </span>
+        <button
+          className="rounded-lg p-1 text-muted-foreground/40 transition-colors hover:bg-accent hover:text-foreground"
+          onClick={onClose}
+          type="button"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-3 py-3">
+        {selectedNode && (() => {
+          const color = getSubsystemColor(selectedNode.subsystem as Subsystem) ?? '#888'
+          const Icon = SUBSYSTEM_ICONS[selectedNode.subsystem] ?? Cpu
+          const ctrl = controllerById.get(selectedNode.id)
+          const assign = assignmentByChildId.get(selectedNode.id)
+          const parentName = assign ? deviceById.get(assign.parentId)?.name ?? assign.parentId : null
+
+          return (
+            <div className="space-y-3">
+              {/* Device card */}
+              <div className="rounded-xl border border-border/50 p-3" style={{ borderLeftWidth: 3, borderLeftColor: color }}>
+                <div className="mb-2 flex items-center gap-2.5">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                       style={{ backgroundColor: `${color}18` }}>
+                    <Icon className="h-4.5 w-4.5" style={{ color }} />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-foreground">{selectedNode.name}</div>
+                    <div className="text-[11px] text-muted-foreground">{selectedNode.brand}</div>
+                  </div>
+                </div>
+                <div className="space-y-1 text-[11px] text-muted-foreground">
+                  <div className="flex justify-between">
+                    <span>子系统</span>
+                    <span className="font-medium text-foreground">{getSubsystemLabel(selectedNode.subsystem as Subsystem)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>协议</span>
+                    <span className="font-medium text-foreground">{selectedNode.protocol}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>挂装</span>
+                    <span className="font-medium text-foreground">{selectedNode.mountType}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Role */}
+              <div className="rounded-xl border border-border/50 px-3 py-2.5">
+                <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+                  接入角色
+                </div>
+                {ctrl ? (
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-blue-400" />
+                    <span className="text-xs text-foreground">控制器</span>
+                    <span className="ml-auto text-xs font-semibold text-blue-500">{ctrl.usedChildren}/{ctrl.maxChildren}</span>
+                  </div>
+                ) : assign ? (
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-emerald-400" />
+                    <span className="text-xs text-foreground">子设备</span>
+                    <span className="ml-auto text-xs text-muted-foreground">→ {parentName} #{assign.slotIndex}</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 w-2 rounded-full bg-amber-400" />
+                    <span className="text-xs text-muted-foreground">待接入</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })()}
+
+        {selectedEdge && (() => {
+          const from = deviceById.get(selectedEdge.from)
+          const to = deviceById.get(selectedEdge.to)
+          const edgeColor = selectedEdge.medium === 'wired' ? '#006FFF' : '#10b981'
+
+          return (
+            <div className="space-y-3">
+              {/* Edge info */}
+              <div className="rounded-xl border border-border/50 px-3 py-2.5">
+                <div className="mb-2 flex items-center gap-1.5">
+                  <div className="h-2 w-8 rounded-full" style={{ backgroundColor: `${edgeColor}40` }}>
+                    <div className="h-full w-full rounded-full" style={{ backgroundColor: edgeColor, opacity: 0.8 }} />
+                  </div>
+                  <span className="text-xs font-medium" style={{ color: edgeColor }}>
+                    {selectedEdge.medium === 'wired' ? '有线' : '无线'} · {selectedEdge.network.toUpperCase()}
+                  </span>
+                </div>
+                <div className="space-y-1 text-[11px] text-muted-foreground">
+                  <div><span className="font-medium text-foreground">{from?.name ?? selectedEdge.from}</span></div>
+                  <div className="pl-2 text-muted-foreground/50">↓</div>
+                  <div><span className="font-medium text-foreground">{to?.name ?? selectedEdge.to}</span></div>
+                </div>
+              </div>
+
+              {/* Edit */}
+              <div className="space-y-2">
+                <select
+                  className="h-8 w-full rounded-lg border border-border/50 bg-background px-2.5 text-xs outline-none focus:border-primary/40"
+                  onChange={(e) => onUpdateEdge(selectedEdge.id, { medium: e.target.value as LinkMedium })}
+                  value={selectedEdge.medium}
+                >
+                  <option value="wired">有线</option>
+                  <option value="wireless">无线</option>
+                </select>
+                <select
+                  className="h-8 w-full rounded-lg border border-border/50 bg-background px-2.5 text-xs outline-none focus:border-primary/40"
+                  onChange={(e) => onUpdateEdge(selectedEdge.id, { network: e.target.value as NetworkType })}
+                  value={selectedEdge.network}
+                >
+                  <option value="lan">LAN</option>
+                  <option value="wan">WAN</option>
+                </select>
+                <button
+                  className="h-8 w-full rounded-lg border border-red-200/60 bg-red-50/60 text-xs text-red-500 transition-colors hover:bg-red-50 dark:border-red-800/40 dark:bg-red-950/20 dark:text-red-400"
+                  onClick={() => onRemoveEdge(selectedEdge.id)}
+                  type="button"
+                >
+                  删除此连接
+                </button>
+              </div>
+            </div>
+          )
+        })()}
+      </div>
+    </div>
+  )
+}
+
+// ─── TopologyWorkspace ──────────────────────────────────────────────────────
 
 export function TopologyWorkspace() {
   const sceneNodes = useScene((s) => s.nodes)
@@ -163,30 +670,30 @@ export function TopologyWorkspace() {
   const [query, setQuery] = useState('')
   const [mediumFilter, setMediumFilter] = useState<'all' | LinkMedium>('all')
   const [brandFilter, setBrandFilter] = useState<'all' | string>('all')
-  const [protocolFilter, setProtocolFilter] = useState<'all' | string>('all')
+  const [protocolFilter] = useState<'all' | string>('all')
 
   const [linkMedium, setLinkMedium] = useState<LinkMedium>('wired')
   const [networkType, setNetworkType] = useState<NetworkType>('lan')
 
-  const [edgeMediumFilter, setEdgeMediumFilter] = useState<'all' | LinkMedium>('all')
-  const [edgeNetworkFilter, setEdgeNetworkFilter] = useState<'all' | NetworkType>('all')
+  const [edgeMediumFilter] = useState<'all' | LinkMedium>('all')
+  const [edgeNetworkFilter] = useState<'all' | NetworkType>('all')
 
   const [pendingFrom, setPendingFrom] = useState<string | null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [apiTopology, setApiTopology] = useState<ApiTopologyData | null>(null)
   const [apiLoading, setApiLoading] = useState(false)
-  const [apiError, setApiError] = useState<string | null>(null)
+  const [showDevicePool, setShowDevicePool] = useState(false)
 
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const dragRef = useRef<{ deviceId: string; offsetX: number; offsetY: number } | null>(null)
 
+  // ── Derived data ───────────────────────────────────────────────────────
+
   const allDevices = useMemo(() => {
     const values = Object.values(sceneNodes) as any[]
     const sceneNodeMap = sceneNodes as Record<string, any>
-    const devices = values
-      .filter((n: any) => n?.type === 'device')
-      .map((n: any) => toSceneDevice(n))
+    const devices = values.filter((n: any) => n?.type === 'device').map((n: any) => toSceneDevice(n))
     const smartItems = values
       .filter((n: any) => {
         if (!isSmartItemNode(n)) return false
@@ -211,7 +718,6 @@ export function TopologyWorkspace() {
   const levelDeviceIdSet = useMemo(() => new Set(levelDevices.map((d) => d.id)), [levelDevices])
 
   const brands = useMemo(() => Array.from(new Set(levelDevices.map((d) => d.brand))).sort(), [levelDevices])
-  const protocols = useMemo(() => Array.from(new Set(levelDevices.map((d) => d.protocol))).sort(), [levelDevices])
 
   const visibleDevices = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -219,14 +725,8 @@ export function TopologyWorkspace() {
       if (q && !`${d.name} ${d.id}`.toLowerCase().includes(q)) return false
       if (brandFilter !== 'all' && d.brand !== brandFilter) return false
       if (protocolFilter !== 'all' && d.protocol !== protocolFilter) return false
-
-      if (mediumFilter === 'wired') {
-        return ['network', 'architecture', 'av', 'security'].includes(d.subsystem)
-      }
-      if (mediumFilter === 'wireless') {
-        return ['sensor', 'lighting', 'panel', 'curtain', 'hvac'].includes(d.subsystem)
-      }
-
+      if (mediumFilter === 'wired') return ['network', 'architecture', 'av', 'security'].includes(d.subsystem)
+      if (mediumFilter === 'wireless') return ['sensor', 'lighting', 'panel', 'curtain', 'hvac'].includes(d.subsystem)
       return true
     })
   }, [levelDevices, query, brandFilter, protocolFilter, mediumFilter])
@@ -242,23 +742,27 @@ export function TopologyWorkspace() {
     })
   }, [edges, levelDeviceIdSet, edgeMediumFilter, edgeNetworkFilter])
 
-  const selectedNode = selectedNodeId ? deviceById.get(selectedNodeId) : null
+  const selectedNode = selectedNodeId ? deviceById.get(selectedNodeId) ?? null : null
   const selectedEdge = selectedEdgeId ? edges.find((e) => e.id === selectedEdgeId) ?? null : null
+
   const assignmentByChildId = useMemo(() => {
     const map = new Map<string, ApiTopologyAssignment>()
-    for (const assignment of apiTopology?.assignments ?? []) {
-      map.set(assignment.childId, assignment)
-    }
+    for (const a of apiTopology?.assignments ?? []) map.set(a.childId, a)
     return map
   }, [apiTopology])
 
   const controllerById = useMemo(() => {
     const map = new Map<string, ApiTopologyController>()
-    for (const controller of apiTopology?.controllers ?? []) {
-      map.set(controller.deviceId, controller)
-    }
+    for (const c of apiTopology?.controllers ?? []) map.set(c.deviceId, c)
     return map
   }, [apiTopology])
+
+  const placedCountOnLevel = Object.keys(placed).filter((id) => levelDeviceIdSet.has(id)).length
+  const unplacedCount = levelDevices.filter((d) => !placedIds.has(d.id)).length
+
+  const hasSelection = !!(selectedNode || selectedEdge)
+
+  // ── Actions ────────────────────────────────────────────────────────────
 
   const addToCanvas = (deviceId: string, x = 80, y = 80) => {
     setPlaced((prev) => {
@@ -273,17 +777,14 @@ export function TopologyWorkspace() {
       let index = 0
       for (const d of visibleDevices) {
         if (next[d.id]) continue
-        const col = index % 6
-        const row = Math.floor(index / 6)
-        next[d.id] = {
-          deviceId: d.id,
-          x: 24 + col * 168,
-          y: 24 + row * 86,
-        }
-        index += 1
+        const col = index % 5
+        const row = Math.floor(index / 5)
+        next[d.id] = { deviceId: d.id, x: 32 + col * (NODE_W + 32), y: 32 + row * (NODE_H + 40) }
+        index++
       }
       return next
     })
+    setShowDevicePool(false)
   }
 
   const autoLayout = () => {
@@ -291,20 +792,16 @@ export function TopologyWorkspace() {
       const ids = Object.keys(prev).filter((id) => levelDeviceIdSet.has(id))
       const next = { ...prev }
       ids.forEach((id, i) => {
-        const col = i % 6
-        const row = Math.floor(i / 6)
-        next[id] = { deviceId: id, x: 24 + col * 168, y: 24 + row * 86 }
+        const col = i % 5
+        const row = Math.floor(i / 5)
+        next[id] = { deviceId: id, x: 32 + col * (NODE_W + 32), y: 32 + row * (NODE_H + 40) }
       })
       return next
     })
   }
 
   const removeFromCanvas = (deviceId: string) => {
-    setPlaced((prev) => {
-      const next = { ...prev }
-      delete next[deviceId]
-      return next
-    })
+    setPlaced((prev) => { const next = { ...prev }; delete next[deviceId]; return next })
     setEdges((prev) => prev.filter((e) => e.from !== deviceId && e.to !== deviceId))
     setPendingFrom((prev) => (prev === deviceId ? null : prev))
     setSelectedNodeId((prev) => (prev === deviceId ? null : prev))
@@ -319,142 +816,112 @@ export function TopologyWorkspace() {
     setEdges((prev) => prev.map((e) => (e.id === edgeId ? { ...e, ...patch } : e)))
   }
 
-  const onDropDevice = (event: React.DragEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    const deviceId = event.dataTransfer.getData('text/topology-device')
-    if (!deviceId) return
-
-    const rect = canvasRef.current?.getBoundingClientRect()
-    if (!rect) return
-
-    const x = Math.max(12, Math.min(rect.width - 152, event.clientX - rect.left - 72))
-    const y = Math.max(12, Math.min(rect.height - 64, event.clientY - rect.top - 28))
-    addToCanvas(deviceId, x, y)
-  }
-
   const connectNode = (deviceId: string) => {
     setSelectedNodeId(deviceId)
     setSelectedEdgeId(null)
-
-    if (!pendingFrom) {
-      setPendingFrom(deviceId)
-      return
-    }
-    if (pendingFrom === deviceId) {
-      setPendingFrom(null)
-      return
-    }
-
+    if (!pendingFrom) { setPendingFrom(deviceId); return }
+    if (pendingFrom === deviceId) { setPendingFrom(null); return }
     const exists = edges.some(
       (e) => (e.from === pendingFrom && e.to === deviceId) || (e.from === deviceId && e.to === pendingFrom),
     )
-
     if (!exists) {
       const id = `edge_${pendingFrom}_${deviceId}_${Date.now()}`
-      setEdges((prev) => [
-        ...prev,
-        { id, from: pendingFrom, to: deviceId, medium: linkMedium, network: networkType },
-      ])
+      setEdges((prev) => [...prev, { id, from: pendingFrom, to: deviceId, medium: linkMedium, network: networkType }])
       setSelectedEdgeId(id)
     }
-
     setPendingFrom(null)
   }
 
   const clearTopology = () => {
-    setPlaced({})
-    setEdges([])
-    setPendingFrom(null)
-    setSelectedNodeId(null)
-    setSelectedEdgeId(null)
+    setPlaced({}); setEdges([]); setPendingFrom(null); setSelectedNodeId(null); setSelectedEdgeId(null)
+  }
+  const clearEdges = () => {
+    setEdges([]); setPendingFrom(null); setSelectedEdgeId(null)
   }
 
-  const clearEdges = () => {
-    setEdges([])
-    setPendingFrom(null)
-    setSelectedEdgeId(null)
+  const onDropDevice = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    const deviceId = event.dataTransfer.getData('text/topology-device')
+    if (!deviceId) return
+    const rect = canvasRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const x = Math.max(12, Math.min(rect.width - NODE_W - 12, event.clientX - rect.left - NODE_W / 2))
+    const y = Math.max(12, Math.min(rect.height - NODE_H - 12, event.clientY - rect.top - NODE_H / 2))
+    addToCanvas(deviceId, x, y)
   }
+
+  const closeSelection = () => { setSelectedNodeId(null); setSelectedEdgeId(null) }
+
+  // ── Persistence ────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
     try {
       const raw = window.localStorage.getItem(TOPOLOGY_DRAFT_KEY)
       if (!raw) return
       const parsed = JSON.parse(raw) as TopologyDraft
-      setPlaced(parsed.placed ?? {})
-      setEdges(parsed.edges ?? [])
-    } catch {
-      // ignore broken draft
-    }
+      setPlaced(parsed.placed ?? {}); setEdges(parsed.edges ?? [])
+    } catch { /* ignore */ }
   }, [])
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
     try {
-      const payload: TopologyDraft = { placed, edges }
-      window.localStorage.setItem(TOPOLOGY_DRAFT_KEY, JSON.stringify(payload))
-    } catch {
-      // ignore storage failure
-    }
+      window.localStorage.setItem(TOPOLOGY_DRAFT_KEY, JSON.stringify({ placed, edges }))
+    } catch { /* ignore */ }
   }, [placed, edges])
 
+  // Prune stale nodes when scene changes
   useEffect(() => {
-    // scene devices changed: prune stale nodes/edges
     const valid = new Set(allDevices.map((d) => d.id))
-
     setPlaced((prev) => {
       let changed = false
       const next: Record<string, TopologyNode> = {}
       for (const [id, node] of Object.entries(prev)) {
-        if (!valid.has(id)) {
-          changed = true
-          continue
-        }
+        if (!valid.has(id)) { changed = true; continue }
         next[id] = node
       }
       return changed ? next : prev
     })
-
     setEdges((prev) => prev.filter((e) => valid.has(e.from) && valid.has(e.to)))
   }, [allDevices])
 
+  // Auto-add newly placed devices to canvas
   useEffect(() => {
-    // Backfill: smart items placed before the bridge rule should get a linked device node.
+    setPlaced((prev) => {
+      const next = { ...prev }
+      let index = Object.keys(next).length
+      let changed = false
+      for (const device of levelDevices) {
+        if (next[device.id]) continue
+        const col = index % 5
+        const row = Math.floor(index / 5)
+        next[device.id] = { deviceId: device.id, x: 32 + col * (NODE_W + 32), y: 32 + row * (NODE_H + 40) }
+        index++; changed = true
+      }
+      return changed ? next : prev
+    })
+  }, [levelDevices])
+
+  // Smart item backfill
+  useEffect(() => {
     const state = useScene.getState()
     const nodes = state.nodes as Record<string, AnyNode>
-
     for (const node of Object.values(nodes)) {
       if (!isSmartItemNode(node)) continue
-
       const existingLinkedId = (node.metadata as any)?.smartDeviceId as string | undefined
       if (existingLinkedId && nodes[existingLinkedId as AnyNodeId]?.type === 'device') continue
-
       const profile = smartItemDeviceProfile(node)
       const levelId = resolveLevelId(node as AnyNode, nodes)
       if (!levelId) continue
-
       const linkedId = generateId('device') as string
       const linkedDevice = DeviceNode.parse({
-        id: linkedId,
-        parentId: levelId,
-        subsystem: profile.subsystem,
-        renderType: profile.renderType,
-        position: (node as any).position ?? [0, 0, 0],
-        rotation: (node as any).rotation ?? [0, 0, 0],
-        mountType: 'floor',
+        id: linkedId, parentId: levelId, subsystem: profile.subsystem,
+        renderType: profile.renderType, position: (node as any).position ?? [0, 0, 0],
+        rotation: (node as any).rotation ?? [0, 0, 0], mountType: 'floor',
         productId: (node as any).asset?.id,
-        productName: (node as any).asset?.name ?? (node as any).name,
-        brand: profile.brand,
-        params: {
-          protocol: profile.protocol,
-          custom: { source: 'item', sourceItemId: node.id },
-        },
-        metadata: {
-          sourceItemId: node.id,
-          generatedBy: 'topology-backfill',
-        },
+        productName: (node as any).asset?.name ?? (node as any).name, brand: profile.brand,
+        params: { protocol: profile.protocol, custom: { source: 'item', sourceItemId: node.id } },
+        metadata: { sourceItemId: node.id, generatedBy: 'topology-backfill' },
       })
-
       state.createNode(linkedDevice, levelId as AnyNodeId)
       state.updateNode(node.id as AnyNodeId, {
         metadata: {
@@ -465,483 +932,288 @@ export function TopologyWorkspace() {
     }
   }, [sceneNodes])
 
-  useEffect(() => {
-    // Auto-add new level devices to canvas so newly placed devices are visible immediately.
-    setPlaced((prev) => {
-      const next = { ...prev }
-      let index = Object.keys(next).length
-      let changed = false
-      for (const device of levelDevices) {
-        if (next[device.id]) continue
-        const col = index % 6
-        const row = Math.floor(index / 6)
-        next[device.id] = {
-          deviceId: device.id,
-          x: 24 + col * 168,
-          y: 24 + row * 86,
-        }
-        index += 1
-        changed = true
-      }
-      return changed ? next : prev
-    })
-  }, [levelDevices])
-
+  // Auto-topology API
   useEffect(() => {
     let cancelled = false
-
-    const loadTopology = async () => {
+    const load = async () => {
       setApiLoading(true)
-      setApiError(null)
-
       try {
-        const response = await fetch('/api/topology/graph', {
+        const res = await fetch('/api/topology/graph', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
-            devices: allDevices.map((device) => ({
-              id: device.id,
-              name: device.name,
-              brand: device.brand,
-              subsystem: device.subsystem,
-              levelId: device.levelId,
-              protocol: device.protocol,
-              renderType: device.renderType,
-              mountType: device.mountType,
+            devices: allDevices.map((d) => ({
+              id: d.id, name: d.name, brand: d.brand, subsystem: d.subsystem,
+              levelId: d.levelId, protocol: d.protocol, renderType: d.renderType, mountType: d.mountType,
             })),
             levelId: selectedLevelId ?? null,
           }),
         })
-
-        const payload = (await response.json()) as { ok: boolean; data?: ApiTopologyData; error?: string }
+        const payload = (await res.json()) as { ok: boolean; data?: ApiTopologyData; error?: string }
         if (cancelled) return
-        if (!response.ok || !payload.ok || !payload.data) {
-          setApiError(payload.error ?? '拓扑接口返回异常')
-          setApiTopology(null)
-          return
-        }
-        setApiTopology(payload.data)
-      } catch (error) {
-        if (cancelled) return
-        setApiError(error instanceof Error ? error.message : '网络错误')
-        setApiTopology(null)
-      } finally {
+        if (res.ok && payload.ok && payload.data) setApiTopology(payload.data)
+      } catch { /* ignore */ } finally {
         if (!cancelled) setApiLoading(false)
       }
     }
-
-    loadTopology()
-
-    return () => {
-      cancelled = true
-    }
+    load()
+    return () => { cancelled = true }
   }, [allDevices, selectedLevelId])
 
+  // Canvas drag (move node)
   useEffect(() => {
-    const onPointerMove = (event: PointerEvent) => {
+    const onPointerMove = (e: PointerEvent) => {
       const drag = dragRef.current
       const rect = canvasRef.current?.getBoundingClientRect()
       if (!drag || !rect) return
-
-      const x = Math.max(12, Math.min(rect.width - 152, event.clientX - rect.left - drag.offsetX))
-      const y = Math.max(12, Math.min(rect.height - 64, event.clientY - rect.top - drag.offsetY))
-
+      const x = Math.max(12, Math.min(rect.width - NODE_W - 12, e.clientX - rect.left - drag.offsetX))
+      const y = Math.max(12, Math.min(rect.height - NODE_H - 12, e.clientY - rect.top - drag.offsetY))
       setPlaced((prev) => {
         const target = prev[drag.deviceId]
         if (!target) return prev
         return { ...prev, [drag.deviceId]: { ...target, x, y } }
       })
     }
-
-    const onPointerUp = () => {
-      dragRef.current = null
-    }
-
+    const onPointerUp = () => { dragRef.current = null }
     window.addEventListener('pointermove', onPointerMove)
     window.addEventListener('pointerup', onPointerUp)
-
     return () => {
       window.removeEventListener('pointermove', onPointerMove)
       window.removeEventListener('pointerup', onPointerUp)
     }
   }, [])
 
-  const placedCountOnLevel = Object.keys(placed).filter((id) => levelDeviceIdSet.has(id)).length
+  // ── Render ─────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-full min-h-0 bg-background">
-      <aside className="flex h-full w-[320px] flex-col border-border/60 border-r bg-sidebar">
-        <div className="border-border/50 border-b px-3 py-2">
-          <div className="text-xs font-semibold">Topology Editor</div>
-          <div className="mt-0.5 text-[11px] text-muted-foreground">
-            {selectedLevelId ? '当前楼层设备池' : '全项目设备池'} · 拖拽到右侧画布
+    <div className="flex h-full min-h-0 overflow-hidden bg-background">
+      {/* ── Main area ── */}
+      <div className="flex min-w-0 flex-1 flex-col">
+
+        {/* Toolbar */}
+        <div className="flex h-11 shrink-0 items-center gap-3 border-b border-border/50 bg-background/80 px-4 backdrop-blur-sm">
+          {/* Connection mode */}
+          <div className="flex items-center gap-1.5 text-xs">
+            <span className="font-medium text-muted-foreground">连接器</span>
+            <select
+              className="h-7 cursor-pointer rounded-lg border border-border/50 bg-background px-2 text-xs outline-none hover:border-border focus:border-primary/40"
+              onChange={(e) => setLinkMedium(e.target.value as LinkMedium)}
+              value={linkMedium}
+            >
+              <option value="wired">有线</option>
+              <option value="wireless">无线</option>
+            </select>
+            <select
+              className="h-7 cursor-pointer rounded-lg border border-border/50 bg-background px-2 text-xs outline-none hover:border-border focus:border-primary/40"
+              onChange={(e) => setNetworkType(e.target.value as NetworkType)}
+              value={networkType}
+            >
+              <option value="lan">LAN</option>
+              <option value="wan">WAN</option>
+            </select>
           </div>
-          <div className="mt-1 text-[10px] text-muted-foreground">
-            后端分配：{apiLoading ? '计算中...' : apiError ? `异常 (${apiError})` : '已同步'}
+
+          {/* Pending connection hint */}
+          {pendingFrom && (
+            <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2 py-1 text-[11px] text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-amber-500" />
+              </span>
+              已选起点 · {deviceById.get(pendingFrom)?.name ?? pendingFrom} · 再点一个设备创建连接
+            </div>
+          )}
+
+          {/* Stats + actions (right side) */}
+          <div className="ml-auto flex items-center gap-2">
+            <span className="text-[11px] text-muted-foreground/60">
+              {placedCountOnLevel} 台 · {filteredEdges.length} 连接
+            </span>
+            <button
+              className="rounded-lg border border-border/50 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              onClick={autoLayout}
+              type="button"
+            >
+              自动排布
+            </button>
+            <button
+              className="rounded-lg border border-border/50 px-2.5 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              onClick={clearEdges}
+              type="button"
+            >
+              清空连接
+            </button>
+            <button
+              className="rounded-lg border border-red-200/60 px-2.5 py-1 text-[11px] text-red-400/70 transition-colors hover:bg-red-50 hover:text-red-500 dark:border-red-800/30 dark:hover:bg-red-950/30"
+              onClick={clearTopology}
+              type="button"
+            >
+              清空拓扑
+            </button>
           </div>
         </div>
 
-        <div className="space-y-2 border-border/40 border-b px-3 py-2">
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="搜索设备"
-            className="h-8 w-full rounded-md border border-border/70 bg-background px-2 text-xs outline-none"
-          />
-          <div className="grid grid-cols-2 gap-2">
-            <select
-              value={mediumFilter}
-              onChange={(e) => setMediumFilter(e.target.value as 'all' | LinkMedium)}
-              className="h-8 rounded-md border border-border/70 bg-background px-2 text-xs"
-            >
-              <option value="all">全部链路</option>
-              <option value="wired">有线设备优先</option>
-              <option value="wireless">无线设备优先</option>
-            </select>
-            <select
-              value={brandFilter}
-              onChange={(e) => setBrandFilter(e.target.value)}
-              className="h-8 rounded-md border border-border/70 bg-background px-2 text-xs"
-            >
-              <option value="all">全部品牌</option>
-              {brands.map((b) => (
-                <option key={b} value={b}>{b}</option>
-              ))}
-            </select>
-            <select
-              value={protocolFilter}
-              onChange={(e) => setProtocolFilter(e.target.value)}
-              className="col-span-2 h-8 rounded-md border border-border/70 bg-background px-2 text-xs"
-            >
-              <option value="all">全部协议</option>
-              {protocols.map((p) => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
-          </div>
-          <div className="flex gap-2">
-            <button type="button" onClick={addFilteredToCanvas} className="flex-1 rounded border border-border/70 px-2 py-1 text-[11px] hover:bg-accent">批量上图</button>
-            <button type="button" onClick={autoLayout} className="flex-1 rounded border border-border/70 px-2 py-1 text-[11px] hover:bg-accent">自动排布</button>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-2 py-2">
-          <div className="space-y-1">
-            {visibleDevices.map((d) => (
-              <div
-                key={d.id}
-                draggable
-                onDragStart={(e) => e.dataTransfer.setData('text/topology-device', d.id)}
-                className="flex cursor-grab items-center justify-between rounded-md border border-border/60 bg-background px-2 py-1.5 text-xs hover:bg-accent"
-              >
-                <div className="min-w-0">
-                  <div className="truncate font-medium">{d.name}</div>
-                  <div className="truncate text-[10px] text-muted-foreground">{d.brand} · {d.protocol}</div>
-                  {controllerById.has(d.id) ? (
-                    <div className="truncate text-[10px] text-blue-600">
-                      控制器 · {controllerById.get(d.id)?.usedChildren ?? 0}/{controllerById.get(d.id)?.maxChildren ?? 0}
-                    </div>
-                  ) : assignmentByChildId.has(d.id) ? (
-                    <div className="truncate text-[10px] text-emerald-600">
-                      子设备 · {deviceById.get(assignmentByChildId.get(d.id)?.parentId ?? '')?.name ?? assignmentByChildId.get(d.id)?.parentId} · 槽位 #{assignmentByChildId.get(d.id)?.slotIndex}
-                    </div>
-                  ) : (
-                    <div className="truncate text-[10px] text-amber-600">子设备 · 待接入</div>
-                  )}
-                </div>
-                <div className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px]">
-                  {placedIds.has(d.id) ? '已放置' : '可拖拽'}
-                </div>
-              </div>
-            ))}
-            {visibleDevices.length === 0 ? (
-              <div className="rounded-md border border-dashed border-border/70 p-3 text-center text-xs text-muted-foreground">
-                当前筛选没有设备
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </aside>
-
-      <section className="flex min-w-0 flex-1">
-        <div className="relative flex min-w-0 flex-1 flex-col">
-          <div className="flex h-11 items-center justify-between border-border/50 border-b px-3">
-            <div className="flex items-center gap-2 text-xs">
-              <span className="font-medium">连接器</span>
-              <select value={linkMedium} onChange={(e) => setLinkMedium(e.target.value as LinkMedium)} className="h-7 rounded border border-border/70 bg-background px-2 text-xs">
-                <option value="wired">有线</option>
-                <option value="wireless">无线</option>
-              </select>
-              <select value={networkType} onChange={(e) => setNetworkType(e.target.value as NetworkType)} className="h-7 rounded border border-border/70 bg-background px-2 text-xs">
-                <option value="lan">LAN</option>
-                <option value="wan">WAN</option>
-              </select>
-              <span className="text-muted-foreground">点击两个设备创建连接</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-muted-foreground">设备 {usageLabel(placedCountOnLevel, levelDevices.length)}</span>
-              <span className="text-muted-foreground">连接 {filteredEdges.length}</span>
-              <button type="button" onClick={clearEdges} className="rounded border border-border/70 px-2 py-1 hover:bg-accent">清空连接</button>
-              <button type="button" onClick={clearTopology} className="rounded border border-border/70 px-2 py-1 hover:bg-accent">清空拓扑</button>
-            </div>
-          </div>
-
-          {pendingFrom ? (
-            <div className="border-border/40 border-b px-3 py-1.5 text-[11px] text-muted-foreground">
-              已选择起点：{deviceById.get(pendingFrom)?.name ?? pendingFrom}，请再点击一个设备完成连接
-            </div>
-          ) : null}
-
+        {/* Canvas + selection panel row */}
+        <div className="relative flex min-h-0 flex-1">
+          {/* Canvas */}
           <div
             ref={canvasRef}
-            className="relative min-h-0 flex-1 overflow-hidden bg-[radial-gradient(circle_at_10%_10%,rgba(0,111,255,0.06),transparent_35%),linear-gradient(0deg,rgba(10,26,57,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(10,26,57,0.02)_1px,transparent_1px)] [background-size:100%_100%,24px_24px,24px_24px]"
+            className="relative min-h-0 flex-1 overflow-hidden"
             onDragOver={(e) => e.preventDefault()}
             onDrop={onDropDevice}
+            style={{
+              backgroundImage: `
+                radial-gradient(circle at 50% 0%, rgba(0,111,255,0.05) 0%, transparent 60%),
+                radial-gradient(circle_at_1px_1px, rgba(10,26,57,0.08) 1px, transparent 0)`,
+              backgroundSize: '100% 100%, 24px 24px',
+            }}
+            onClick={(e) => {
+              // Deselect when clicking canvas background
+              const target = e.target as HTMLElement
+              if (target === canvasRef.current) closeSelection()
+            }}
           >
-            <svg className="absolute inset-0 h-full w-full">
-              {filteredEdges.map((edge) => {
-                const from = placed[edge.from]
-                const to = placed[edge.to]
-                if (!from || !to) return null
+            {/* SVG edges */}
+            <EdgeLayer
+              edges={filteredEdges}
+              onSelectEdge={(id) => { setSelectedEdgeId(id); setSelectedNodeId(null) }}
+              placed={placed}
+              selectedEdgeId={selectedEdgeId}
+            />
 
-                const x1 = from.x + 72
-                const y1 = from.y + 28
-                const x2 = to.x + 72
-                const y2 = to.y + 28
-                const selected = edge.id === selectedEdgeId
-                const color = selected ? '#f59e0b' : edge.medium === 'wired' ? '#1976d2' : '#00b894'
-
-                return (
-                  <g
-                    key={edge.id}
-                    onClick={() => {
-                      setSelectedEdgeId(edge.id)
-                      setSelectedNodeId(null)
-                    }}
-                  >
-                    <line
-                      x1={x1}
-                      y1={y1}
-                      x2={x2}
-                      y2={y2}
-                      stroke="transparent"
-                      strokeWidth="12"
-                    />
-                    <line
-                      x1={x1}
-                      y1={y1}
-                      x2={x2}
-                      y2={y2}
-                      stroke={color}
-                      strokeWidth={selected ? '3' : '2'}
-                      strokeDasharray={edge.medium === 'wireless' ? '6 4' : undefined}
-                    />
-                    <text x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 4} fill={color} fontSize="10" textAnchor="middle">
-                      {edge.network.toUpperCase()}
-                    </text>
-                  </g>
-                )
-              })}
-            </svg>
-
+            {/* Device nodes */}
             {Object.values(placed).map((item) => {
               if (!levelDeviceIdSet.has(item.deviceId)) return null
               const device = deviceById.get(item.deviceId)
               if (!device) return null
-              const selected = pendingFrom === device.id || selectedNodeId === device.id
-              const controller = controllerById.get(device.id)
-              const assignment = assignmentByChildId.get(device.id)
-              const parentName = assignment ? deviceById.get(assignment.parentId)?.name ?? assignment.parentId : null
-
               return (
-                <div
+                <DeviceCard
                   key={item.deviceId}
-                  data-topology-card
-                  className={[
-                    'absolute w-36 rounded-md border bg-background px-2 py-1.5 text-xs shadow-sm',
-                    selected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-border/70',
-                  ].join(' ')}
-                  style={{ left: item.x, top: item.y }}
-                >
-                  <div className="mb-1 flex items-center justify-between text-[10px] text-muted-foreground">
-                    <button
-                      type="button"
-                      className="cursor-grab rounded px-1 hover:bg-accent"
-                      onPointerDown={(event) => {
-                        const cardRect = (event.currentTarget.closest('[data-topology-card]') as HTMLDivElement | null)?.getBoundingClientRect()
-                        if (!cardRect) return
-                        dragRef.current = {
-                          deviceId: item.deviceId,
-                          offsetX: event.clientX - cardRect.left,
-                          offsetY: event.clientY - cardRect.top,
-                        }
-                      }}
-                    >
-                      拖拽
-                    </button>
-                    <span>{device.subsystem}</span>
-                  </div>
-
-                  <div className="flex items-start justify-between gap-2">
-                    <button
-                      type="button"
-                      onClick={() => connectNode(device.id)}
-                      className="min-w-0 flex-1 text-left"
-                    >
-                      <div className="truncate font-medium">{device.name}</div>
-                      <div className="truncate text-[10px] text-muted-foreground">{device.brand} · {device.protocol}</div>
-                      {controller ? (
-                        <div className="truncate text-[10px] text-blue-600">
-                          控制器 {controller.usedChildren}/{controller.maxChildren}
-                        </div>
-                      ) : assignment ? (
-                        <div className="truncate text-[10px] text-emerald-600">
-                          子设备 → {parentName} · #{assignment.slotIndex}
-                        </div>
-                      ) : (
-                        <div className="truncate text-[10px] text-amber-600">待接入</div>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removeFromCanvas(device.id)}
-                      className="rounded px-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
-                    >
-                      ×
-                    </button>
-                  </div>
-                </div>
+                  assignment={assignmentByChildId.get(item.deviceId)}
+                  controller={controllerById.get(item.deviceId)}
+                  device={device}
+                  isPendingFrom={pendingFrom === item.deviceId}
+                  onConnect={() => connectNode(item.deviceId)}
+                  onPointerDown={(e) => {
+                    const cardEl = (e.currentTarget.closest('[data-topology-card]') as HTMLDivElement | null)
+                    const rect = cardEl?.getBoundingClientRect()
+                    if (!rect) return
+                    dragRef.current = {
+                      deviceId: item.deviceId,
+                      offsetX: e.clientX - rect.left,
+                      offsetY: e.clientY - rect.top,
+                    }
+                  }}
+                  onRemove={() => removeFromCanvas(item.deviceId)}
+                  parentName={
+                    assignmentByChildId.get(item.deviceId)
+                      ? deviceById.get(assignmentByChildId.get(item.deviceId)!.parentId)?.name ?? null
+                      : null
+                  }
+                  selected={selectedNodeId === item.deviceId}
+                  x={item.x}
+                  y={item.y}
+                />
               )
             })}
 
-            {placedCountOnLevel === 0 ? (
-              <div className="absolute inset-0 grid place-items-center text-center">
-                <div className="rounded-lg border border-dashed border-border/80 bg-background/70 px-4 py-3 text-xs text-muted-foreground">
-                  从左侧设备池拖拽设备到画布，开始构建拓扑
+            {/* Empty state */}
+            {placedCountOnLevel === 0 && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-dashed border-border/50 bg-background/60">
+                  <Network className="h-7 w-7 text-muted-foreground/30" />
                 </div>
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        <aside className="flex h-full w-[300px] flex-col border-border/60 border-l bg-sidebar">
-          <div className="border-border/50 border-b px-3 py-2 text-xs font-semibold">连接与详情</div>
-
-          <div className="space-y-2 border-border/40 border-b px-3 py-2">
-            <div className="text-[11px] text-muted-foreground">连接筛选</div>
-            <div className="grid grid-cols-2 gap-2">
-              <select value={edgeMediumFilter} onChange={(e) => setEdgeMediumFilter(e.target.value as 'all' | LinkMedium)} className="h-7 rounded border border-border/70 bg-background px-2 text-xs">
-                <option value="all">全部介质</option>
-                <option value="wired">有线</option>
-                <option value="wireless">无线</option>
-              </select>
-              <select value={edgeNetworkFilter} onChange={(e) => setEdgeNetworkFilter(e.target.value as 'all' | NetworkType)} className="h-7 rounded border border-border/70 bg-background px-2 text-xs">
-                <option value="all">全部网络</option>
-                <option value="lan">LAN</option>
-                <option value="wan">WAN</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="flex-1 overflow-y-auto px-2 py-2">
-            {selectedNode ? (
-              <div className="mb-3 rounded-md border border-border/60 bg-background px-2 py-2 text-xs">
-                <div className="mb-1 text-[11px] font-semibold">选中设备</div>
-                <div className="truncate font-medium">{selectedNode.name}</div>
-                <div className="mt-1 text-[10px] text-muted-foreground">品牌：{selectedNode.brand}</div>
-                <div className="text-[10px] text-muted-foreground">协议：{selectedNode.protocol}</div>
-                <div className="text-[10px] text-muted-foreground">子系统：{selectedNode.subsystem}</div>
-                {controllerById.has(selectedNode.id) ? (
-                  <div className="mt-1 text-[10px] text-blue-600">
-                    角色：控制器（{controllerById.get(selectedNode.id)?.usedChildren}/{controllerById.get(selectedNode.id)?.maxChildren}）
+                <div className="text-center">
+                  <div className="text-sm font-medium text-foreground/60">尚无设备上图</div>
+                  <div className="mt-1 text-[11px] text-muted-foreground/40">
+                    从下方设备池拖拽设备到画布，或点击"全部上图"
                   </div>
-                ) : assignmentByChildId.has(selectedNode.id) ? (
-                  <div className="mt-1 text-[10px] text-emerald-600">
-                    角色：子设备 → {deviceById.get(assignmentByChildId.get(selectedNode.id)?.parentId ?? '')?.name ?? assignmentByChildId.get(selectedNode.id)?.parentId}（槽位 #{assignmentByChildId.get(selectedNode.id)?.slotIndex}）
-                  </div>
-                ) : (
-                  <div className="mt-1 text-[10px] text-amber-600">角色：子设备（待接入）</div>
+                </div>
+                {levelDevices.length > 0 && (
+                  <button
+                    className="rounded-xl bg-primary/10 px-4 py-2 text-xs font-medium text-primary transition-colors hover:bg-primary/20"
+                    onClick={addFilteredToCanvas}
+                    type="button"
+                  >
+                    全部上图 ({levelDevices.length} 台)
+                  </button>
                 )}
               </div>
-            ) : null}
+            )}
 
-            <div className="mb-3 rounded-md border border-border/60 bg-background px-2 py-2 text-xs">
-              <div className="mb-1 text-[11px] font-semibold">自动接入状态</div>
-              <div className="text-[10px] text-muted-foreground">
-                控制器：{apiTopology?.controllers.length ?? 0}
-              </div>
-              <div className="text-[10px] text-muted-foreground">
-                已分配子设备：{apiTopology?.assignments.length ?? 0}
-              </div>
-              <div className="text-[10px] text-muted-foreground">
-                待接入：{apiTopology?.unassigned.length ?? 0}
-              </div>
+            {/* API status pill (top-right of canvas) */}
+            <div className="pointer-events-none absolute right-3 top-3 flex items-center gap-1.5 rounded-full border border-border/40 bg-background/80 px-2.5 py-1 text-[10px] text-muted-foreground/60 backdrop-blur-sm">
+              {apiLoading ? (
+                <>
+                  <RefreshCw className="h-2.5 w-2.5 animate-spin" />
+                  <span>计算中</span>
+                </>
+              ) : (
+                <>
+                  <div className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                  <span>后端已同步</span>
+                </>
+              )}
             </div>
 
-            {selectedEdge ? (
-              <div className="mb-3 rounded-md border border-border/60 bg-background px-2 py-2 text-xs">
-                <div className="mb-1 text-[11px] font-semibold">选中连接</div>
-                <div className="mb-2 text-[10px] text-muted-foreground">
-                  {(deviceById.get(selectedEdge.from)?.name ?? selectedEdge.from)} → {(deviceById.get(selectedEdge.to)?.name ?? selectedEdge.to)}
+            {/* Device pool toggle button (bottom-left of canvas) */}
+            <div className="absolute bottom-4 left-4 z-10">
+              {showDevicePool && (
+                <div className="mb-2">
+                  <DevicePoolPanel
+                    brandFilter={brandFilter}
+                    brands={brands}
+                    devices={visibleDevices}
+                    mediumFilter={mediumFilter}
+                    onAddAll={addFilteredToCanvas}
+                    onBrandFilter={setBrandFilter}
+                    onDragStart={(e, id) => e.dataTransfer.setData('text/topology-device', id)}
+                    onMediumFilter={setMediumFilter}
+                    onQuery={setQuery}
+                    placedIds={placedIds}
+                    query={query}
+                  />
                 </div>
-                <div className="space-y-2">
-                  <select
-                    value={selectedEdge.medium}
-                    onChange={(e) => updateEdge(selectedEdge.id, { medium: e.target.value as LinkMedium })}
-                    className="h-7 w-full rounded border border-border/70 bg-background px-2 text-xs"
-                  >
-                    <option value="wired">有线</option>
-                    <option value="wireless">无线</option>
-                  </select>
-                  <select
-                    value={selectedEdge.network}
-                    onChange={(e) => updateEdge(selectedEdge.id, { network: e.target.value as NetworkType })}
-                    className="h-7 w-full rounded border border-border/70 bg-background px-2 text-xs"
-                  >
-                    <option value="lan">LAN</option>
-                    <option value="wan">WAN</option>
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => removeEdge(selectedEdge.id)}
-                    className="h-7 w-full rounded border border-red-200 bg-red-50 text-xs text-red-600 hover:bg-red-100"
-                  >
-                    删除此连接
-                  </button>
-                </div>
-              </div>
-            ) : null}
-
-            <div className="space-y-1">
-              {filteredEdges.map((edge) => {
-                const from = deviceById.get(edge.from)?.name ?? edge.from
-                const to = deviceById.get(edge.to)?.name ?? edge.to
-                const selected = selectedEdgeId === edge.id
-                return (
-                  <button
-                    key={edge.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedEdgeId(edge.id)
-                      setSelectedNodeId(null)
-                    }}
-                    className={[
-                      'w-full rounded border px-2 py-1 text-left text-[11px]',
-                      selected ? 'border-blue-300 bg-blue-50 text-blue-900' : 'border-border/60 bg-background hover:bg-accent',
-                    ].join(' ')}
-                  >
-                    <div className="truncate">{from} → {to}</div>
-                    <div className="mt-0.5 text-[10px] text-muted-foreground">{edge.medium} · {edge.network.toUpperCase()}</div>
-                  </button>
-                )
-              })}
-              {filteredEdges.length === 0 ? (
-                <div className="rounded border border-dashed border-border/70 p-2 text-center text-[11px] text-muted-foreground">暂无连接</div>
-              ) : null}
+              )}
+              <button
+                className={cn(
+                  'flex items-center gap-2 rounded-2xl border px-3.5 py-2 text-xs font-medium shadow-md backdrop-blur-sm transition-all',
+                  showDevicePool
+                    ? 'border-primary/30 bg-primary/10 text-primary'
+                    : 'border-border/60 bg-background/90 text-foreground hover:border-border hover:bg-background',
+                )}
+                onClick={() => setShowDevicePool((v) => !v)}
+                type="button"
+              >
+                <Package className="h-3.5 w-3.5" />
+                设备池
+                {unplacedCount > 0 && (
+                  <span className="rounded-full bg-primary/15 px-1.5 py-0 text-[10px] font-semibold text-primary">
+                    {unplacedCount}
+                  </span>
+                )}
+                {showDevicePool
+                  ? <ChevronDown className="h-3 w-3 opacity-60" />
+                  : <ChevronUp className="h-3 w-3 opacity-60" />}
+              </button>
             </div>
           </div>
-        </aside>
-      </section>
+
+          {/* Selection detail panel (slides in from right) */}
+          {hasSelection && (
+            <SelectionPanel
+              assignmentByChildId={assignmentByChildId}
+              controllerById={controllerById}
+              deviceById={deviceById}
+              onClose={closeSelection}
+              onRemoveEdge={removeEdge}
+              onUpdateEdge={updateEdge}
+              selectedEdge={selectedEdge}
+              selectedNode={selectedNode}
+            />
+          )}
+        </div>
+      </div>
     </div>
   )
 }

@@ -46,6 +46,14 @@ export const CurtainContainer = ({ node }: { node: DeviceNode }) => {
     return n?.type === 'wall' ? (n as WallNode) : undefined
   })
 
+  // 【新】没绑定窗户但绑定了墙：用 params.wallId 读墙做对齐（2 点画线放置走这条路径）
+  const directWallId = (node.params?.wallId as string | undefined) ?? undefined
+  const directWallNode = useScene((s) => {
+    if (windowNode || !directWallId) return undefined // 优先用 window 派生
+    const n = (s.nodes as Record<string, unknown>)[directWallId] as { type?: string } | undefined
+    return n?.type === 'wall' ? (n as WallNode) : undefined
+  })
+
   // 运行时状态 —— 每层开合度
   const deviceState = useScene((s) => {
     const dn = s.nodes[node.id] as DeviceNode | undefined
@@ -70,19 +78,39 @@ export const CurtainContainer = ({ node }: { node: DeviceNode }) => {
 
   const slatAngleDeg = (deviceState?.slatAngleDeg as number | undefined) ?? 0
 
-  // 世界几何计算
+  // 世界几何计算 —— 三档优先级：
+  //   1. windowNode + wallNode：完整窗户几何（精确尺寸）
+  //   2. directWallNode + node.position + params.curtainWidth：墙对齐 + 用户画的宽度
+  //   3. node.position + 默认尺寸 + node.rotation：纯 fallback
   const geom = useMemo(() => {
     if (!windowNode || !wallNode) return null
     return computeWindowWorldGeometry(windowNode, wallNode)
   }, [windowNode, wallNode])
 
-  // 若未关联窗户，走 fallback：用 device 的 position + 默认尺寸
+  // 用户画线时的 curtainWidth（params）+ catalog defaultH 当 height
+  const drawnWidth = (node.params?.curtainWidth as number | undefined) ?? null
+  const directionDeg = (node.params?.direction as number | undefined) ?? null
+
+  // 墙对齐方向（仅 directWallNode 且无 windowNode 时算）
+  const wallDirVec = useMemo<[number, number, number] | null>(() => {
+    if (!directWallNode) return null
+    const [sx, sz] = directWallNode.start
+    const [ex, ez] = directWallNode.end
+    const len = Math.hypot(ex - sx, ez - sz)
+    if (len < 0.001) return null
+    return [(ex - sx) / len, 0, (ez - sz) / len]
+  }, [directWallNode])
+
   const posWorld: [number, number, number] = geom?.center ?? node.position
-  const width = geom?.width ?? 2.4
+  const width = geom?.width ?? drawnWidth ?? 2.4
   const height = geom?.height ?? 2.2
   const rotY = geom
     ? -Math.atan2(geom.wallDir[2], geom.wallDir[0])
-    : (node.rotation?.[1] ?? 0)
+    : wallDirVec
+      ? -Math.atan2(wallDirVec[2], wallDirVec[0])
+      : directionDeg !== null
+        ? -directionDeg * (Math.PI / 180)
+        : (node.rotation?.[1] ?? 0)
 
   // 百叶窗装窗内 → z 从 wallThickness/2 往内数；其他类型装窗外 → z 正偏移
   const isVenetian = curtainType === 'venetian'

@@ -121,6 +121,27 @@ type EditorState = {
     points: Array<[number, number]>
     hoverPoint: [number, number] | null
   } | null) => void
+  /**
+   * 窗帘 2 点绘制草稿 —— 选中窗帘类设备后：
+   *   - 1st click: 锁定一面墙 + 起点 t1（沿墙参数 0-1）
+   *   - 2nd click: 同一面墙的 t2 → 计算中点 + 宽度，放置窗帘
+   *   - hoverPoint 用于 2D 渲染"墙上拖出来的预览段"
+   *   - Esc / 切设备 / 切 mode 清掉
+   */
+  curtainDraft: {
+    wallId: string
+    t1: number
+    /** 1st click 的世界 [x, z]，用于 2D 渲染 ghost 线起点 */
+    point1: [number, number]
+    /** 当前鼠标在同墙上的 t（hover 时刷新） */
+    hoverT: number | null
+  } | null
+  setCurtainDraft: (draft: {
+    wallId: string
+    t1: number
+    point1: [number, number]
+    hoverT: number | null
+  } | null) => void
   movingNode: ItemNode | WindowNode | DoorNode | RoofNode | RoofSegmentNode | StairNode | StairSegmentNode | null
   setMovingNode: (
     node: ItemNode | WindowNode | DoorNode | RoofNode | RoofSegmentNode | null,
@@ -517,6 +538,7 @@ const useEditor = create<EditorState>()(
           selectedDevice: device,
           currentCircuitId: null,
           lightStripDraft: null,
+          curtainDraft: null,
           ...(device ? { tool: 'item' as const, mode: 'build' as const } : {}),
         }),
       currentCircuitId: null,
@@ -525,6 +547,8 @@ const useEditor = create<EditorState>()(
       setCircuitLinkSourceId: (id) => set({ circuitLinkSourceId: id }),
       lightStripDraft: null,
       setLightStripDraft: (draft) => set({ lightStripDraft: draft }),
+      curtainDraft: null,
+      setCurtainDraft: (draft) => set({ curtainDraft: draft }),
       movingNode: null as ItemNode | WindowNode | DoorNode | RoofNode | RoofSegmentNode | null,
       setMovingNode: (node) => set({ movingNode: node }),
       selectedReferenceId: null,
