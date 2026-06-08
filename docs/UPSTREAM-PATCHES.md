@@ -42,11 +42,12 @@
 
 #### L1 · DeviceNode inline 进 core schema
 - **文件**：`packages/core/src/schema/nodes/device.ts`（294 行，整文件新增）
-- **状态**：🔴 active
+- **状态**：🟡 migrating（Phase 2B：schema 仍住 core，但 device kind 已通过 `smarthomePlugin.deviceDefinition` 注册到 `nodeRegistry`——节点的「逻辑归属」已搬到 VilHil 上层）
 - **代价**：上游若修改 NodeBase 类型/导出方式即冲突
 - **迁出方案**：等待 PR1（`Node.extensions`）；过渡期保留，但**禁止**继续往这个文件加字段
+- **Phase 2B 进度**：`packages/smarthome/src/plugin/{device-definition,index}.ts` 通过 `loadPlugin(smarthomePlugin)` 在 app 启动时注册 device kind；现有 viewer/editor 硬编码 dispatch 仍负责实际渲染
 - **责任人**：未指定
-- **关联 commit**：`279e0446`、`b0fdbfe3`
+- **关联 commit**：`279e0446`、`b0fdbfe3`、Phase 2B（2026-06-08）
 
 #### L2 · window.ts 删除上游字段
 - **文件**：`packages/core/src/schema/nodes/window.ts`

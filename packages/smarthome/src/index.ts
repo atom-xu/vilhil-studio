@@ -208,6 +208,9 @@ export {
   smartHostModel,
 } from './models'
 
+// Plugin（Phase 2B — 类型层注册到 nodeRegistry，渲染仍走硬编码 dispatch）
+export { smarthomePlugin, deviceDefinition } from './plugin'
+
 // 3D 组件（交互层）
 export {
   // 核心渲染器

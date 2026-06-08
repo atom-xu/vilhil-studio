@@ -197,7 +197,25 @@ VilHil proposal-demo 渲染器订阅 useScene → 渲染
 
 **完成判定**：`import { loadPlugin, nodeRegistry, type Plugin } from '@pascal-app/core'` 与 `import { builtinPlugin } from '@pascal-app/nodes'` 类型层面可用；App 启动时 `loadPlugin(builtinPlugin)` 调用通过；VilHil 现有 viewer / editor / device 渲染**完全不受影响**。
 
-#### Phase 2B+ · 业务迁出
+#### Phase 2B · device 注册为 smarthomePlugin（✅ 已完成 2026-06-08）
+
+把 device kind 通过 `smarthomePlugin: Plugin` 声明式注册到 `nodeRegistry`，让 VilHil 的 device 在架构上成为独立 plugin 的 domain 节点——**渲染仍走硬编码 dispatch**（viewer/editor 不变）。
+
+| 任务 | 状态 | 备注 |
+|---|---|---|
+| 2B.1 `packages/smarthome/src/plugin/device-definition.ts`：`deviceDefinition: NodeDefinition<typeof DeviceNode>` | ✅ | schema/category/defaults/capabilities/presentation 已填；renderer/tool/panel/system/geometry 等留 undefined |
+| 2B.2 `packages/smarthome/src/plugin/index.ts`：`smarthomePlugin: Plugin = { id: 'vilhil:smarthome', apiVersion: 1, nodes: [deviceDefinition] }` | ✅ | `as unknown as AnyNodeDefinition` 对齐上游 nodes barrel |
+| 2B.3 `packages/smarthome/src/index.ts` 导出 `smarthomePlugin / deviceDefinition` | ✅ | |
+| 2B.4 `apps/editor/app/plugin-bootstrap.ts` 在 `loadPlugin(builtinPlugin)` 之后追加 `loadPlugin(smarthomePlugin)` | ✅ | dev 模式下 console.debug 打印注册结果作 sanity |
+| 2B.5 typecheck baseline 保持：editor 40 / apps/editor 37 | ✅ | 零新增 |
+
+**完成判定**：
+- `import { smarthomePlugin } from '@vilhil/smarthome'` 在 app 入口可用
+- 运行时 `nodeRegistry.get('device')` 返回 `deviceDefinition`
+- 上游查询函数 `isRegistrySelectable('device')` / `isRegistryMovable('device')` / `getSelectableKinds()` / `kindsWithFloorplanScope('level')` 都识别 device
+- VilHil 编辑器主流程（设备放置、子系统聚焦、proposal-demo）和之前一样
+
+#### Phase 2C+ · 业务迁出（待启动）
 
 | 任务 | From → To | 风险 |
 |---|---|---|
@@ -205,7 +223,6 @@ VilHil proposal-demo 渲染器订阅 useScene → 渲染
 | 2.2 device-renderer + device-geometry 迁出 | `packages/viewer/.../device/**` → `packages/smarthome/src/viewer/**` | 🟡 需在 proposal-demo 直接 mount，绕过 viewer node-renderer |
 | 2.3 device-panel 迁出 | `packages/editor/.../device-panel.tsx` → `packages/smarthome/src/components/device-panel.tsx` | 🟢 已是独立组件，挪文件即可 |
 | 2.4 floorplan-panel 智能家居交互抽出 | inline → `packages/smarthome/src/floorplan/{light-strip-tool,curtain-tool,device-tool}.tsx` | 🔴 等待 drawTool registry |
-| 2.5 device 注册为 `smarthomePlugin` Plugin（依赖 Phase 2A）| `@vilhil/smarthome` exports `smarthomePlugin: Plugin` | 🟢 类型层就绪，渲染仍走硬编码 dispatch |
 
 ### 5.4 Phase 3 · 上游接纳（持续，背景任务）
 

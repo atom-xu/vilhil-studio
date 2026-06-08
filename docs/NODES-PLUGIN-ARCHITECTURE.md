@@ -1,7 +1,7 @@
 # Nodes / Plugin 架构
 
-> 配套：`docs/ARCHITECTURE-LAYERING.md` §5.3、`docs/UPSTREAM-PATCHES.md` N1。
-> 当前状态：**Phase 2A 完成（2026-06-08）**——基础设施奠基，业务渲染仍走硬编码 dispatch。
+> 配套：`docs/ARCHITECTURE-LAYERING.md` §5.3、`docs/UPSTREAM-PATCHES.md` N1 / L1。
+> 当前状态：**Phase 2B 完成（2026-06-08）**——`smarthomePlugin` 已注册 `device` kind 到 `nodeRegistry`；viewer/editor 仍走硬编码 dispatch 实际渲染 device。
 
 ---
 
@@ -100,9 +100,81 @@ Next.js / Webpack 保证模块只执行一次。HMR 下 `loadPlugin` 内部 `_re
 
 ---
 
-## 3. 未来扩展（Phase 2B+）
+## 2.5 Phase 2B 做了什么（已落地）
+
+把 `device` kind 通过 `smarthomePlugin` 注册进 `nodeRegistry`——让 device 在架构上"独立成 plugin"，是 VilHil smarthome 的 domain 节点，不再是 inline 进 Pascal core 的杂质。**Runtime 行为不变**：viewer/editor 仍走硬编码 dispatch 渲染 device，plugin 注册是声明式 + 元数据。
+
+### 2.5.1 新增文件
+
+| 文件 | 用途 |
+|---|---|
+| `packages/smarthome/src/plugin/device-definition.ts` | `deviceDefinition: NodeDefinition<typeof DeviceNode>`——只填 schema/category/defaults/capabilities/presentation，渲染相关字段全留 undefined |
+| `packages/smarthome/src/plugin/index.ts` | `smarthomePlugin: Plugin = { id: 'vilhil:smarthome', apiVersion: 1, nodes: [deviceDefinition] }` |
+
+### 2.5.2 修改文件
+
+| 文件 | 改动 |
+|---|---|
+| `packages/smarthome/src/index.ts` | 新 export `smarthomePlugin / deviceDefinition` |
+| `apps/editor/app/plugin-bootstrap.ts` | 在 `loadPlugin(builtinPlugin)` 之后追加 `loadPlugin(smarthomePlugin)`，dev 模式打印一行 sanity console |
+
+### 2.5.3 deviceDefinition 字段实际填法
+
+```ts
+export const deviceDefinition: NodeDefinition<typeof DeviceNode> = {
+  kind: 'device',
+  schemaVersion: 1,
+  schema: DeviceNode,
+  category: 'furnish',            // device 属于 Furnish 体系（CLAUDE.md §2 硬规则 1）
+  defaults: () => {
+    // 跟上游 door 一致：parse 最小 stub，丢 id/type
+    const stub = DeviceNode.parse({
+      id: 'device_default', type: 'device',
+      parentId: null, subsystem: 'lighting', renderType: '',
+    })
+    const { id, type, ...rest } = stub
+    return rest
+  },
+  capabilities: {
+    movable: { axes: ['x','y','z'] },
+    rotatable: { axes: ['y'] },
+    selectable: { hitVolume: 'bbox' },
+    duplicable: true, deletable: true,
+    hostable: { parents: ['level','wall','ceiling'], fromAsset: 'attachTo' },
+    hostRefFields: ['wallId', 'wallT'],
+  },
+  presentation: {
+    label: '智能设备',
+    icon: { kind: 'iconify', name: 'lucide:zap' },
+    paletteSection: 'furnish',
+  },
+  // renderer/geometry/floorplan/tool/system/parametrics/handles/affordances/
+  // preview/toolHints/affordanceTools/keyboardActions 全部留 undefined
+  // —— viewer/editor 现有硬编码 dispatch 继续工作。
+}
+```
+
+### 2.5.4 验证
+
+- `nodeRegistry.get('device')` 返回 deviceDefinition（运行时）
+- `isRegistrySelectable('device')` → `true`（`selectable` 已声明）
+- `isRegistryMovable('device')` → `true`（`movable` 已声明）
+- `getSelectableKinds()` 包含 `'device'`
+- `kindsWithFloorplanScope('level')` 包含 `'device'`（默认 scope）
+- typecheck：editor 维持 40 错（baseline），apps/editor 维持 37 错（baseline），零新增
+- VilHil 编辑器主流程：设备放置、子系统聚焦、proposal-demo、curtain 动画、subsystem panel 全部不变
+
+### 2.5.5 一个 TS 类型 quirk
+
+`Plugin.nodes: AnyNodeDefinition[]`（= `NodeDefinition<ZodObject<any>>[]`）与 `NodeDefinition<typeof DeviceNode>` 之间，TS 不接受 ZodObject 复杂泛型参数上的协变，**必须显式 `as unknown as AnyNodeDefinition` cast**。这与上游 `packages/nodes/src/index.ts` 同款（上游对每个 def 都同样 cast），不是 VilHil 引入的污点。
+
+---
+
+## 3. 未来扩展（Phase 2C+）
 
 ### 3.1 注册一个 device kind（smarthomePlugin 示例）
+
+**注意**：以下是早先 Phase 2A 草拟的"如果要做"模板，**Phase 2B 已经按此模板落地**（见 §2.5）。保留示例作为新 plugin 作者的参考。
 
 在 `@vilhil/smarthome` 中：
 
@@ -209,7 +281,9 @@ loadPlugin(smarthomePlugin)
 
 ---
 
-## 5. 验收 checklist（Phase 2A）
+## 5. 验收 checklist
+
+### Phase 2A
 
 - [x] `import { loadPlugin, nodeRegistry, type Plugin, type NodeDefinition } from '@pascal-app/core'` 类型可用
 - [x] `import { builtinPlugin } from '@pascal-app/nodes'` 类型可用
@@ -219,6 +293,17 @@ loadPlugin(smarthomePlugin)
 - [x] typecheck：editor 仍 40 错（baseline 不变，零新增）
 - [x] `docs/ARCHITECTURE-LAYERING.md` §5.3 Phase 2A 标记 ✅
 - [x] `docs/UPSTREAM-PATCHES.md` 新增条目 N1
+
+### Phase 2B
+
+- [x] `import { smarthomePlugin, deviceDefinition } from '@vilhil/smarthome'` 在 app 入口可用
+- [x] `loadPlugin(smarthomePlugin)` 调用通过；`nodeRegistry.get('device')` 返回 deviceDefinition
+- [x] `isRegistrySelectable('device') / isRegistryMovable('device') / getSelectableKinds()` 识别 device
+- [x] `kindsWithFloorplanScope('level')` 包含 device（默认 scope）
+- [x] VilHil 编辑器主流程（设备放置、子系统聚焦、proposal-demo、curtain 动画）不受影响
+- [x] typecheck baseline 保持：editor 40 / apps/editor 37 错，零新增
+- [x] `docs/ARCHITECTURE-LAYERING.md` §5.3 Phase 2B 标记 ✅
+- [x] `docs/UPSTREAM-PATCHES.md` L1 状态改为 🟡 migrating
 
 ---
 
