@@ -5,7 +5,7 @@ import { ADDITION, Brush, Evaluator, SUBTRACTION } from 'three-bvh-csg'
 import { computeBoundsTree } from 'three-mesh-bvh'
 import { sceneRegistry } from '../../hooks/scene-registry/scene-registry'
 import type { AnyNode, AnyNodeId, RoofNode, RoofSegmentNode } from '../../schema'
-import type { RoofType } from '../../schema/nodes/roof-segment'
+import { getActiveRoofHeight, type RoofType } from '../../schema/nodes/roof-segment'
 import useScene from '../../store/use-scene'
 
 const csgEvaluator = new Evaluator()
@@ -306,14 +306,14 @@ export function getRoofSegmentBrushes(
     width,
     depth,
     wallHeight,
-    roofHeight,
     wallThickness,
     deckThickness,
     overhang,
     shingleThickness,
   } = node
 
-  const activeRh = roofType === 'flat' ? 0 : roofHeight
+  // 上游 schema 用 pitch 表征屋顶倾角；通过 getActiveRoofHeight 推导到几何代码原本依赖的 roofHeight。
+  const activeRh = roofType === 'flat' ? 0 : getActiveRoofHeight(node)
 
   let run = Math.min(width, depth) / 2
   let rise = activeRh

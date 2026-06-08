@@ -84,6 +84,79 @@
 - **状态**：🔴 active
 - **迁出方案**：PR3 `extendEditorEvents<T>()`
 
+#### L6 · wall.ts 量化转换 + VertexNode 软引用
+- **文件**：`packages/core/src/schema/nodes/wall.ts`
+- **状态**：🔴 active
+- **性质**：position 加 quantizePoint 转换、新增 `startNodeId/endNodeId` 可选字段。Phase 1.5 已恢复上游所有删除字段（materialPreset / 内外饰面 / curveOffset / `WallSurfaceMaterialSpec`）为 optional
+- **代价**：合并上游若 wall schema 调整，需重新挂载 quantizePoint
+- **迁出方案**：等 PR1（`Node.extensions`）将 startNodeId/endNodeId 迁到 extensions
+- **关联 commit**：Phase 1.5
+
+#### L7 · roof.ts 量化转换
+- **文件**：`packages/core/src/schema/nodes/roof.ts`
+- **状态**：🔴 active
+- **性质**：position 加 quantizePoint3 转换。Phase 1.5 已恢复所有上游字段（materialPreset / role-specific materials / getEffectiveRoofSurfaceMaterial）
+- **迁出方案**：长期保留——quantizePoint3 是 VilHil 核心精度策略
+- **关联 commit**：Phase 1.5
+
+#### L8 · roof-segment.ts 量化转换
+- **文件**：`packages/core/src/schema/nodes/roof-segment.ts`
+- **状态**：🔴 active
+- **性质**：position 加 quantizePoint3 转换。Phase 1.5 已恢复所有上游字段（pitch / 各 shape ratios / slope helpers / getActiveRoofHeight 等）；早先 VilHil 用 roofHeight 替代 pitch 已撤回
+- **关联坑**：`packages/core/src/systems/roof/roof-system.tsx` 仍依赖语义层的 roofHeight，已改为通过 `getActiveRoofHeight()` 派生
+- **迁出方案**：长期保留 quantizePoint3
+- **关联 commit**：Phase 1.5
+
+#### L9 · stair.ts 量化转换
+- **文件**：`packages/core/src/schema/nodes/stair.ts`
+- **状态**：🔴 active
+- **性质**：position 加 quantizePoint3 转换。Phase 1.5 已恢复上游所有字段（stairType / 楼梯参数 / surface material 角色 / getEffectiveStairSurfaceMaterial）
+- **迁出方案**：长期保留 quantizePoint3
+- **关联 commit**：Phase 1.5
+
+#### L10 · door.ts 量化转换
+- **文件**：`packages/core/src/schema/nodes/door.ts`
+- **状态**：🔴 active
+- **性质**：position 加 quantizePoint3 转换。Phase 1.5 已恢复上游所有删除字段（doorCategory / doorType / openingKind / swingAngle 等门型相关字段）
+- **迁出方案**：长期保留 quantizePoint3
+- **关联 commit**：Phase 1.5
+
+#### L11 · item.ts 量化转换 + 设备扩展字段
+- **文件**：`packages/core/src/schema/nodes/item.ts`
+- **状态**：🔴 active
+- **性质**：position 加 quantizePoint3 转换；新增 cameraParams（安防摄像头 FOV/range/yaw）、rotationEffect（控件驱动节点旋转）、assetSchema.wallArm（自动 wall-side 手臂 + 安装板）、WallArm 类型导出。Phase 1.5 已恢复上游字段（floorPlanUrl / source / isDraft / functionTags / isLowProfileItemSurface）
+- **代价**：合并上游若 ItemNode 重构，需重新挂载 VilHil 新增字段
+- **迁出方案**：等 PR1（`Node.extensions`）将 cameraParams/wallArm 迁到 extensions
+- **关联 commit**：Phase 1.5
+
+#### L12 · guide.ts 上游版本恢复
+- **文件**：`packages/core/src/schema/nodes/guide.ts`
+- **状态**：🔴 active（实际无 VilHil 改动，标 active 仅为登记）
+- **性质**：Phase 1.5 已从上游恢复完整版本（AssetUrl / GuideScaleReference / scaleReference）；之前曾被 VilHil 简化
+- **迁出方案**：无需迁出
+- **关联 commit**：Phase 1.5
+
+#### L13 · ceiling.ts 量化转换
+- **文件**：`packages/core/src/schema/nodes/ceiling.ts`
+- **状态**：🔴 active
+- **性质**：polygon/holes 加 quantizePolygon 转换。Phase 1.5 已恢复 materialPreset/holeMetadata/autoFromWalls 与 SurfaceHoleMetadata 依赖
+- **迁出方案**：长期保留 quantizePolygon
+- **关联 commit**：Phase 1.5
+
+#### L14 · slab.ts 量化转换
+- **文件**：`packages/core/src/schema/nodes/slab.ts`
+- **状态**：🔴 active
+- **性质**：polygon/holes 加 quantizePolygon 转换（与墙端点共用 1cm 网格）。Phase 1.5 已恢复 materialPreset/holeMetadata/autoFromWalls
+- **迁出方案**：长期保留 quantizePolygon
+- **关联 commit**：Phase 1.5
+
+#### L15 · stair-segment.ts 量化转换
+- **文件**：`packages/core/src/schema/nodes/stair-segment.ts`
+- **状态**：🔴 active
+- **性质**：position 加 quantizePoint3 转换。Phase 1.5 已恢复 materialPreset
+- **迁出方案**：长期保留 quantizePoint3
+- **关联 commit**：Phase 1.5
+
 ---
 
 ### 🟢 可接受越界
@@ -129,3 +202,4 @@
 ## 更新记录
 
 - 2026-06-03：初版建表；从 `ARCHITECTURE-LAYERING.md` §4 审计结果迁入
+- 2026-06-03 · Phase 1.5：恢复剩余被删的上游 schema —— 整文件（box-vent / chimney / cupola / dormer / downspout / eyebrow-vent / gutter / surface-hole-metadata / turbine-vent / asset-url）+ 字段恢复（wall / roof / roof-segment / stair / door / item / ceiling / slab / stair-segment / building / site / guide / scan / material）。VertexNode / precision 保留为 VilHil 自有。chimney/dormer/box-vent 调研：schema 文件已恢复；上游 `packages/nodes/**` 子节点完整实现包暂不引入（与 VilHil 上层架构耦合度低，留作后续）。新增 L6–L15 侵入点登记。typecheck：core / viewer / smarthome 全绿，editor 维持基线 40 错（与改动前相同）。

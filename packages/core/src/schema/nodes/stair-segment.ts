@@ -1,3 +1,14 @@
+/**
+ * @vilhil-managed-file
+ *
+ * 此文件由 VilHil 修改过：position 加了 quantizePoint3 量化转换。
+ * 之前曾被 VilHil 删除 materialPreset；Phase 1.5 已恢复。
+ *
+ * 合并上游时：上游所有字段保留；VilHil 的 quantizePoint3 不动；
+ * 上游对 schema 的字段语义如有改动，优先采纳上游版本。
+ *
+ * 详见 docs/ARCHITECTURE-LAYERING.md §4、docs/UPSTREAM-PATCHES.md L15。
+ */
 import dedent from 'ts-dedent'
 import { z } from 'zod'
 import { BaseNode, nodeType, objectId } from '../base'
@@ -16,6 +27,7 @@ export const StairSegmentNode = BaseNode.extend({
   id: objectId('sseg'),
   type: nodeType('stair-segment'),
   material: MaterialSchema.optional(),
+  materialPreset: z.string().optional(),
   position: z
     .tuple([z.number(), z.number(), z.number()])
     .default([0, 0, 0])

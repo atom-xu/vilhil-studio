@@ -188,7 +188,7 @@ const useScene: UseSceneStore = create<SceneState>()(
         })
 
         const site = SiteNode.parse({
-          children: [building],
+          children: [building.id],
         })
 
         // Define all nodes flat

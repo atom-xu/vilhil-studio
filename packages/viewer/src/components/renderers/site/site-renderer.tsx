@@ -1,4 +1,4 @@
-import { type SiteNode, useRegistry } from '@pascal-app/core'
+import { type AnyNodeId, type SiteNode, useRegistry } from '@pascal-app/core'
 import { useMemo, useRef } from 'react'
 import { BufferGeometry, Float32BufferAttribute, type Group, Shape } from 'three'
 import { useNodeEvents } from '../../../hooks/use-node-events'
@@ -68,11 +68,8 @@ export const SiteRenderer = ({ node }: { node: SiteNode }) => {
   return (
     <group ref={ref} {...handlers}>
       {/* Render children (buildings and items) */}
-      {node.children.map((child) => (
-        <NodeRenderer
-          key={typeof child === 'string' ? child : child.id}
-          nodeId={typeof child === 'string' ? child : child.id}
-        />
+      {node.children.map((childId) => (
+        <NodeRenderer key={childId} nodeId={childId as AnyNodeId} />
       ))}
 
       {/* Transparent floor fill */}
