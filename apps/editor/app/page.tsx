@@ -12,6 +12,8 @@ import { UserNavbar } from '@/components/user-navbar'
 import { DevBridge } from './dev-bridge'
 import { HiddenNodeKindsGuard } from './_layers/hidden-node-kinds-guard'
 import { PdfPagePicker } from './pdf-page-picker'
+// Plugin 注册（Phase 2A）—— side-effect import；模块顶层调用 loadPlugin。
+import './plugin-bootstrap'
 import { ProjectLoader } from './project-loader'
 
 /**

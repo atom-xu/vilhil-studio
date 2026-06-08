@@ -1,0 +1,27 @@
+{
+  "name": "@pascal-app/nodes",
+  "version": "0.1.0",
+  "description": "Pascal built-in node plugin (Phase 2A: empty placeholder — viewer/editor remain on hardcoded dispatch).",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "bunx tsc --build",
+    "check-types": "bunx tsc --noEmit"
+  },
+  "dependencies": {
+    "@pascal-app/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@pascal/typescript-config": "workspace:*",
+    "typescript": "5.9.3"
+  }
+}

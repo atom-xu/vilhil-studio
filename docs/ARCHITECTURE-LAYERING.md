@@ -182,12 +182,30 @@ VilHil proposal-demo 渲染器订阅 useScene → 渲染
 
 **目标**：把 L4 + M2~M5 从 Pascal 迁到 VilHil 自有包。
 
+#### Phase 2A · Plugin/Registry 基础设施奠基（✅ 已完成 2026-06-08）
+
+引入上游 `packages/core/src/registry/` 类型 + Map 基础设施，并建立空的 `@pascal-app/nodes` workspace。viewer / editor / device 的硬编码 dispatch **全部保留**，本阶段不动业务渲染。
+
+| 任务 | 状态 | 备注 |
+|---|---|---|
+| 2A.1 引入 `packages/core/src/registry/{types,registry,handles,scene-api,subtree,relations-resolver,index}.ts` | ✅ | 仅纯类型 + Map；无 viewer/editor 依赖 |
+| 2A.2 引入 `packages/core/src/store/history-control.ts`（scene-api 依赖）| ✅ | 自包含模块 |
+| 2A.3 `packages/core/src/index.ts` 导出 `loadPlugin` / `nodeRegistry` / `NodeDefinition` / `Plugin` / `Capabilities` 等关键类型 | ✅ | 见 `core/src/index.ts` 末尾 Registry 段 |
+| 2A.4 新建 `@pascal-app/nodes` workspace（package.json + tsconfig + 空 `builtinPlugin`）| ✅ | 占位；`nodes: []` |
+| 2A.5 `apps/editor/app/plugin-bootstrap.ts` 在 page.tsx 顶部 side-effect import，调用 `loadPlugin(builtinPlugin)` | ✅ | 模块级单次执行 |
+| 2A.6 typecheck baseline 保持：core/viewer/smarthome/nodes 全绿；editor 40 错不变 | ✅ | 零新增 |
+
+**完成判定**：`import { loadPlugin, nodeRegistry, type Plugin } from '@pascal-app/core'` 与 `import { builtinPlugin } from '@pascal-app/nodes'` 类型层面可用；App 启动时 `loadPlugin(builtinPlugin)` 调用通过；VilHil 现有 viewer / editor / device 渲染**完全不受影响**。
+
+#### Phase 2B+ · 业务迁出
+
 | 任务 | From → To | 风险 |
 |---|---|---|
 | 2.1 use-editor 设备/拓扑/proposal 切片迁出 | `packages/editor/.../use-editor.tsx` → `packages/smarthome/src/store/use-smart-editor.ts` | 🟡 需重新订阅 useScene |
 | 2.2 device-renderer + device-geometry 迁出 | `packages/viewer/.../device/**` → `packages/smarthome/src/viewer/**` | 🟡 需在 proposal-demo 直接 mount，绕过 viewer node-renderer |
 | 2.3 device-panel 迁出 | `packages/editor/.../device-panel.tsx` → `packages/smarthome/src/components/device-panel.tsx` | 🟢 已是独立组件，挪文件即可 |
 | 2.4 floorplan-panel 智能家居交互抽出 | inline → `packages/smarthome/src/floorplan/{light-strip-tool,curtain-tool,device-tool}.tsx` | 🔴 等待 drawTool registry |
+| 2.5 device 注册为 `smarthomePlugin` Plugin（依赖 Phase 2A）| `@vilhil/smarthome` exports `smarthomePlugin: Plugin` | 🟢 类型层就绪，渲染仍走硬编码 dispatch |
 
 ### 5.4 Phase 3 · 上游接纳（持续，背景任务）
 

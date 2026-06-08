@@ -14,6 +14,30 @@
 
 ## 当前侵入点（按 ARCHITECTURE-LAYERING.md §4 分类）
 
+### 🟢 Phase 2A 引入（基础设施奠基，非业务越界）
+
+#### N1 · registry 基础设施引入
+- **文件**：
+  - `packages/core/src/registry/{types,registry,handles,scene-api,subtree,relations-resolver,index}.ts`（全部 `git checkout upstream/main -- ...` 引入，**未做语义修改**）
+  - `packages/core/src/store/history-control.ts`（scene-api 依赖，自包含模块）
+  - `packages/core/src/registry/registry.ts` 头部 `isDevMode()` 函数把 `process` 引用改为 `(globalThis as { process? }).process` 安全转换，**运行时语义不变**——仅为让 core 在无 `@types/node` 下 typecheck 通过
+- **状态**：🟢 upstreamed（即与上游同步，无 VilHil 自有侵入）
+- **代价**：合并上游时这些文件应直接 take theirs；若上游又改了 `isDevMode()` 中的 process 引用方式，保留 VilHil 的安全转换形态
+- **新建文件**（VilHil-managed）：
+  - `packages/nodes/{package.json,tsconfig.json,src/index.ts}` —— 空 `builtinPlugin: Plugin = { id: 'pascal:core', apiVersion: 1, nodes: [] }`
+  - `apps/editor/app/plugin-bootstrap.ts` —— 模块级 `loadPlugin(builtinPlugin)`，由 `apps/editor/app/page.tsx` side-effect import
+  - `docs/NODES-PLUGIN-ARCHITECTURE.md` —— Plugin pattern 说明
+- **`packages/core/src/index.ts` 导出新增**：`loadPlugin / nodeRegistry / registerNode / setPluginDiscovery / discoverPlugins / isRegistry* / type Plugin / type NodeDefinition / type Capabilities / type NodeCategory / type SurfaceRole / type Presentation` 等
+- **未引入的上游子集**：
+  - `packages/core/src/registry/__bench__/`（性能基准，需要 vitest bench）
+  - `packages/core/src/registry/*.test.ts`（4 个测试文件，需要完整测试基础设施）
+  - 注：以上是测试/基准代码，与运行时无关。后续若要引入测试基础设施再补
+- **viewer / editor / device 渲染保持硬编码 dispatch 不变**——`nodeRegistry` 当前是空 Map，对运行时零影响
+- **关联文档**：`docs/ARCHITECTURE-LAYERING.md` §5.3 Phase 2A、`docs/NODES-PLUGIN-ARCHITECTURE.md`
+- **关联 commit**：Phase 2A（2026-06-08）
+
+---
+
 ### 🔴 严重越界
 
 #### L1 · DeviceNode inline 进 core schema
@@ -203,3 +227,4 @@
 
 - 2026-06-03：初版建表；从 `ARCHITECTURE-LAYERING.md` §4 审计结果迁入
 - 2026-06-03 · Phase 1.5：恢复剩余被删的上游 schema —— 整文件（box-vent / chimney / cupola / dormer / downspout / eyebrow-vent / gutter / surface-hole-metadata / turbine-vent / asset-url）+ 字段恢复（wall / roof / roof-segment / stair / door / item / ceiling / slab / stair-segment / building / site / guide / scan / material）。VertexNode / precision 保留为 VilHil 自有。chimney/dormer/box-vent 调研：schema 文件已恢复；上游 `packages/nodes/**` 子节点完整实现包暂不引入（与 VilHil 上层架构耦合度低，留作后续）。新增 L6–L15 侵入点登记。typecheck：core / viewer / smarthome 全绿，editor 维持基线 40 错（与改动前相同）。
+- 2026-06-08 · Phase 2A：引入上游 registry 基础设施 + 建立 `@pascal-app/nodes` workspace + 接入 `loadPlugin(builtinPlugin)` 占位调用（见 N1）。viewer / editor / device 硬编码 dispatch 完全保留；nodeRegistry 当前为空 Map，对运行时零影响。typecheck：core / viewer / smarthome / nodes 全绿，editor 仍 40 错（基线不变）。

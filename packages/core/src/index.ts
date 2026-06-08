@@ -51,6 +51,35 @@ export {
   useInteractive,
 } from './store/use-interactive'
 export { clearSceneHistory, default as useScene } from './store/use-scene'
+// Registry / Plugin infrastructure (Phase 2A — VilHil 上层未消费 viewer/editor 部分)
+// 详见 docs/ARCHITECTURE-LAYERING.md §5、docs/NODES-PLUGIN-ARCHITECTURE.md
+export {
+  discoverPlugins,
+  getHostRefFields,
+  getSelectableKinds,
+  isDrawnViaTool,
+  isDrawnViaToolKind,
+  isPresettable,
+  isPresettableKind,
+  isRegistryMovable,
+  isRegistrySelectable,
+  kindsWithFloorplanScope,
+  loadPlugin,
+  nodeRegistry,
+  type PluginDiscovery,
+  registerNode,
+  setPluginDiscovery,
+} from './registry/registry'
+export type {
+  AnyNodeDefinition,
+  Capabilities,
+  NodeCategory,
+  NodeDefinition,
+  NodeRegistry,
+  Plugin,
+  Presentation,
+  SurfaceRole,
+} from './registry/types'
 // Systems
 export { CeilingSystem } from './systems/ceiling/ceiling-system'
 export { DoorSystem } from './systems/door/door-system'
