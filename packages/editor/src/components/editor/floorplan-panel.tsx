@@ -1,5 +1,19 @@
 'use client'
 
+/**
+ * @vilhil-managed-file
+ *
+ * 此文件被 VilHil 业务层修改过。具体修改内容与原因详见
+ * docs/UPSTREAM-PATCHES.md（条目 ID: L5）。
+ *
+ * 合并上游时：
+ *   - 默认采纳上游版本作为基线
+ *   - VilHil 的改动按 UPSTREAM-PATCHES.md 中描述的策略重新应用
+ *   - 如果上游已提供等价扩展点，按 ARCHITECTURE-LAYERING.md §5 迁出
+ *
+ * 详见：docs/ARCHITECTURE-LAYERING.md
+ */
+
 import { Icon } from '@iconify/react'
 import {
   type AnyNodeId,

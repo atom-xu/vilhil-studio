@@ -1,8 +1,9 @@
 # VilHil Studio — Claude/AI 协作标准
 
 > 本文件是 AI 协作主规范。`CLAUDE.md` 软链到本文件。
-> 当文档冲突时，优先级：`AGENTS.md` > `docs/CODE-REVIEW.md` > `docs/UI-STANDARD.md` > 其他 docs。
+> 当文档冲突时，优先级：`AGENTS.md` > `docs/ARCHITECTURE-LAYERING.md` > `docs/CODE-REVIEW.md` > `docs/UI-STANDARD.md` > 其他 docs。
 > **每次提交前必须对照 `docs/CODE-REVIEW.md` 的自检清单逐项确认。**
+> **任何改 `packages/core|editor|viewer/**` 的动作前必读 `docs/ARCHITECTURE-LAYERING.md`。**
 
 ## 1. 项目定位
 
@@ -17,8 +18,9 @@ VilHil Studio 是基于 Pascal Editor 的智能家居方案工作台：
 1. 智能设备归属 `Furnish` 体系，不得塞入 `Structure` 主流程。
 2. 功能先做工具函数，再做 UI 包装（`packages/smarthome/src/tools/`）。
 3. 设备运行时真值在 `useScene`；UI 偏好放 `useDeviceState`。
-4. 一次交互只做一件事（例如“聚焦”和“显隐”必须分离）。
+4. 一次交互只做一件事（例如"聚焦"和"显隐"必须分离）。
 5. 改动前必须读取目标文件上下文，不做盲改。
+6. **VilHil 在上层、Pascal 在下层**：新功能默认落在 `packages/smarthome/**` 或 `apps/editor/app/**`。**禁止删除** Pascal 节点类型/字段。**禁止**未登记的 Pascal 源码修改。改 Pascal 必登记 `docs/UPSTREAM-PATCHES.md`。详见 `docs/ARCHITECTURE-LAYERING.md`。
 
 ## 3. 文件边界
 
@@ -39,11 +41,14 @@ VilHil Studio 是基于 Pascal Editor 的智能家居方案工作台：
 
 ### 开发/AI
 
-1. `docs/CONVENTIONS.md`
-2. `docs/ARCHITECTURE.md`
-3. `docs/STATE-FLOW.md`
-4. `docs/DATA-SCHEMA.md`
-5. `docs/UI-LOGIC-STANDARD.md`
+1. `docs/ARCHITECTURE-LAYERING.md` — **VilHil ↔ Pascal 分层契约（必读）**
+2. `docs/UPSTREAM-PATCHES.md` — 当前上游侵入点登记
+3. `docs/CONVENTIONS.md`
+4. `docs/ARCHITECTURE.md`
+5. `docs/STATE-FLOW.md`
+6. `docs/DATA-SCHEMA.md`
+7. `docs/UI-LOGIC-STANDARD.md`
+8. `docs/GLB-RENDER-STANDARD.md`
 
 ## 5. Claude 开发流程
 
@@ -82,5 +87,6 @@ VilHil Studio 是基于 Pascal Editor 的智能家居方案工作台：
 
 ## 9. 更新记录
 
+- 2026-06-03: 确立"VilHil 上层 / Pascal 下层"分层架构，新增 `docs/ARCHITECTURE-LAYERING.md` 与 `docs/UPSTREAM-PATCHES.md`。新增硬规则 6：禁止删除 Pascal 节点类型/字段，禁止未登记的 Pascal 源码修改。
 - 2026-04-20: 增加账号体系 & 分享体系（Better Auth 邮箱+密码、项目云端持久化、匿名分享链接、路由保护、登录回跳）。
 - 2026-04-17: 扩展为长期 AI 协作标准，并关联工程规约文档。

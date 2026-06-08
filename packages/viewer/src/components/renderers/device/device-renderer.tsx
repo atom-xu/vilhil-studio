@@ -1,3 +1,17 @@
+/**
+ * @vilhil-managed-file
+ *
+ * 此文件被 VilHil 业务层修改过。具体修改内容与原因详见
+ * docs/UPSTREAM-PATCHES.md（条目 ID: M2）。
+ *
+ * 合并上游时：
+ *   - 默认采纳上游版本作为基线
+ *   - VilHil 的改动按 UPSTREAM-PATCHES.md 中描述的策略重新应用
+ *   - 如果上游已提供等价扩展点，按 ARCHITECTURE-LAYERING.md §5 迁出
+ *
+ * 详见：docs/ARCHITECTURE-LAYERING.md
+ */
+
 import { type DeviceNode, useRegistry, useScene } from '@pascal-app/core'
 import { useEffect, useMemo, useRef } from 'react'
 import type { Group, Material, Mesh } from 'three'
@@ -144,6 +158,7 @@ export const DeviceRenderer = ({ node }: { node: DeviceNode }) => {
               path={(node.params as any)?.path as Array<[number, number]> | undefined}
               centroidWorld={[node.position[0], node.position[2]]}
               emissionDirection={(node.params as any)?.emissionDirection}
+              productId={(node as any).productId as string | undefined}
               visualState={{
                 on: isOn,
                 brightness: (deviceState?.brightness as number) ?? 100,

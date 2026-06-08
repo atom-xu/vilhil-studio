@@ -10,6 +10,7 @@ import { getCurrentProject, setCurrentProject, useCurrentProject } from '@/lib/c
 import { saveProjectToCloud } from '@/lib/project-api'
 import { UserNavbar } from '@/components/user-navbar'
 import { DevBridge } from './dev-bridge'
+import { HiddenNodeKindsGuard } from './_layers/hidden-node-kinds-guard'
 import { PdfPagePicker } from './pdf-page-picker'
 import { ProjectLoader } from './project-loader'
 
@@ -270,6 +271,7 @@ function HomeContent() {
   return (
     <div className="h-screen w-screen">
       <DevBridge />
+      <HiddenNodeKindsGuard />
       <Editor
         layoutVersion="v2"
         projectId={effectiveProjectId}

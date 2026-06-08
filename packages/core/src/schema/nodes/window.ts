@@ -1,8 +1,32 @@
+/**
+ * @vilhil-managed-file
+ *
+ * 此文件由 VilHil 修改过（新增 presetId 字段，恢复了原 Pascal 上游字段为 optional）。
+ * 合并上游时：上游所有字段保留为 optional；VilHil 的 presetId 字段不动；
+ * 上游对该 schema 的字段语义如有改动，优先采纳上游版本。
+ *
+ * 详见 docs/ARCHITECTURE-LAYERING.md §4、docs/UPSTREAM-PATCHES.md L2。
+ */
 import dedent from 'ts-dedent'
 import { z } from 'zod'
 import { BaseNode, nodeType, objectId } from '../base'
 import { MaterialSchema } from '../material'
 import { quantizePoint3 } from '../precision'
+
+// 上游 Pascal 的 WindowType 枚举。VilHil 当前未消费，但保留以避免合并冲突。
+export const WindowType = z.enum([
+  'fixed',
+  'sliding',
+  'casement',
+  'awning',
+  'hopper',
+  'single-hung',
+  'double-hung',
+  'bay',
+  'bow',
+  'louvered',
+])
+export type WindowType = z.infer<typeof WindowType>
 
 export const WindowNode = BaseNode.extend({
   id: objectId('window'),
@@ -23,6 +47,29 @@ export const WindowNode = BaseNode.extend({
   // Overall dimensions
   width: z.number().default(1.5),
   height: z.number().default(1.5),
+
+  // ────────────────────────────────────────────────────────────
+  // 上游 Pascal 字段（VilHil 当前未消费，全部恢复为 optional）。
+  // 合并上游时：保留 optional；如上游有语义变更优先采纳上游。
+  // ────────────────────────────────────────────────────────────
+
+  // Opening mode - when set to "opening", the window is only a shaped cutout
+  openingKind: z.enum(['window', 'opening']).optional(),
+
+  // Window family
+  windowType: WindowType.optional(),
+  operationState: z.number().min(0).max(1).optional(),
+  awningDirection: z.enum(['up', 'down']).optional(),
+  casementStyle: z.enum(['single', 'french']).optional(),
+  hingesSide: z.enum(['left', 'right']).optional(),
+  openingShape: z.enum(['rectangle', 'rounded', 'arch']).optional(),
+  openingRadiusMode: z.enum(['all', 'individual']).optional(),
+  openingCornerRadii: z
+    .tuple([z.number(), z.number(), z.number(), z.number()])
+    .optional(),
+  cornerRadius: z.number().optional(),
+  archHeight: z.number().optional(),
+  openingRevealRadius: z.number().optional(),
 
   // Frame
   frameThickness: z.number().default(0.05),
