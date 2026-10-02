@@ -46,3 +46,18 @@ export {
   type TopologyProtocol,
   type TopologyStrategy,
 } from './topology-tools'
+export {
+  playerToggleDevice,
+  playerSetDeviceParam,
+  playerApplyScene,
+  playerListScenes,
+  playerSubscribeSceneStatus,
+  playerFocusSubsystem,
+  playerToggleSubsystemVisibility,
+  playerListLevels,
+  playerGetDevices,
+  playerGetDeviceState,
+  type PlayerDeviceSummary,
+  type PlayerSceneSummary,
+  type PlayerSubsystemFocus,
+} from './player-api'

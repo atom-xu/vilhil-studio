@@ -30,7 +30,9 @@
     "three": "^0.183"
   },
   "dependencies": {
+    "@tweenjs/tween.js": "^25.0.0",
     "polygon-clipping": "^0.15.7",
+    "three-mesh-bvh": "^0.9.9",
     "zustand": "^5"
   },
   "devDependencies": {

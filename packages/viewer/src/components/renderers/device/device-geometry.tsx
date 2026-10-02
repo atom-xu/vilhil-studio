@@ -1,6 +1,20 @@
 // 扩容触发线：当 renderType case > 40 或 effects 总数 > 15 时，
 // 必须拆分为 registry 架构。参考 docs/DEVICE-SPEC-DESIGN.md 决策 1。
 
+/**
+ * @vilhil-managed-file
+ *
+ * 此文件被 VilHil 业务层修改过。具体修改内容与原因详见
+ * docs/UPSTREAM-PATCHES.md（条目 ID: M3）。
+ *
+ * 合并上游时：
+ *   - 默认采纳上游版本作为基线
+ *   - VilHil 的改动按 UPSTREAM-PATCHES.md 中描述的策略重新应用
+ *   - 如果上游已提供等价扩展点，按 ARCHITECTURE-LAYERING.md §5 迁出
+ *
+ * 详见：docs/ARCHITECTURE-LAYERING.md
+ */
+
 import { type MountType, type Subsystem } from '@pascal-app/core'
 import { Suspense, useEffect, useMemo, useRef } from 'react'
 import type { Object3D, SpotLight } from 'three'
@@ -10,12 +24,16 @@ import { useGLTF } from '@react-three/drei/core/Gltf'
 import { useFrame } from '@react-three/fiber'
 import { getSubsystemColor } from '@vilhil/smarthome'
 import { colorTempToColor } from '../../../lib/color-temp'
+import { applyBvh } from '../../../lib/bvh'
+import { getDeviceModel, getAllModelPaths, type ModelEntry } from './model-registry'
 
 // 预加载常用 GLB，避免首次拖放时卡顿
 useGLTF.preload('/items/electric-panel/model.glb')
 useGLTF.preload('/items/security-camera-dome/model.glb')
 useGLTF.preload('/items/security-camera-bullet/model.glb')
 useGLTF.preload('/items/apple-homepod/model.glb')
+// 品牌 GLB（model-registry 里登记的）一并预加载
+for (const p of getAllModelPaths()) useGLTF.preload(p)
 
 // 设备运行时视觉状态 — 与 @vilhil/smarthome DeviceVisualState 保持同步
 export interface DeviceVisualState {
@@ -45,6 +63,8 @@ interface DeviceGeometryProps {
   emissionDirection?: 'down' | 'up' | 'wall' | 'omni'
   /** 设备运行时视觉状态 — Kimi 3D 模型接入后通过此 prop 驱动动画 */
   visualState?: DeviceVisualState
+  /** 产品 SKU（如 'unifi-uvc-g6-pro-360'）—— model-registry 优先按它选品牌 GLB */
+  productId?: string
 }
 
 // Device geometry renderer - creates appropriate 3D geometry based on device type
@@ -57,6 +77,7 @@ export const DeviceGeometry = ({
   centroidWorld,
   emissionDirection,
   visualState,
+  productId,
 }: DeviceGeometryProps) => {
   const [width, height, depth] = size
   const subsystemColor = useMemo(() => getSubsystemColor(subsystem), [subsystem])
@@ -84,8 +105,29 @@ export const DeviceGeometry = ({
     )
   }
 
+  // 品牌 GLB 优先 —— model-registry 命中(productId 或 renderType)则用真实品牌模型，
+  // 各类型的程序化几何作为 Suspense fallback（GLB 加载期间显示 + 命不中时显示）。
+  const brandModel = useMemo<ModelEntry | null>(
+    () => getDeviceModel({ productId, renderType }),
+    [productId, renderType],
+  )
+
   // Get geometry based on render type and mount type
   const geometry = useMemo(() => {
+    // 命中品牌 GLB：用对应类型的白模当 fallback
+    if (brandModel) {
+      let fb: React.ReactNode
+      switch (renderType) {
+        case 'dome': fb = <DomeCameraFallback size={size} />; break
+        case 'camera-bullet': fb = <BulletCameraFallback size={size} />; break
+        case 'ceiling':
+        case 'wall':
+        case 'ap-ceiling':
+        case 'ap-wall': fb = <ApGeometry color={color} size={size} />; break
+        default: fb = <DefaultGeometry color={color} size={size} />
+      }
+      return <BrandModelGeometry entry={brandModel} fallback={fb} />
+    }
     switch (renderType) {
       case 'downlight':
         return <DownlightGeometry color={color} size={size} />
@@ -142,7 +184,7 @@ export const DeviceGeometry = ({
       default:
         return <DefaultGeometry color={color} size={size} />
     }
-  }, [renderType, color, size])
+  }, [renderType, color, size, brandModel, visualState])
 
   // Adjust position based on mount type
   const position = useMemo(() => {
@@ -626,6 +668,7 @@ const SwitchNetworkGeometry = ({ size: [w, h, d] }: { color: string; size: [numb
 // 失败或加载中 fallback 到白模，保证视觉不掉
 const WallCabinetGLB = () => {
   const { scene } = useGLTF('/items/electric-panel/model.glb')
+  useEffect(() => { applyBvh(scene) }, [scene])
   // 和 item-catalog 里 electric-panel 保持一致的 scale
   return <Clone object={scene} scale={[0.61, 0.74, 0.7]} />
 }
@@ -657,9 +700,39 @@ const WallCabinetGeometry = ({ size }: { size: [number, number, number] }) => {
   )
 }
 
+// ─── 品牌 GLB 通用加载器 ──────────────────────────────────────────────────
+// model-registry 命中时用这个加载任意品牌 GLB（UniFi 摄像头/AP, 未来路创面板等）。
+// 接受 ModelEntry 的 rotation/scale/yOffset 校正 GLB 朝向尺寸。
+const BrandModelGLB = ({ entry }: { entry: ModelEntry }) => {
+  const { scene } = useGLTF(entry.path)
+  useEffect(() => { applyBvh(scene) }, [scene])
+  const s = entry.scale ?? 1
+  return (
+    <group
+      position={[0, entry.yOffset ?? 0, 0]}
+      rotation={entry.rotation ?? [0, 0, 0]}
+    >
+      <Clone object={scene} scale={[s, s, s]} />
+    </group>
+  )
+}
+
+const BrandModelGeometry = ({
+  entry,
+  fallback,
+}: {
+  entry: ModelEntry
+  fallback: React.ReactNode
+}) => (
+  <Suspense fallback={fallback}>
+    <BrandModelGLB entry={entry} />
+  </Suspense>
+)
+
 // ─── 安防摄像头 GLB + 兜底白模 ────────────────────────────────────────────
 const DomeCameraGLB = () => {
   const { scene } = useGLTF('/items/security-camera-dome/model.glb')
+  useEffect(() => { applyBvh(scene) }, [scene])
   // GLB 导出时可能朝向 +Z 或 +Y，视模型而定。常见半球摄像头模型"镜头向下"默认即可
   return <Clone object={scene} scale={[1, 1, 1]} />
 }
@@ -694,6 +767,7 @@ const DomeCameraGeometry = ({ size }: { size: [number, number, number] }) => {
 
 const BulletCameraGLB = () => {
   const { scene } = useGLTF('/items/security-camera-bullet/model.glb')
+  useEffect(() => { applyBvh(scene) }, [scene])
   return <Clone object={scene} scale={[1, 1, 1]} />
 }
 
@@ -728,6 +802,7 @@ const BulletCameraGeometry = ({ size }: { size: [number, number, number] }) => {
 // ─── 智能音箱 GLB（HomePod 风格）+ 顶部 LED 呼吸环 ──────────────────────
 const SmartSpeakerGLB = ({ visualState }: { visualState?: DeviceVisualState }) => {
   const { scene } = useGLTF('/items/apple-homepod/model.glb')
+  useEffect(() => { applyBvh(scene) }, [scene])
   const ledRef = useRef<THREE.MeshStandardMaterial>(null)
   const isOn = visualState?.on ?? false
 

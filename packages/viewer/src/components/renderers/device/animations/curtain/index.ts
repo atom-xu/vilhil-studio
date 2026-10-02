@@ -1,5 +1,7 @@
 export { CurtainContainer } from './curtain-container'
-export { SideOpenCurtain } from './side-open'
+export { SideOpenCurtain, SideOpenCurtainBoth } from './side-open'
 export { RollerCurtain } from './roller'
 export { VenetianBlind } from './venetian'
 export { RomanShade } from './roman'
+export { Curtain3D } from './curtain-3d-class'
+export type { Curtain3DOptions } from './curtain-3d-class'

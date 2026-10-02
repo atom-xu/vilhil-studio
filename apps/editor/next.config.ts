@@ -44,15 +44,16 @@ const nextConfig: NextConfig = {
     }
     return config
   },
+  // outputFileTracingRoot 指向 monorepo 根，确保 packages/* 依赖被一并追踪
+  // Next.js 16+ 已移出 experimental，必须放在顶层
+  outputFileTracingRoot: path.join(__dirname, '../../'),
   experimental: {
-    // 独立输出模式 —— 让 Next.js 打包出一个可独立运行的 Node.js 服务
-    // Docker / PM2 部署时 `node .next/standalone/apps/editor/server.js` 即可启动
-    // outputFileTracingRoot 指向 monorepo 根，确保 packages/* 依赖被一并追踪
-    outputFileTracingRoot: path.join(__dirname, '../../'),
     serverActions: {
       bodySizeLimit: '100mb',
     },
   },
+  // 独立输出模式 —— 让 Next.js 打包出一个可独立运行的 Node.js 服务
+  // PM2 部署时 `node .next/standalone/apps/editor/server.js` 即可启动
   output: 'standalone',
   // ─── 安全响应头（生产 + 开发都加，生产额外加 HSTS）───────────────
   async headers() {

@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "biome lint",
     "check-types": "next typegen && tsc --noEmit",
-    "db:seed": "bun db/seed.ts"
+    "db:seed": "bun db/seed.ts",
+    "db:init:local": "bun db/init-local.ts"
   },
   "dependencies": {
     "@number-flow/react": "^0.5.14",

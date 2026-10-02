@@ -1,14 +1,15 @@
 # VilHil Studio — 账号体系 & 分享功能 开发状态
 
 > 本文档仅覆盖账号体系（Auth）和分享功能（Share）两个模块。
-> 最后更新：2026-04-20
+> 历史盘点：2026-04-20；2026-09-19 校正路由、权限模式和初始化说明。
+> 最新本地验证结果见 `HANDOFF-2026-09-19.md`；下文未复测的功能条目仍是历史记录。
 
 ---
 
 ## 一、整体结论
 
 **账号体系：基础链路已通，管理后台已交付，但缺少头像、用户资料编辑。**
-**分享功能：核心链路已闭环（创建 → 落地页 → 密码/过期/权限），但 operate 权限的编辑限制有底层缺陷。**
+**分享功能：创建、密码校验、读取、撤销已通过本地 API 冒烟；代码已引入 edit / operate / view 权限模式，完整 UI 权限回归仍待验收。**
 
 ---
 
@@ -22,11 +23,11 @@
 | 登录页面 | `app/login/page.tsx` | 邮箱+密码，支持 `?redirect=` 回跳，错误提示+loading |
 | 会话管理 | `lib/auth-client.ts` | Better Auth `useSession` / `signIn` / `signUp` / `signOut` |
 | 用户导航栏 | `components/user-navbar.tsx` | 匿名/登录双态 UI，登出刷新 |
-| 路由保护（代码保留） | `middleware.ts` | 已注释掉，不强制拦截。上线前取消注释即可恢复 `/projects` 保护 |
+| 路由保护 | `middleware.ts` | 当前已启用 `/projects`、`/admin` 会话检查；未登录跳转 `/login?redirect=...` |
 | 数据库表 | `drizzle/0001_auth_setup.sql` | user / session / account / verification（Better Auth 自带） |
 | 角色系统 | `lib/auth.ts` | 启用 Better Auth `admin` 插件，`user.role` 字段（默认 `user`） |
 | Admin 管理后台 | `app/admin/users/page.tsx` | 用户列表、创建用户、重置密码、删除用户（仅 admin 可访问） |
-| 项目列表页 | `app/projects/page.tsx` | 登录用户显示项目列表；匿名用户显示友好引导（不强制跳转） |
+| 项目列表页 | `app/projects/page.tsx` | 登录用户显示项目列表；匿名访问先由 middleware 重定向 |
 
 ### 2.2 未实现 ❌（非当前任务，留给后续）
 
@@ -40,9 +41,9 @@
 
 ### 2.3 技术债务 / 注意事项
 
-1. **Middleware 当前是"透明模式"**
-   - 所有路由公开访问，已注释掉拦截逻辑。
-   - 上线前取消 `middleware.ts` 中的注释即可恢复保护。
+1. **Middleware 已启用保护**
+   - `/projects`、`/admin` 检查会话；主编辑器支持游客模式。
+   - Next.js 16 启动提示 middleware 命名已弃用；迁往 proxy 是后续兼容任务。
 
 2. **第一个管理员需要手动设置**
    - 执行 SQL：`UPDATE "user" SET "role" = 'admin' WHERE "email" = 'xxx';`
@@ -71,17 +72,16 @@
 
 | 功能 | 优先级 | 说明 |
 |------|--------|------|
-| **operate 权限的编辑限制** | 🔴 P0 | **底层缺陷**：`operate` 模式设 `readOnly(false)`，客户**可以添加/删除/移动设备**。BDD 要求"只能操作设备，不能编辑场景"。需要改 Pascal 核心 `useScene` 的权限粒度。 |
+| **operate 权限完整验收** | P1 | 已有 interactionMode：创建/删除要求 edit，operate 更新仅放行 state/params；需覆盖全部工具入口、快捷键与模式切换，不能再按旧 readOnly 缺陷重复开发。 |
 | 分享统计详情页 | P2 | 只有列表页显示浏览次数，没有单个分享的详细统计图表。 |
 | 分享链接二次编辑 | P2 | 生成后不能修改有效期、密码、权限。只能撤销后重新生成。 |
 
 ### 3.3 技术债务 / 注意事项
 
-1. **operate 权限语义不对（最重要）**
-   - 当前实现：`view` → `readOnly(true)`（不能编辑，**也不能开关灯**）；`operate` → `readOnly(false)`（能开关灯，**也能误删设备**）。
-   - 期望：无论 view 还是 operate，都不能添加/删除/移动设备；operate 允许开关灯、调亮度。
-   - **根因**：Pascal 核心 `node-actions.ts` 中 `createNodesAction` / `updateNodesAction` / `deleteNodesAction` 共用同一个 `readOnly` 开关，无法区分"结构性编辑"和"状态性更新"。
-   - **修复方向**：在 Pascal 核心中新增 `allowStateUpdate` 或类似标志，让设备状态更新（on/off/brightness）绕过 `readOnly`，但结构性操作（create/update position/delete）仍被阻止。
+1. **权限模式已落在代码，尚需完整业务验收**
+   - 分享页调用 `setInteractionMode('view' | 'operate')`。
+   - `node-actions.ts` 对创建/删除要求 edit，对 operate 的更新仅允许 state/params 字段。
+   - 仍需核对 params 放行范围及所有结构操作入口；此次 API 冒烟不等同于客户端权限验收。
 
 2. **分享密码前端用明文输入**
    - `share-dialog.tsx` 和落地页密码输入都是 `type="text"`，建议改为 `type="password"`（但内部使用场景可能希望明文方便口述）。
@@ -93,7 +93,7 @@
 
 ## 四、数据库迁移清单
 
-已生成但未执行的迁移文件：
+历史迁移清单（原记录不能证明任意当前数据库是否已执行）：
 
 | 文件 | 内容 |
 |------|------|
@@ -110,22 +110,16 @@
 | BDD 场景 | 状态 | 备注 |
 |----------|------|------|
 | 设计师匿名分享方案 | ✅ | 完整实现 |
-| 客户通过分享链接查看方案 | ⚠️ | 场景加载正常，但 operate 权限下客户可以编辑场景（需修 Pascal 核心） |
+| 客户通过分享链接查看方案 | ⚠️ | 权限模式已实现；完整 UI 结构编辑限制与设备操控仍需回归 |
 | 分享链接过期 | ✅ | 完整实现 |
 | 设计师注册并登录 | ✅ | 完整实现 |
 | 登录用户保存项目到云端 | ✅ | 完整实现 |
 | 登录用户从项目列表加载方案 | ✅ | 完整实现 |
-| 未登录用户访问受保护页面 | ⚠️ | 代码已写但已注释（按需求不激活） |
+| 未登录用户访问受保护页面 | 已实现 | 当前 middleware 已启用 `/projects`、`/admin` 保护 |
 
 ---
 
 ## 六、环境配置
 
-`apps/editor/.env.local` 已创建，包含：
-```
-BETTER_AUTH_SECRET=dev-secret-key-change-in-production-32chars!
-NEXT_PUBLIC_APP_URL=http://localhost:3002
-POSTGRES_URL=postgresql://localhost:5432/vilhil_dev
-```
-
-> 生产环境务必替换 `BETTER_AUTH_SECRET` 为 `openssl rand -base64 32` 生成的真密钥。
+以根目录 `SETUP.md` 为当前操作入口。2026-09-19 的本地专用数据库监听 `127.0.0.1:55432`，配置和随机密钥保存在被 Git 忽略的 `apps/editor/.env.local`。
+`bun run db:init:local` 同时执行手写 Auth SQL，并依据当前 Better Auth 配置补齐 admin 插件字段；不能只运行 Drizzle journal 或用查询投影执行 schema push。

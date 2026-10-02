@@ -4,12 +4,35 @@
  * S3 核心工具：创建 / 更新 / 删除 / 执行场景
  * 所有函数不依赖 React 组件，可被 UI / AI / 测试脚本直接调用。
  * 自动获得 Undo/Redo + 持久化。
+ *
+ * 动画层：使用 @tweenjs/tween.js 替代手写 requestAnimationFrame 插值。
+ * 参考 iCraft 技术方案 —— TWEEN 支持 chain/yoyo/easing，
+ * 比裸 lerp 更容易组合复杂场景时间线。
  */
 
+import TWEEN from '@tweenjs/tween.js'
 import { generateId, SceneNode, useScene } from '@pascal-app/core'
 import type { AnyNode, SceneEffect, SceneNodeType } from '@pascal-app/core'
 import { setDeviceState } from './set-device-params'
 import { listCircuitMembers } from './circuit-tools'
+
+// ─── TWEEN 全局 RAF 驱动 ────────────────────────────────────────────────────────
+// scene-tools 是非 React 模块，TWEEN.update() 需要在自己的 RAF 里跑。
+// 当没有活跃 tween 时自动停止，避免空转。
+let _tweenRafId: ReturnType<typeof requestAnimationFrame> | null = null
+
+function ensureTweenLoop(): void {
+  if (_tweenRafId !== null) return
+  const loop = (time: number) => {
+    TWEEN.update(time)
+    if (TWEEN.getAll().length > 0) {
+      _tweenRafId = requestAnimationFrame(loop)
+    } else {
+      _tweenRafId = null
+    }
+  }
+  _tweenRafId = requestAnimationFrame(loop)
+}
 
 /**
  * 把一条 SceneEffect 解析为它实际要影响的 deviceId 列表。
@@ -334,6 +357,7 @@ function animateNumericState(effect: SceneEffect, durationMs: number, runToken: 
   )
   const immediateKeys = Object.keys(targetState).filter((key) => !numericKeys.includes(key))
 
+  // 非数值字段立即写入（布尔、字符串等）
   if (immediateKeys.length > 0) {
     const immediatePatch: Record<string, unknown> = {}
     for (const key of immediateKeys) immediatePatch[key] = targetState[key]
@@ -342,26 +366,26 @@ function animateNumericState(effect: SceneEffect, durationMs: number, runToken: 
 
   if (numericKeys.length === 0) return
 
-  const start = Date.now()
-
-  const tick = () => {
-    if (activeSceneRunToken !== runToken) return
-    const progress = Math.min(1, (Date.now() - start) / durationMs)
-
-    const patch: Record<string, unknown> = {}
-    for (const key of numericKeys) {
-      const from = currentState[key] as number
-      const to = targetState[key] as number
-      patch[key] = from + (to - from) * progress
-    }
-    setDeviceState(effect.deviceId as any, patch)
-
-    if (progress < 1) {
-      requestAnimationFrame(tick)
-    }
+  // 构建 TWEEN 起始对象（只含数值字段）
+  const fromObj: Record<string, number> = {}
+  const toObj: Record<string, number> = {}
+  for (const key of numericKeys) {
+    fromObj[key] = currentState[key] as number
+    toObj[key] = targetState[key] as number
   }
 
-  requestAnimationFrame(tick)
+  // 参考 iCraft 方案：使用 TWEEN.Easing.Quadratic.InOut 做自然缓动
+  new TWEEN.Tween(fromObj)
+    .to(toObj, durationMs)
+    .easing(TWEEN.Easing.Quadratic.InOut)
+    .onUpdate((obj) => {
+      if (activeSceneRunToken !== runToken) return
+      setDeviceState(effect.deviceId as any, obj as Record<string, unknown>)
+    })
+    .start()
+
+  // 启动（或保持）全局 TWEEN RAF 循环
+  ensureTweenLoop()
 }
 
 /**

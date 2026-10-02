@@ -4,7 +4,7 @@ import { type DeviceNode, useScene, type WallNode, type WindowNode } from '@pasc
 import { useMemo } from 'react'
 import { RollerCurtain } from './roller'
 import { RomanShade } from './roman'
-import { SideOpenCurtain } from './side-open'
+import { SideOpenCurtain, SideOpenCurtainBoth } from './side-open'
 import { VenetianBlind } from './venetian'
 import { computeWindowWorldGeometry } from './window-geometry'
 
@@ -116,13 +116,34 @@ export const CurtainContainer = ({ node }: { node: DeviceNode }) => {
   const isVenetian = curtainType === 'venetian'
   const baseZ = isVenetian ? -(geom?.wallThickness ?? 0.2) * 0.4 : 0
 
+  // side-open 多层 → 用 Curtain3D 'both' 单实例（共享 pelmet + 双轨）
+  // side-open 单层 → 单实例 SideOpenCurtain
+  // 其它类型（roller/venetian/roman）维持"逐层叠加 + 顶部轨道杆"的旧渲染
+  const isSideOpen = curtainType === 'side-open'
+  const sideOpenIsBoth = isSideOpen && layers.length >= 2
+
   return (
     <group position={posWorld} rotation={[0, rotY, 0]}>
       <group position={[0, 0, baseZ]}>
-        {layers.map((layer, i) => {
+        {sideOpenIsBoth && (() => {
+          // 'both' 单实例：层 0 = 遮光（blackout 通道，无视 layer.material），
+          //              层 1 = 纱帘（sheer 通道）
+          // 这种约定让多层场景视觉一致；如果用户两层都标 sheer，仍按"内布外纱"渲染。
+          const blackoutPos = layerPositions[0] ?? legacyPosition
+          const sheerPos = layerPositions[1] ?? 50
+          return (
+            <SideOpenCurtainBoth
+              width={width}
+              height={height}
+              layerZ={0}
+              openPctBlackout={blackoutPos}
+              openPctSheer={sheerPos}
+            />
+          )
+        })()}
+
+        {!sideOpenIsBoth && layers.map((layer, i) => {
           const layerPos = layerPositions[i] ?? (i === 0 ? legacyPosition : 50)
-          // 外层（i=0）在最远处 z=0.07，每加一层 z 向窗户靠近 0.03m
-          // 百叶窗只允许单层（忽略多层），层 0 z=0
           const layerZ = isVenetian ? 0 : (0.07 - i * 0.03)
           const key = `layer-${i}`
           if (curtainType === 'roller') {
@@ -134,11 +155,12 @@ export const CurtainContainer = ({ node }: { node: DeviceNode }) => {
           if (curtainType === 'roman') {
             return <RomanShade key={key} width={width} height={height} layerZ={layerZ} openPct={layerPos} material={layer.material} />
           }
+          // side-open 单层
           return <SideOpenCurtain key={key} width={width} height={height} layerZ={layerZ} openPct={layerPos} material={layer.material} />
         })}
 
-        {/* 顶部轨道杆（仅非百叶类型：对开 / 卷 / 罗马） */}
-        {!isVenetian && (
+        {/* 顶部轨道杆（仅 roller/roman；side-open 现在自带 pelmet box，不再画铁杆；百叶不需要）*/}
+        {(curtainType === 'roller' || curtainType === 'roman') && (
           <mesh position={[0, height / 2 + 0.04, 0.10]}>
             <boxGeometry args={[width + 0.22, 0.04, 0.04]} />
             <meshStandardMaterial color="#7a7570" roughness={0.5} metalness={0.6} />

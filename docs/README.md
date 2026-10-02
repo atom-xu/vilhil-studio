@@ -3,6 +3,10 @@
 本目录是 VilHil Studio 的业务与工程标准中心。
 新增需求、修复问题、AI 协作都从这里进入。
 
+当前接手快照：[2026-09-19 接手记录](./HANDOFF-2026-09-19.md)。本地启动参见 [SETUP.md](../SETUP.md)。
+
+2026-09-21 开发服务故障恢复与后续启动：[开发服务生命周期](./DEV-SERVICE.md)。
+
 ## 1. 必读顺序（负责人/产品）
 
 1. `UI-START-HERE.md`
@@ -12,12 +16,15 @@
 
 ## 2. 必读顺序（开发/AI）
 
-1. `CONVENTIONS.md`
-2. `ARCHITECTURE.md`
-3. `STATE-FLOW.md`
-4. `DATA-SCHEMA.md`
-5. `UI-LOGIC-STANDARD.md`
-6. `UI-COMPONENT-LIBRARY.md`
+1. `ARCHITECTURE-LAYERING.md`
+2. `UPSTREAM-PATCHES.md`
+3. `CONVENTIONS.md`
+4. `ARCHITECTURE.md`
+5. `STATE-FLOW.md`
+6. `DATA-SCHEMA.md`
+7. `UI-LOGIC-STANDARD.md`
+8. `GLB-RENDER-STANDARD.md`
+9. `UI-COMPONENT-LIBRARY.md`
 
 ## 3. 文档职责
 
@@ -42,5 +49,7 @@
 4. 文档更新必须写明日期和影响范围。
 
 ## 6. 变更记录
+
+- 2026-09-19: 接手初始化，校正开发必读顺序，与根目录 `AGENTS.md` 的分层契约保持一致。
 
 - 2026-04-17: 新增工程规约骨架（CONVENTIONS/ARCHITECTURE/STATE-FLOW/DATA-SCHEMA/CODE-REVIEW）与文档入口索引。

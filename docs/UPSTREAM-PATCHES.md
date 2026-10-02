@@ -32,7 +32,7 @@
   - `packages/core/src/registry/__bench__/`（性能基准，需要 vitest bench）
   - `packages/core/src/registry/*.test.ts`（4 个测试文件，需要完整测试基础设施）
   - 注：以上是测试/基准代码，与运行时无关。后续若要引入测试基础设施再补
-- **viewer / editor / device 渲染保持硬编码 dispatch 不变**——`nodeRegistry` 当前是空 Map，对运行时零影响
+- **viewer / editor / device 渲染保持硬编码 dispatch 不变**——Phase 2A 的空 Map 已在 Phase 2B 注册 device；注册尚未接管实际渲染
 - **关联文档**：`docs/ARCHITECTURE-LAYERING.md` §5.3 Phase 2A、`docs/NODES-PLUGIN-ARCHITECTURE.md`
 - **关联 commit**：Phase 2A（2026-06-08）
 
@@ -51,17 +51,16 @@
 
 #### L2 · window.ts 删除上游字段
 - **文件**：`packages/core/src/schema/nodes/window.ts`
-- **状态**：🔴 active（**Phase 1 必须修复**）
-- **代价**：删除 `openingKind/windowType/operationState` 等 17 个上游字段；上游任何依赖这些字段的代码合并都冲突
-- **迁出方案**：恢复所有删除字段为 `optional`，新加的 `presetId` 保留为扩展字段
+- **状态**：⚪ resolved（删除问题已在 Phase 1 恢复；2026-09-19 对照源码复核）
+- **当前差异**：上游字段作为 optional 保留，VilHil 的 `presetId` 和位置量化仍需在合并时维护
+- **后续**：保留字段恢复成果；本条 resolved 不表示整个 window schema 与上游相同
 - **责任人**：未指定
 - **关联 commit**：`279e0446`
 
 #### L3 · 删除 8 个上游节点类型
 - **文件**：`packages/core/src/schema/nodes/{elevator,fence,column,shelf,spawn,ridge-vent,skylight,solar-panel}.ts`
-- **状态**：🔴 active（**Phase 1 必须修复**）
-- **代价**：上游任何用到这些类型的代码合并都冲突；上游若新增依赖会持续撞车
-- **迁出方案**：`git show upstream/main:<path>` 恢复文件原状；VilHil UI 在 `apps/editor/app/**` 层 hide
+- **状态**：⚪ resolved（8 个 schema 文件已恢复并纳入版本控制；2026-09-19 复核）
+- **后续**：UI 层按需隐藏；schema 文件存在不代表对应 renderer/tool 已完成注册迁移
 - **责任人**：未指定
 - **关联 commit**：`b0fdbfe3`
 
@@ -100,7 +99,7 @@
 - **迁出方案**：同 M2
 
 #### M4 · device-panel 在 editor 包内
-- **文件**：`packages/editor/src/components/ui/panels/device-panel.tsx`
+- **文件**：`packages/editor/src/components/ui/sidebar/panels/device-panel/index.tsx`
 - **状态**：🔴 active
 - **迁出方案**：等 panel slot；过渡期挪到 `packages/smarthome/src/components/`
 
@@ -215,7 +214,7 @@
 - [ ] 本表 🔴 active 条目是否已减少？
 - [ ] 上游新版本是否引入了能让我们去除某个侵入点的扩展点？
 - [ ] L1~L5 各文件冲突如何解决？（默认：VilHil 保留侵入，但不破坏上游新加字段）
-- [ ] 合并后 `pnpm typecheck` 通过？
+- [ ] 合并后 `bun run check-types` 及 core/viewer/smarthome 包级类型检查通过？
 - [ ] proposal-demo / 编辑器主流程冒烟通过？
 
 合并完成后更新本表：
@@ -225,6 +224,29 @@
 ---
 
 ## 更新记录
+
+### 2026-10-02 本地 WIP 快照登记
+
+按本次“先本地提交”的要求保存既有工作区。以下补丁仍为 **active / 待验收**；此快照不表示功能完成或生产发布门禁通过。
+
+| ID | 文件范围 | 当前改动与迁出方向 |
+|---|---|---|
+| M6 | `packages/editor/src/components/editor/{index.tsx,device-workspace.tsx,topology-workspace.tsx,topology/*}`、`packages/editor/package.json`；延续 M4 的 device-panel | 设备目录独立工作区、拓扑节点/连线/布局与 Dagre 依赖；TODO：业务工作区迁到 smarthome，通过 editor slot 接入。楼层与保存行为仍需完整验收。 |
+| M7 | `packages/viewer/src/components/renderers/device/animations/curtain/{curtain-container.tsx,index.ts,side-open.tsx,curtain-3d-class.ts,HANDOFF.md}` | 参数化单层/双层窗帘及 R3F 包装；TODO：随 M2/M3 迁出。隐藏窗帘仍持续更新，保留为后续性能修复项。 |
+| M8 | `packages/viewer/src/components/renderers/device/{device-geometry.tsx,model-registry.ts}`、`packages/viewer/src/hooks/use-gltf-ktx2.tsx`、`packages/viewer/src/lib/bvh.ts`、`packages/viewer/package.json` | UniFi 模型映射、Draco 加载与按 mesh 启用 BVH；TODO：模型选择与业务渲染迁到 smarthome，通用加载扩展独立评审。共享缓存资源生命周期仍待完整验证。 |
+
+提交前按 `CODE-REVIEW.md` 核对的状态：
+
+- useFrame / 资源清理：已查看窗帘更新与 dispose、GLB/BVH 处理；已知隐藏窗帘持续更新和缓存资源清理边界尚未全部关闭。
+- useMemo：窗帘用于实例初始化，销毁放在 effect cleanup；不将此静态检查等同于完整 StrictMode 验收。
+- 导出：窗帘入口、Player API 工具入口及拓扑相对导入已存在；没有把辅助文件机械地全部重导出为公共 API。
+- 数据字段：本快照未改变 core schema；Player API 的楼层读取问题及状态文档偏差仍见 `HANDOFF-2026-09-19.md`，未宣称字段与状态契约已收敛。
+- effect 清理：键盘监听与窗帘销毁有 cleanup；拓扑自动布局的延迟 fitView 尚无定时器清理，完整切换/卸载回归待做。
+- 800 行限制：未通过，device-workspace、topology-workspace、editor/index 与 device-geometry 仍超限；本次保留已有实现，不在保存快照时重构。
+- 敏感配置：待提交文件仅有模板或运行时生成表达式；本机环境文件、数据库和运行日志不入库。
+- 2026-10-02 重跑：core/viewer/smarthome 类型检查通过；editor 仍有 40 条、app 37 条类型错误（有重叠）；服务脚本 6 项测试、AssetUrl 39 项测试通过；全库 lint 仍有 21 errors / 46 warnings / 76 infos。该 WIP 快照保留已记录的 Tween、类型与生产迁移问题，后续交付必须继续关闭。
+
+- 2026-09-19：复核 L2/L3 恢复状态、Phase 2B 注册状态与 M4 文件位置；仅校正文档，没有新增 Pascal 源码补丁。工作区中尚未提交的设备/拓扑/渲染改动仍需按接手记录逐项评审登记。
 
 - 2026-06-03：初版建表；从 `ARCHITECTURE-LAYERING.md` §4 审计结果迁入
 - 2026-06-03 · Phase 1.5：恢复剩余被删的上游 schema —— 整文件（box-vent / chimney / cupola / dormer / downspout / eyebrow-vent / gutter / surface-hole-metadata / turbine-vent / asset-url）+ 字段恢复（wall / roof / roof-segment / stair / door / item / ceiling / slab / stair-segment / building / site / guide / scan / material）。VertexNode / precision 保留为 VilHil 自有。chimney/dormer/box-vent 调研：schema 文件已恢复；上游 `packages/nodes/**` 子节点完整实现包暂不引入（与 VilHil 上层架构耦合度低，留作后续）。新增 L6–L15 侵入点登记。typecheck：core / viewer / smarthome 全绿，editor 维持基线 40 错（与改动前相同）。

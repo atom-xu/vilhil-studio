@@ -104,6 +104,8 @@
       "apps/**/*.tsx",
       "apps/**/*.js",
       "apps/**/*.jsx",
+      "scripts/**/*.mjs",
+      "scripts/**/*.cjs",
       "!**/node_modules",
       "!**/.next",
       "!**/dist",

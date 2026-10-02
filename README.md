@@ -18,6 +18,7 @@ A smart home solution workspace built on [Pascal Editor](https://github.com/pasc
 
 | Document | Description |
 |----------|-------------|
+| [`docs/HANDOFF-2026-09-19.md`](./docs/HANDOFF-2026-09-19.md) | Current local setup, verification baseline, and next steps |
 | [`docs/UI-START-HERE.md`](./docs/UI-START-HERE.md) | Start here (non-technical) |
 | [`docs/UI-STANDARD.md`](./docs/UI-STANDARD.md) | Unified UI standard (SSOT) |
 | [`docs/NAVIGATION-ARCHITECTURE.md`](./docs/NAVIGATION-ARCHITECTURE.md) | Routing & navigation |
@@ -59,7 +60,7 @@ vilhil-studio/
 |-------|---------|----------------|
 | `useScene` | `@pascal-app/core` | Scene data: nodes, root IDs, dirty nodes, CRUD. Persisted to IndexedDB with undo/redo (Zundo). |
 | `useViewer` | `@pascal-app/viewer` | Viewer state: selection (building/level/zone), level display mode, camera mode, outliner. |
-| `useEditor` | `apps/editor` | Editor state: active tool, panel states, focused device, editor preferences. |
+| `useEditor` | `@pascal-app/editor` | Editor state: active tool, panel states, focused device, editor preferences. |
 
 **Access patterns:**
 
@@ -74,7 +75,7 @@ const node = useScene.getState().nodes[id]
 useViewer.getState().setSelection({ levelId: 'level_123' })
 ```
 
-**Hard rule:** device runtime state (on/off, brightness, temperature) lives in `useScene`. UI-only preferences (panel open, highlight mode) live in `useEditor`. Never mix them.
+**Hard rule:** device runtime state (on/off, brightness, temperature) lives in `useScene`. Device UI preferences (subsystem visibility/focus) live in `useDeviceState`; general editor UI state lives in `useEditor`. Never mix them.
 
 ---
 
@@ -259,10 +260,17 @@ bun install
 
 # Start development server
 bun dev
-# → http://localhost:3000
+# → http://localhost:3002
+
+# Keep the local server running after a Codex task ends
+bun run dev:start
+bun run dev:status
+bun run dev:stop
 ```
 
-`bun dev` runs Turbopack (Next.js) only. Packages are compiled from source via `transpilePackages` — no separate tsc watch processes needed.
+`bun dev` first builds the core/viewer/nodes dependencies through Turbo, then starts Next.js on port 3002. The app loads `apps/editor/.env.local`; no separate tsc watch processes are needed.
+
+Use the root lifecycle commands for foreground cleanup, bounded broken-pipe exits, and rotating background logs. See [DEV-SERVICE.md](./docs/DEV-SERVICE.md).
 
 ---
 

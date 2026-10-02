@@ -118,7 +118,9 @@ VilHil proposal-demo 渲染器订阅 useScene → 渲染
 
 ## 4. 当前越界点清单（违反原则的地方，需逐步偿还）
 
-> 数据来源：`origin/main..HEAD` 共 48 commit，**24 个修改了 Pascal 源码**，影响 ~160 个文件。
+> 本节保留 2026-06-03 的历史审计列表（当时统计 48 commit，24 个涉及 Pascal，约 160 个文件），不是当前 Git 差异统计。2026-09-19 已复核：L2/L3 的 schema 删除问题已恢复；当前状态见 `UPSTREAM-PATCHES.md` 与 `HANDOFF-2026-09-19.md`。
+
+2026-10-02 本地 WIP 快照将既有设备/拓扑工作区、窗帘和模型加载补丁登记为 `UPSTREAM-PATCHES.md` 的 M6/M7/M8。它们仍在 Pascal 包内，状态为 active / 待验收，后续按本契约迁出；此登记不表示已解决架构或发布门禁问题。
 
 ### 🔴 严重越界（结构性侵入，必须迁出）
 
@@ -246,7 +248,7 @@ PR 候选清单（按 ROI 排序）：
 ```bash
 git checkout -b chore/upstream-sync-v0.9
 git merge upstream/main          # 解决剩余冲突
-pnpm typecheck && pnpm build     # 验证
+bun run check-types && bun run build  # 验证，并补 core/viewer/smarthome 包级检查
 # proposal-demo / 灯光 / 窗帘 / 设备放置 / 编辑器主流程 手工冒烟
 ```
 
@@ -319,7 +321,7 @@ pnpm typecheck && pnpm build     # 验证
 
 - `docs/ARCHITECTURE.md` — VilHil 内部分层（Tool/State/UI/Render）
 - `docs/PASCAL-REUSE-AUDIT.md` — Pascal 现有能力复用对照表
-- `docs/UPSTREAM-PATCHES.md` — 所有未迁出的 Pascal 侵入点登记（待建）
+- `docs/UPSTREAM-PATCHES.md` — 所有未迁出的 Pascal 侵入点登记
 - `docs/STATE-FLOW.md` — useScene / useDeviceState 真值分层
 - `docs/DATA-SCHEMA.md` — 节点 schema 与字段
 - `CLAUDE.md` — AI 协作主规范
