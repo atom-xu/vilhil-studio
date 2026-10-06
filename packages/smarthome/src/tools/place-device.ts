@@ -8,6 +8,7 @@
 import { DeviceNode, generateId, useScene } from '@pascal-app/core'
 import type { DeviceParams } from '@pascal-app/core'
 import { getDeviceDefinition } from '../device-catalog'
+import { checkDevicePlacement, DevicePlacementError } from './device-placement'
 
 /** 各 catalogId 对应的灯带发光朝向预设。
  *  画线工具放灯带时如果没显式传 emissionDirection，按这里的默认走。
@@ -29,6 +30,9 @@ export function placeDevice(
   if (!def) {
     throw new Error(`placeDevice: 设备目录中找不到 catalogId="${catalogId}"`)
   }
+
+  const placement = checkDevicePlacement(levelId, catalogId, position, params?.direction ?? 0)
+  if (!placement.valid) throw new DevicePlacementError(placement)
 
   const id = generateId('device')
 

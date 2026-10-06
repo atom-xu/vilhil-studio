@@ -325,3 +325,9 @@ bun run check-types && bun run build  # 验证，并补 core/viewer/smarthome �
 - `docs/STATE-FLOW.md` — useScene / useDeviceState 真值分层
 - `docs/DATA-SCHEMA.md` — 节点 schema 与字段
 - `CLAUDE.md` — AI 协作主规范
+
+
+2026-10-03 隔离交互批次：场景引擎和碰撞计算在smarthome层；已有editor设备工具/二维ghost增加最小UI适配，登记M9。
+不进行Phase2C迁出、不更改任何Pascal节点schema。旧候选仅逐项重放游客保存、指针捕获、楼层计数、本地Draco及Webpack解析修复，未覆盖main源码。
+
+2026-10-06 暖通收尾：已有 viewer HVAC 动画与 editor DeviceInfoCard 的正确性修复登记 M10；因两者尚无独立动画/控件替换扩展点，本轮仅修原实现，不新增第二套动画。暖通入口、派生相机目标和 postprocessing 选区适配在 app；未修改安装依赖、灯光预设或认可纱帘。

@@ -15,7 +15,7 @@
 import { type DeviceNode, useRegistry, useScene } from '@pascal-app/core'
 import { useEffect, useMemo, useRef } from 'react'
 import type { Group, Material, Mesh } from 'three'
-import { getDeviceDefinition, useSelectedSubsystem, useSubsystemVisibility } from '@vilhil/smarthome'
+import { getDeviceDefinition, isSecurityCamera, securityCameraRotation, useSelectedSubsystem, useSubsystemVisibility } from '@vilhil/smarthome'
 import { useNodeEvents } from '../../../hooks/use-node-events'
 import { ErrorBoundary } from '../../error-boundary'
 import { DeviceEffects } from './device-effects'
@@ -134,7 +134,7 @@ export const DeviceRenderer = ({ node }: { node: DeviceNode }) => {
     <group
       position={node.position}
       ref={ref}
-      rotation={node.rotation}
+      rotation={isSecurityCamera(node) ? securityCameraRotation(node) : node.rotation}
       visible={node.visible}
       {...handlers}
     >

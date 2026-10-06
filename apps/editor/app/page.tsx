@@ -10,6 +10,7 @@ import { getCurrentProject, setCurrentProject, useCurrentProject } from '@/lib/c
 import { saveProjectToCloud } from '@/lib/project-api'
 import { UserNavbar } from '@/components/user-navbar'
 import { DevBridge } from './dev-bridge'
+import { DragCheckReadout } from './drag-check-readout'
 import { HiddenNodeKindsGuard } from './_layers/hidden-node-kinds-guard'
 import { PdfPagePicker } from './pdf-page-picker'
 // Plugin 注册（Phase 2A）—— side-effect import；模块顶层调用 loadPlugin。
@@ -165,7 +166,11 @@ function HomeContent() {
 
   // ── 云端自动保存回调（传给 Editor.onSave）────────────────────────
   const handleSave = useCallback(async (scene: { nodes: Record<string, unknown>; rootNodeIds: string[] }) => {
-    if (!sessionRef.current?.user) return // 未登录只走 localStorage
+    if (!sessionRef.current?.user) {
+      // The supplied callback replaces Editor's default local autosave.
+      window.localStorage.setItem('pascal-editor-scene', JSON.stringify(scene))
+      return
+    }
 
     const project = getCurrentProject()
     try {
@@ -273,6 +278,7 @@ function HomeContent() {
   return (
     <div className="h-screen w-screen">
       <DevBridge />
+      <DragCheckReadout />
       <HiddenNodeKindsGuard />
       <Editor
         layoutVersion="v2"

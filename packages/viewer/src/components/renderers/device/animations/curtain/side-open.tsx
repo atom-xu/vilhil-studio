@@ -6,7 +6,9 @@
  * 历史：v0 是简易多薄片直挺布料模型（已废弃）。v1 换成参数化褶皱 + 弧长守恒
  * 振幅 + 飘动 vertex 位移的 Curtain3D（详见 curtain-3d-class.ts 头注 + HANDOFF.md）。
  *
- * 对外 prop 不变（CurtainCommonProps），CurtainContainer 调用方零改动。
+ * 2026-10-06：认可的轻纱由 smarthome/curtain 提供，仅在本文件适配既有状态 props。
+ * 遮光单层保留原实现；双层沿用旧盒体/遮光网格，纱帘使用复用网格的渲染动画。
+ * 状态 prop 保持原语义；可选 wallSurfaceZ 仅传递安装几何，不进入持久化。
  *
  * 坐标系（局部）：CurtainContainer 已经把 group 转到窗户世界中心 + 朝向墙法线。
  *   +X = 沿墙方向（窗户宽度）
@@ -21,9 +23,10 @@
  *   多层（双纱+双布）由 CurtainContainer 改为单实例 'both' 模式（避免两个 pelmet 叠加）。
  */
 
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
+import { SheerCurtain, sheerHousingDimensions } from '@vilhil/smarthome/curtain'
 import { Curtain3D } from './curtain-3d-class'
 
 export interface CurtainCommonProps {
@@ -33,6 +36,8 @@ export interface CurtainCommonProps {
   height: number
   /** 本层 z 偏移 —— 单层模式仍兼容（多层模式应该走 CurtainContainer 的 'both' 单实例）*/
   layerZ: number
+  /** Existing linked window's interior wall face, relative to window centre. */
+  wallSurfaceZ?: number
   /** 0-100，0=完全关闭、100=完全打开 */
   openPct: number
   /** 'blackout' | 'sheer' */
@@ -45,7 +50,7 @@ const PELMET_HEIGHT = 0.18 // 必须和 Curtain3D DEFAULTS.boxHeight 保持一�
  * 单层对开帘 —— 多层场景不应该走这里（应该用 SideOpenCurtainBoth），
  * 但为兼容历史调用方仍保留 layerZ 参数。
  */
-export const SideOpenCurtain = ({
+const LegacyBlackoutCurtain = ({
   width,
   height,
   layerZ,
@@ -90,8 +95,8 @@ export const SideOpenCurtain = ({
 
 /**
  * 双层对开帘（遮光 + 纱帘）—— 单实例 Curtain3D 'both' 模式：
- *   - 一个 pelmet 盒（自动切到 dual depth 200mm）
- *   - 双轨：blackout 在 +Z 5cm，sheer 在 -Z 5cm
+ *   - 一个 pelmet 盒；含纱帘时按褶皱包络调整盒深和双轨间距
+ *   - 双轨：blackout 在 +Z，sheer 在 -Z，保留现有层顺序
  *   - 两层独立开合度
  *
  * 比"两个独立 SideOpenCurtain 叠加"更接近真实施工（共享盒、施工尺寸正确）。
@@ -101,47 +106,77 @@ export interface SideOpenCurtainBothProps {
   height: number
   /** 整体 z 偏移 —— 双层之间的 z 差由 Curtain3D 内部处理 */
   layerZ: number
+  /** Existing linked window's interior wall face, relative to window centre. */
+  wallSurfaceZ?: number
   /** 遮光层 0-100 */
   openPctBlackout: number
   /** 纱帘层 0-100 */
   openPctSheer: number
 }
 
-export const SideOpenCurtainBoth = ({
-  width,
-  height,
-  layerZ,
-  openPctBlackout,
-  openPctSheer,
-}: SideOpenCurtainBothProps) => {
-  const curtain = useMemo(
-    () =>
-      new Curtain3D({
-        trackLength: Math.max(0.4, width),
-        height: Math.max(0.4, height),
-        material: 'both',
-        openness: openPctBlackout / 100,
-        opennessSheer: openPctSheer / 100,
-        breathing: true,
-      }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  )
+/** Approved sheer uses the existing state props; blackout-only stays on its legacy path. */
+export const SideOpenCurtain = (props: CurtainCommonProps) =>
+  props.material === 'sheer' ? (
+    <SheerSideOpenAdapter {...props} openPctSheer={props.openPct} dual={false} />
+  ) : <LegacyBlackoutCurtain {...props} />
 
-  useEffect(() => { curtain.setTrackLength(Math.max(0.4, width)) }, [width, curtain])
-  useEffect(() => { curtain.setHeight(Math.max(0.4, height)) }, [height, curtain])
-  useEffect(() => { curtain.setOpenness(openPctBlackout / 100) }, [openPctBlackout, curtain])
-  useEffect(() => { curtain.setOpennessSheer(openPctSheer / 100) }, [openPctSheer, curtain])
+export const SideOpenCurtainBoth = (props: SideOpenCurtainBothProps) => (
+  <SheerSideOpenAdapter {...props} openPct={props.openPctBlackout} dual />
+)
 
-  useEffect(() => () => curtain.dispose(), [curtain])
+function SheerSideOpenAdapter({
+  width, height, layerZ, wallSurfaceZ = 0, openPct, openPctSheer, dual,
+}: CurtainCommonProps & { openPctSheer: number; dual: boolean }) {
+  const { gl } = useThree()
+  const mount = useRef<THREE.Group>(null)
+  const model = useRef<{ housing: Curtain3D; sheer: SheerCurtain } | null>(null)
+  const targets = useRef({ openPct, openPctSheer })
+  targets.current.openPct = openPct
+  targets.current.openPctSheer = openPctSheer
 
-  useFrame((_, dt) => curtain.update(dt))
+  useEffect(() => {
+    const parent = mount.current!
+    const dimensions = sheerHousingDimensions(width)
+    const housing = new Curtain3D({
+      trackLength: Math.max(0.4, width), height: Math.max(0.4, height),
+      material: dual ? 'both' : 'sheer', externalSheer: true,
+      openness: targets.current.openPct / 100, breathing: true,
+      boxDepthSingle: dimensions.singleDepth, boxDepthDual: dimensions.dualDepth,
+      dualRailZ: dimensions.railZ,
+    })
+    const context = gl.getContext()
+    const samples = context.getParameter(context.SAMPLES) as number
+    const sheer = new SheerCurtain(width, height, targets.current.openPctSheer / 100, samples)
+    sheer.group.position.set(0, -housing.opts.boxHeight + 0.012, dual ? -dimensions.railZ : 0)
+    // Keep the deeper pelmet and folds in front of the linked wall/window.
+    housing.group.position.z = wallSurfaceZ + housing.getBoxDepth() / 2 + 0.012
+    housing.group.add(sheer.group)
+    parent.add(housing.group)
+    model.current = { housing, sheer }
+    return () => {
+      model.current = null
+      parent.remove(housing.group)
+      sheer.dispose()
+      housing.dispose()
+    }
+  }, [width, height, wallSurfaceZ, dual, gl])
 
-  const yLift = height / 2 + PELMET_HEIGHT
+  useEffect(() => {
+    if (dual) model.current?.housing.setOpenness(openPct / 100)
+  }, [openPct, dual])
+  useEffect(() => { model.current?.sheer.setTarget(openPctSheer / 100) }, [openPctSheer])
 
-  return (
-    <group position={[0, yLift, layerZ]}>
-      <primitive object={curtain.object3D as unknown as THREE.Object3D} />
-    </group>
-  )
+  useFrame((_, dt) => {
+    const current = model.current
+    if (!current) return
+    current.sheer.update(dt)
+    // Preserve the legacy blackout motion, but suspend both layers under hidden floors.
+    let ancestor: THREE.Object3D | null = mount.current
+    while (ancestor) {
+      if (!ancestor.visible) return
+      ancestor = ancestor.parent
+    }
+    current.housing.update(dt)
+  })
+  return <group ref={mount} position={[0, height / 2 + PELMET_HEIGHT, layerZ]} />
 }

@@ -10,28 +10,36 @@
  * 比裸 lerp 更容易组合复杂场景时间线。
  */
 
-import TWEEN from '@tweenjs/tween.js'
+import TWEEN, { type Tween } from '@tweenjs/tween.js'
 import { generateId, SceneNode, useScene } from '@pascal-app/core'
 import type { AnyNode, SceneEffect, SceneNodeType } from '@pascal-app/core'
 import { setDeviceState } from './set-device-params'
 import { listCircuitMembers } from './circuit-tools'
 
-// ─── TWEEN 全局 RAF 驱动 ────────────────────────────────────────────────────────
-// scene-tools 是非 React 模块，TWEEN.update() 需要在自己的 RAF 里跑。
-// 当没有活跃 tween 时自动停止，避免空转。
+// 独立组：Tween 25 不会自动加入全局组；完成时从组中移除。
+const sceneTweens = new TWEEN.Group()
 let _tweenRafId: ReturnType<typeof requestAnimationFrame> | null = null
+const pendingEffects = new Set<ReturnType<typeof setTimeout>>()
+const deviceTweens = new Map<string, Tween<Record<string, number>>>()
 
 function ensureTweenLoop(): void {
   if (_tweenRafId !== null) return
   const loop = (time: number) => {
-    TWEEN.update(time)
-    if (TWEEN.getAll().length > 0) {
-      _tweenRafId = requestAnimationFrame(loop)
-    } else {
-      _tweenRafId = null
-    }
+    sceneTweens.update(time)
+    _tweenRafId = sceneTweens.getAll().length ? requestAnimationFrame(loop) : null
   }
   _tweenRafId = requestAnimationFrame(loop)
+}
+
+function cancelPreviousRun(): void {
+  activeSceneRunToken = null
+  for (const timer of pendingEffects) clearTimeout(timer)
+  pendingEffects.clear()
+  for (const tween of deviceTweens.values()) tween.stop()
+  deviceTweens.clear()
+  sceneTweens.removeAll()
+  if (_tweenRafId !== null) cancelAnimationFrame(_tweenRafId)
+  _tweenRafId = null
 }
 
 /**
@@ -47,7 +55,6 @@ function resolveEffectTargets(effect: SceneEffect): string[] {
 }
 
 let activeSceneRunToken: symbol | null = null
-let activeRunEndTimer: ReturnType<typeof setTimeout> | null = null
 
 export interface SceneRunStatus {
   sceneId: string | null
@@ -155,8 +162,8 @@ export function deleteScene(sceneId: string): void {
  * @param sceneId   场景 ID
  * @param deviceId  设备 ID
  * @param state     目标状态
- * @param delay     延迟秒数（S4 时间线用，当前忽略）
- * @param duration  渐变时间（S4 渐变用，当前忽略）
+ * @param delay     延迟秒数（相对上一步的启动时间）
+ * @param duration  数值渐变秒数
  */
 export function addSceneEffect(
   sceneId: string,
@@ -250,7 +257,7 @@ export function removeSceneCircuitEffect(sceneId: string, circuitId: string): vo
  *
  * 按顺序执行场景效果，支持 delay / duration：
  * - delay: 在当前步骤前等待（秒）
- * - duration: 对数值字段做线性插值（秒）
+ * - duration: 对数值字段做平滑插值（秒）
  *
  * @param sceneId 场景 ID
  * @returns 场景中可执行的设备效果数量
@@ -269,122 +276,91 @@ export function applyScene(sceneId: string): number {
     return 0
   }
 
+  cancelPreviousRun()
   const runToken = Symbol(`scene-run-${sceneId}`)
   activeSceneRunToken = runToken
-  if (activeRunEndTimer) {
-    clearTimeout(activeRunEndTimer)
-    activeRunEndTimer = null
-  }
-
   const startedAt = Date.now()
   let elapsedMs = 0
   let maxEndMs = 0
-  let count = 0
-
+  const scheduled: Array<{ effect: SceneEffect; atMs: number }> = []
   for (const effect of sceneNode.effects) {
-    // 解析目标：单灯 → 1 条；回路 → N 条（每盏灯共享同一个 delay/duration/state）
-    const targetIds = resolveEffectTargets(effect)
-    if (targetIds.length === 0) continue
-
     elapsedMs += Math.max(0, (effect.delay ?? 0) * 1000)
-    maxEndMs = Math.max(maxEndMs, elapsedMs + Math.max(0, (effect.duration ?? 0) * 1000))
-
-    for (const tid of targetIds) {
-      const deviceNode = nodes[tid as AnyNode['id']]
-      if (!deviceNode || deviceNode.type !== 'device') continue
-      // 内部 schedule / 动画系统按 deviceId 字段读取，所以合成一条只带 deviceId 的局部 effect
-      scheduleEffect({ ...effect, deviceId: tid, circuitId: undefined }, elapsedMs, runToken)
-      count++
+    for (const tid of resolveEffectTargets(effect)) {
+      if (nodes[tid as AnyNode['id']]?.type !== 'device') continue
+      scheduled.push({ effect: { ...effect, deviceId: tid, circuitId: undefined }, atMs: elapsedMs })
+      maxEndMs = Math.max(maxEndMs, elapsedMs + Math.max(0, (effect.duration ?? 0) * 1000))
     }
   }
-
-  if (count === 0) {
-    emitSceneRunStatus({
-      sceneId,
-      running: false,
-      startedAt,
-      expectedEndAt: startedAt,
-      completedAt: startedAt,
-    })
-    return 0
+  let remaining = scheduled.length
+  const finishEffect = () => {
+    if (activeSceneRunToken !== runToken || --remaining !== 0) return
+    emitSceneRunStatus({ sceneId, running: false, startedAt,
+      expectedEndAt: startedAt + maxEndMs, completedAt: Date.now() })
   }
-
-  emitSceneRunStatus({
-    sceneId,
-    running: true,
-    startedAt,
-    expectedEndAt: startedAt + maxEndMs,
-    completedAt: null,
-  })
-
-  activeRunEndTimer = setTimeout(() => {
-    if (activeSceneRunToken !== runToken) return
-    emitSceneRunStatus({
-      sceneId,
-      running: false,
-      startedAt,
-      expectedEndAt: startedAt + maxEndMs,
-      completedAt: Date.now(),
-    })
-  }, maxEndMs + 16)
-
-  return count
+  emitSceneRunStatus({ sceneId, running: remaining > 0, startedAt,
+    expectedEndAt: startedAt + maxEndMs, completedAt: remaining ? null : startedAt })
+  for (const { effect, atMs } of scheduled) {
+    const timer = setTimeout(() => {
+      pendingEffects.delete(timer)
+      if (activeSceneRunToken !== runToken) return
+      animateNumericState(effect, Math.max(0, (effect.duration ?? 0) * 1000), runToken, finishEffect)
+    }, atMs)
+    pendingEffects.add(timer)
+  }
+  return scheduled.length
 }
 
-function scheduleEffect(effect: SceneEffect, atMs: number, runToken: symbol): void {
-  setTimeout(() => {
-    if (activeSceneRunToken !== runToken) return
-
-    const durationMs = Math.max(0, (effect.duration ?? 0) * 1000)
-    if (durationMs === 0) {
-      setDeviceState(effect.deviceId as any, effect.state)
-      return
-    }
-
-    animateNumericState(effect, durationMs, runToken)
-  }, atMs)
-}
-
-function animateNumericState(effect: SceneEffect, durationMs: number, runToken: symbol): void {
-  const current = useScene.getState().nodes[effect.deviceId as AnyNode['id']]
-  if (!current || current.type !== 'device') return
-
+function animateNumericState(
+  effect: SceneEffect, durationMs: number, runToken: symbol, done: () => void,
+): void {
+  const id = effect.deviceId as AnyNode['id']
+  // 同一设备的新步骤取代旧过渡；旧步骤不再写入最终值。
+  deviceTweens.get(id)?.stop()
+  const current = useScene.getState().nodes[id]
+  if (!current || current.type !== 'device') { done(); return }
   const currentState = (current.state ?? {}) as Record<string, unknown>
   const targetState = effect.state as Record<string, unknown>
-
-  const numericKeys = Object.keys(targetState).filter(
-    (key) => typeof targetState[key] === 'number' && typeof currentState[key] === 'number',
-  )
-  const immediateKeys = Object.keys(targetState).filter((key) => !numericKeys.includes(key))
-
-  // 非数值字段立即写入（布尔、字符串等）
-  if (immediateKeys.length > 0) {
-    const immediatePatch: Record<string, unknown> = {}
-    for (const key of immediateKeys) immediatePatch[key] = targetState[key]
-    setDeviceState(effect.deviceId as any, immediatePatch)
-  }
-
-  if (numericKeys.length === 0) return
-
-  // 构建 TWEEN 起始对象（只含数值字段）
+  const defaults: Record<string, number> = { brightness: 100, colorTemp: 4000, position: 50 }
   const fromObj: Record<string, number> = {}
   const toObj: Record<string, number> = {}
-  for (const key of numericKeys) {
-    fromObj[key] = currentState[key] as number
-    toObj[key] = targetState[key] as number
+  const immediatePatch: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(targetState)) {
+    const initial = currentState[key] ?? defaults[key]
+    if (durationMs > 0 && typeof value === 'number' && Number.isFinite(value)
+      && typeof initial === 'number' && Number.isFinite(initial)) {
+      fromObj[key] = initial
+      toObj[key] = value
+    } else if (key !== 'on' || value !== false || durationMs === 0) {
+      immediatePatch[key] = value
+    }
   }
-
-  // 参考 iCraft 方案：使用 TWEEN.Easing.Quadratic.InOut 做自然缓动
-  new TWEEN.Tween(fromObj)
+  const finish = () => {
+    if (activeSceneRunToken === runToken) setDeviceState(id as any, targetState)
+    done()
+  }
+  if (!Object.keys(toObj).length) { finish(); return }
+  if (Object.keys(immediatePatch).length) setDeviceState(id as any, immediatePatch)
+  let settled = false
+  const settle = () => {
+    if (settled) return
+    settled = true
+    sceneTweens.remove(tween)
+    if (deviceTweens.get(id) === tween) deviceTweens.delete(id)
+    done()
+  }
+  const tween = new TWEEN.Tween(fromObj, sceneTweens)
     .to(toObj, durationMs)
     .easing(TWEEN.Easing.Quadratic.InOut)
     .onUpdate((obj) => {
-      if (activeSceneRunToken !== runToken) return
-      setDeviceState(effect.deviceId as any, obj as Record<string, unknown>)
+      if (activeSceneRunToken === runToken) setDeviceState(id as any, { ...obj })
     })
+    .onComplete(() => {
+      if (activeSceneRunToken === runToken) setDeviceState(id as any, targetState)
+      settle()
+    })
+    .onStop(settle)
     .start()
-
-  // 启动（或保持）全局 TWEEN RAF 循环
+  deviceTweens.set(id, tween)
   ensureTweenLoop()
 }
 

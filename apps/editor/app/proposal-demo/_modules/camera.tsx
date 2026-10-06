@@ -118,7 +118,13 @@ export interface PoseInput {
   bboxCz: number
   bboxSpan: number
   rooms: Array<{ id: string; cx: number; cz: number; radius: number; width: number; depth: number }>
-  devices: Array<{ id: string; position: Vec3Tuple }>
+  devices: Array<{
+    id: string
+    position: Vec3Tuple
+    curtain?: { width: number; height: number; normal: [number, number] }
+    hvac?: { forward: Vec3Tuple; ceiling: boolean }
+    security?: { forward: Vec3Tuple; ceiling: boolean }
+  }>
 }
 
 function resolveBearingXZ(
@@ -217,6 +223,33 @@ export function resolveDeviceDetailPose(
   const device = input.devices.find((d) => d.id === deviceId)
   if (!device) return null
   const [dx, dy, dz] = device.position
+  if (device.security) {
+    const { forward: [fx, fy, fz], ceiling } = device.security
+    if (ceiling) return { pos: [dx + 2.8, Math.min(dy - 0.3, 2.2), dz + 2.8], tgt: [dx, dy - 0.8, dz] }
+    const tgt: Vec3Tuple = [dx + fx * 0.8, dy + fy * 0.8 - 0.2, dz + fz * 0.8]
+    return { pos: [tgt[0] + fx * 2.6 - fz * 2, tgt[1] + 0.55, tgt[2] + fz * 2.6 + fx * 2], tgt }
+  }
+  if (device.hvac) {
+    const { forward, ceiling } = device.hvac
+    // Keep the existing airflow visible from the outlet side, including its travel.
+    if (ceiling) return { pos: [dx + 2.8, 2.2, dz + 2.8], tgt: [dx, dy / 2, dz] }
+    const [fx, fy, fz] = forward
+    const tgt: Vec3Tuple = [dx + fx * 1.3, dy + fy * 1.3 - 0.35, dz + fz * 1.3]
+    return {
+      pos: [tgt[0] + fx * 3.2 - fz * 2, tgt[1] + 0.6, tgt[2] + fz * 3.2 + fx * 2],
+      tgt,
+    }
+  }
+  if (device.curtain) {
+    // A curtain spans the window. Frame the full opening from the cloth side,
+    // rather than inheriting an overview bearing behind the wall/glass.
+    const { width, height, normal } = device.curtain
+    const dist = Math.max(width + 0.3, height + 0.4) / (2 * Math.tan(CAMERA_FOV_DEG * Math.PI / 360)) * 1.3
+    return {
+      pos: [dx + normal[0] * dist, dy + height * 0.2, dz + normal[1] * dist],
+      tgt: [dx, dy, dz],
+    }
+  }
   // 设备特写：优先继承当前相机方位，避免切换时"先转向再推进"。
   // 若当前方位不可用，再回退到建筑中心外侧方向。
   const fallbackBearing: [number, number] = (() => {

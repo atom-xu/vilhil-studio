@@ -25,6 +25,10 @@ const WEBPACK_ALIAS: Record<string, string> = Object.fromEntries(
   Object.entries(TURBO_ALIAS).map(([k, v]) => [k, path.resolve(APP_DIR, v)]),
 )
 
+// Preserve three package subpath exports (webgpu/tsl/addons).
+WEBPACK_ALIAS['three$'] = WEBPACK_ALIAS.three!
+delete WEBPACK_ALIAS.three
+
 const isProd = process.env.NODE_ENV === 'production'
 
 const nextConfig: NextConfig = {
@@ -36,11 +40,16 @@ const nextConfig: NextConfig = {
   turbopack: {
     resolveAlias: TURBO_ALIAS,
   },
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     config.resolve = config.resolve ?? {}
+    const aliases = { ...WEBPACK_ALIAS }
+    if (isServer) {
+      delete aliases.react
+      delete aliases['react-dom']
+    }
     config.resolve.alias = {
       ...(config.resolve.alias ?? {}),
-      ...WEBPACK_ALIAS,
+      ...aliases,
     }
     return config
   },

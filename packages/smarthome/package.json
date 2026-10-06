@@ -27,6 +27,14 @@
     "./tools": {
       "types": "./src/tools/index.ts",
       "default": "./src/tools/index.ts"
+    },
+    "./camera": {
+      "types": "./src/renderers/camera.ts",
+      "default": "./src/renderers/camera.ts"
+    },
+    "./curtain": {
+      "types": "./src/renderers/curtain/index.ts",
+      "default": "./src/renderers/curtain/index.ts"
     }
   },
   "dependencies": {

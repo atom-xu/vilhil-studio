@@ -7,7 +7,7 @@ import { cn } from '../../../lib/utils'
 interface SliderControlProps {
   label: React.ReactNode
   value: number
-  onChange: (value: number) => void
+  onChange: (value: number) => void | boolean
   min?: number
   max?: number
   precision?: number
@@ -193,13 +193,13 @@ export function SliderControl({
       } else if (e.key === 'ArrowUp') {
         e.preventDefault()
         const newV = clamp(value + step)
-        onChange(newV)
-        setInputValue(newV.toFixed(precision))
+        const accepted = onChange(newV) !== false
+        setInputValue((accepted ? newV : value).toFixed(precision))
       } else if (e.key === 'ArrowDown') {
         e.preventDefault()
         const newV = clamp(value - step)
-        onChange(newV)
-        setInputValue(newV.toFixed(precision))
+        const accepted = onChange(newV) !== false
+        setInputValue((accepted ? newV : value).toFixed(precision))
       }
     },
     [submitValue, value, precision, step, clamp, onChange],

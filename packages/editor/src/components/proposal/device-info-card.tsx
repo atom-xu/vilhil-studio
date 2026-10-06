@@ -68,7 +68,10 @@ export function DeviceInfoCard({ device, className }: DeviceInfoCardProps) {
                 'h-auto w-full justify-between rounded-xl px-3 py-2 transition-all duration-200',
                 isOn ? 'bg-accent/60' : 'bg-muted/50 hover:bg-muted',
               )}
-              onClick={() => setState({ on: !isOn })}
+              onClick={() => setState({
+                on: !isOn,
+                ...(device.subsystem === 'hvac' && !isOn && deviceState.mode === 'off' ? { mode: 'cold' } : {}),
+              })}
               type="button"
               variant="ghost"
             >
@@ -194,7 +197,7 @@ export function DeviceInfoCard({ device, className }: DeviceInfoCardProps) {
                       'h-auto rounded-md py-1 text-[11px] transition-colors',
                       active ? `${bg} ${color}` : 'bg-muted/40 text-muted-foreground hover:bg-muted',
                     )}
-                    onClick={() => setState({ mode: key })}
+                    onClick={() => setState({ mode: key, on: key !== 'off' })}
                     type="button"
                     variant="ghost"
                   >
@@ -344,6 +347,7 @@ export function DeviceInfoCard({ device, className }: DeviceInfoCardProps) {
                   max={120}
                   min={60}
                   step={5}
+                  aria-label="摄像机视场角"
                   onChange={(e) => setState({ coverageAngle: Number(e.target.value) })}
                   type="range"
                   value={fov}
@@ -359,6 +363,7 @@ export function DeviceInfoCard({ device, className }: DeviceInfoCardProps) {
                   max={15}
                   min={3}
                   step={0.5}
+                  aria-label="摄像机探测距离"
                   onChange={(e) => setState({ coverageRadius: Number(e.target.value) })}
                   type="range"
                   value={range}

@@ -124,9 +124,9 @@ export const DeviceEffects = ({ node, isFocusedBySubsystem }: DeviceEffectsProps
               (deviceParams?.coverageRadius as number | undefined) ??
               5
             }
-            rotationY={((deviceParams?.direction as number | undefined) ?? 0) * (Math.PI / 180)}
+            horizontal={node.renderType === 'camera-bullet'}
             color="#f59e0b"
-            intensity={focused ? 1 : 0.25}
+            intensity={isOn ? (focused ? 1 : 0.25) : 0}
           />
         )}
 
@@ -144,6 +144,7 @@ export const DeviceEffects = ({ node, isFocusedBySubsystem }: DeviceEffectsProps
       {node.subsystem === 'hvac' && node.renderType === 'ac-wall' && (
         <HvacRibbonFlow
           position={[0, 0, 0]}
+          rotationY={Math.PI}
           mode={
             (deviceState?.mode as 'cold' | 'hot' | 'off' | undefined) ?? (isOn ? 'cold' : 'off')
           }

@@ -18,8 +18,33 @@
  *   - 主画面经过 AgX，bloom 加上去也经过 AgX → 永远不会无限累加
  */
 
-import { EffectComposer, SelectiveBloom } from '@react-three/postprocessing'
+import { EffectComposer, EffectComposerContext, SelectiveBloom } from '@react-three/postprocessing'
+import { useFrame } from '@react-three/fiber'
+import { useContext, useEffect, useMemo } from 'react'
 import { LIGHTING_CONFIG } from './lighting-config'
+
+/** The installed wrapper removes passes on unmount but never disposes them.
+ * Capture the passes that actually render: a primitive ref can point at a
+ * replacement effect while an earlier effect is still owned by EffectPass.
+ */
+function BloomResourceCleanup() {
+  const { composer } = useContext(EffectComposerContext)
+  const ownedPasses = useMemo(() => new Set<(typeof composer.passes)[number]>(), [composer])
+  // Day/night changes can replace EffectPass while this composer stays mounted.
+  // Retain every actual pass until unmount, including effects no longer exposed
+  // by primitive refs. No allocation or scene/store writes in the frame loop.
+  useFrame(() => { for (const pass of composer.passes) ownedPasses.add(pass) })
+  useEffect(() => {
+    for (const pass of composer.passes) ownedPasses.add(pass)
+    return () => {
+      // React's layout cleanup has already removed the effect passes here.
+      for (const pass of ownedPasses) pass.dispose()
+      ownedPasses.clear()
+      composer.dispose()
+    }
+  }, [composer, ownedPasses])
+  return null
+}
 
 export function DemoBloomLayer({ isNight }: { isNight: boolean }) {
   // SelectiveBloom 的 selection 由 <Selection> context 注入 —— 仅 <Select enabled>
@@ -35,6 +60,7 @@ export function DemoBloomLayer({ isNight }: { isNight: boolean }) {
         luminanceSmoothing={cfg.luminanceSmoothing}
         mipmapBlur={cfg.mipmapBlur}
       />
+      <BloomResourceCleanup />
     </EffectComposer>
   )
 }

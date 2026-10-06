@@ -232,7 +232,7 @@
 | ID | 文件范围 | 当前改动与迁出方向 |
 |---|---|---|
 | M6 | `packages/editor/src/components/editor/{index.tsx,device-workspace.tsx,topology-workspace.tsx,topology/*}`、`packages/editor/package.json`；延续 M4 的 device-panel | 设备目录独立工作区、拓扑节点/连线/布局与 Dagre 依赖；TODO：业务工作区迁到 smarthome，通过 editor slot 接入。楼层与保存行为仍需完整验收。 |
-| M7 | `packages/viewer/src/components/renderers/device/animations/curtain/{curtain-container.tsx,index.ts,side-open.tsx,curtain-3d-class.ts,HANDOFF.md}` | 参数化单层/双层窗帘及 R3F 包装；TODO：随 M2/M3 迁出。隐藏窗帘仍持续更新，保留为后续性能修复项。 |
+| M7 | `packages/viewer/src/components/renderers/device/animations/curtain/{curtain-container.tsx,index.ts,side-open.tsx,curtain-3d-class.ts,HANDOFF.md}` | 参数化单层/双层窗帘及 R3F 包装；TODO：随 M2/M3 迁出。2026-10-06：`side-open.tsx` 适配 `@vilhil/smarthome/curtain`，`curtain-3d-class.ts` 增加默认关闭的 `externalSheer` 开关；认可轻纱算法留在业务包，原布帘与其他帘型保留。新适配器在祖先隐藏时暂停，其他旧帘型隐藏更新仍未处理。同日后续：`curtain-container.tsx` 调用业务包 `curtainLocalTransform` 将楼层锚点转入设备局部坐标，避免重复位置/旋转；无 schema 变化。初轮记录见 `SHEER-DEVICE-INTEGRATION.md`，最新整合验收见 `STUDIO-INTEGRATION-2026-10-06.md`。 |
 | M8 | `packages/viewer/src/components/renderers/device/{device-geometry.tsx,model-registry.ts}`、`packages/viewer/src/hooks/use-gltf-ktx2.tsx`、`packages/viewer/src/lib/bvh.ts`、`packages/viewer/package.json` | UniFi 模型映射、Draco 加载与按 mesh 启用 BVH；TODO：模型选择与业务渲染迁到 smarthome，通用加载扩展独立评审。共享缓存资源生命周期仍待完整验证。 |
 
 提交前按 `CODE-REVIEW.md` 核对的状态：
@@ -251,3 +251,18 @@
 - 2026-06-03：初版建表；从 `ARCHITECTURE-LAYERING.md` §4 审计结果迁入
 - 2026-06-03 · Phase 1.5：恢复剩余被删的上游 schema —— 整文件（box-vent / chimney / cupola / dormer / downspout / eyebrow-vent / gutter / surface-hole-metadata / turbine-vent / asset-url）+ 字段恢复（wall / roof / roof-segment / stair / door / item / ceiling / slab / stair-segment / building / site / guide / scan / material）。VertexNode / precision 保留为 VilHil 自有。chimney/dormer/box-vent 调研：schema 文件已恢复；上游 `packages/nodes/**` 子节点完整实现包暂不引入（与 VilHil 上层架构耦合度低，留作后续）。新增 L6–L15 侵入点登记。typecheck：core / viewer / smarthome 全绿，editor 维持基线 40 错（与改动前相同）。
 - 2026-06-08 · Phase 2A：引入上游 registry 基础设施 + 建立 `@pascal-app/nodes` workspace + 接入 `loadPlugin(builtinPlugin)` 占位调用（见 N1）。viewer / editor / device 硬编码 dispatch 完全保留；nodeRegistry 当前为空 Map，对运行时零影响。typecheck：core / viewer / smarthome / nodes 全绿，editor 仍 40 错（基线不变）。
+
+
+### 2026-10-03 交互补丁（隔离分支，未发布）
+
+| ID | 文件范围 | 改动/迁出方向 |
+|---|---|---|
+| M9 | editor device-tool.tsx、floorplan-panel.tsx、device-panel.tsx、slider-control.tsx中的既有设备入口 | 碰撞工具位于smarthome；UI包装创建、拖动、安装高度、朝向与相机跟随提交。SliderControl兼容void回调，false表示拒绝并回退编辑箭头值。TODO：随drawTool/panel扩展点迁出，未修改Pascal schema。 |
+| M8补充 | viewer device-geometry.tsx | 从旧候选逐项重放预加载前本地Draco路径初始化；保留main新增模型/BVH逻辑。 |
+
+### 2026-10-06 暖通正确性修复（隔离分支，未发布）
+
+| ID | 文件范围 | 改动/迁出方向 |
+|---|---|---|
+| M10 | viewer device-effects.tsx、animations/hvac-ribbon-flow.tsx、hvac-airflow.tsx；editor proposal/device-info-card.tsx | 修复已有 HVAC 关闭淡出受帧率影响、关闭后云雾残留、设备旋转下 billboard 朝向、流线与模型 +Z 出风口方向不一致、共享纹理重复释放，以及 mode=off 后电源重启不出风。复用已有 setDeviceState；无 schema/协议变更。入口与相机、Bloom 选区适配均留在 app。TODO：随 M2 渲染扩展点和 M4 面板 slot 迁出；本轮不做架构迁移。 |
+| M11 | viewer device-renderer.tsx、device-effects.tsx、animations/laser-scan-cone.tsx；editor proposal/device-info-card.tsx | 摄像机模型与覆盖锥共用既有 params.direction 的绝对朝向，缺失时沿用 node.rotation；枪机覆盖沿本地 +X，半球沿 −Y；关闭隐藏覆盖；FOV/距离只更新 uniform，几何/材质分开释放。原控件补充可访问名称。纯朝向派生函数在 smarthome，入口/取景/Bloom 释放适配在 app。TODO：随 M2/M4 扩展点迁出；不修改 schema、品牌模型资产或依赖。 |

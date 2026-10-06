@@ -16,6 +16,7 @@
 import { Html } from '@react-three/drei'
 import { useScene, type AnyNodeId, type DeviceNode, type WallNode, type WindowNode } from '@pascal-app/core'
 import { useState } from 'react'
+import { curtainViewTarget } from './curtain-target'
 
 interface Props {
   node: DeviceNode
@@ -23,6 +24,8 @@ interface Props {
   onQuickToggle: () => void
   /** 齿轮点击：打开 popup */
   onOpenPopup: () => void
+  /** Overview focus action, separate from the existing open/close control. */
+  onEnterDetail?: () => void
 }
 
 /** 计算窗帘 pill 的世界坐标（窗户中心稍上方，朝室内一点） */
@@ -46,19 +49,12 @@ function useCurtainAnchor(node: DeviceNode): {
     const [x, y, z] = node.position
     return { cx: x, cy: y + 0.3, cz: z, label: (node.name as string) ?? '窗帘' }
   }
-  // 窗中心
-  const [sx, sz] = wallNode.start
-  const [ex, ez] = wallNode.end
-  const wallLen = Math.hypot(ex - sx, ez - sz)
-  if (wallLen < 0.001) return null
-  const u = (windowNode.position?.[0] ?? 0) / wallLen
-  const cx = sx + (ex - sx) * u
-  const cz = sz + (ez - sz) * u
-  const cy = (windowNode.position?.[1] ?? 1.2) + (windowNode.height ?? 1.4) / 2 + 0.2
-  return { cx, cy, cz, label: (node.name as string) ?? '窗帘' }
+  const target = curtainViewTarget(node, { [windowNode.id]: windowNode, [wallNode.id]: wallNode })
+  const [cx, cy, cz] = target.position
+  return { cx, cy: cy + target.curtain.height / 2 + 0.2, cz, label: (node.name as string) ?? '窗帘' }
 }
 
-export function CurtainOverlay({ node, onQuickToggle, onOpenPopup }: Props) {
+export function CurtainOverlay({ node, onQuickToggle, onOpenPopup, onEnterDetail }: Props) {
   const [hovered, setHovered] = useState(false)
   const state = useScene((s) => {
     const dn = s.nodes[node.id as AnyNodeId] as DeviceNode | undefined
@@ -127,8 +123,9 @@ export function CurtainOverlay({ node, onQuickToggle, onOpenPopup }: Props) {
         </button>
         <button
           type="button"
-          onClick={(e) => { e.stopPropagation(); onOpenPopup() }}
-          title="精细调节"
+          onClick={(e) => { e.stopPropagation(); (onEnterDetail ?? onOpenPopup)() }}
+          aria-label={onEnterDetail ? `查看${anchor.label}` : `调节${anchor.label}`}
+          title={onEnterDetail ? '查看窗帘' : '精细调节'}
           style={{
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
             width: 28, padding: 0,
@@ -139,7 +136,7 @@ export function CurtainOverlay({ node, onQuickToggle, onOpenPopup }: Props) {
             fontSize: 13, opacity: 0.85,
           }}
         >
-          ⚙
+          {onEnterDetail ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="10" cy="10" r="6" /><path d="m15 15 5 5" /></svg> : '⚙'}
         </button>
       </div>
     </Html>

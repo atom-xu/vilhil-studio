@@ -37,7 +37,7 @@ import {
   type ZoneNode as ZoneNodeType,
 } from '@pascal-app/core'
 import { useViewer } from '@pascal-app/viewer'
-import { assignMissingCircuitIds, getLightCircuits, getSubsystemColor, placeDevice } from '@vilhil/smarthome'
+import { updateDevicePlacement, checkDevicePlacementEdit, assignMissingCircuitIds, getLightCircuits, getSubsystemColor, checkDevicePlacement, DevicePlacementError, placeDevice } from '@vilhil/smarthome'
 import { CheckCircle2, Command } from 'lucide-react'
 import {
   memo,
@@ -77,7 +77,6 @@ import { tools as structureTools } from '../ui/action-menu/structure-tools'
 
 import { PALETTE_COLORS } from '../ui/primitives/color-dot'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/primitives/popover'
-import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/primitives/tooltip'
 import { NodeActionMenu } from './node-action-menu'
 
 const FALLBACK_VIEW_SIZE = 12
@@ -5129,10 +5128,12 @@ function FloorplanWallDistancesLayer({
 
 /** Ghost —— 仅放置预览期间的半透明圆点 */
 function FloorplanDeviceGhost({
+  blocked = false,
   point,
   subsystem,
   worldUnitsPerPixel,
 }: {
+  blocked?: boolean
   point: WallPlanPoint | null
   subsystem: string | null
   worldUnitsPerPixel: number
@@ -5144,10 +5145,11 @@ function FloorplanDeviceGhost({
   const dashLen = Math.max(0.08, worldUnitsPerPixel * 4)
   const cx = -point[0]
   const cy = -point[1]
-  const color = getSubsystemColor(subsystem as Subsystem)
+  const color = blocked ? '#ef4444' : '#22c55e'
 
   return (
-    <g pointerEvents="none">
+    <g pointerEvents="none" data-placement-valid={!blocked}>
+      {blocked && <text x={cx} y={cy - haloR * 1.5} fill={color} fontSize={worldUnitsPerPixel * 12} textAnchor="middle">位置已被占用</text>}
       <circle cx={cx} cy={cy} r={haloR} fill={color} opacity={0.1} />
       <circle cx={cx} cy={cy} r={r} fill={color} opacity={0.5} stroke="#fff" strokeWidth={strokeW} />
       <circle cx={cx} cy={cy} r={haloR} fill="none" stroke={color}
@@ -6173,6 +6175,24 @@ export function FloorplanPanel() {
   // 设备目录的响应式订阅（handleBackgroundClick 用 getState 拿即时值；预览和 UI 指示器需要重渲染触发）
   const selectedDevice = useEditor((s) => s.selectedDevice)
   const setSelectedDevice = useEditor((s) => s.setSelectedDevice)
+  const [placementError, setPlacementError] = useState<string | null>(null)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: selecting a different catalog device intentionally resets its placement error.
+  useEffect(() => { setPlacementError(null) }, [selectedDevice])
+  const tryPlaceDevice = useCallback((...args: Parameters<typeof placeDevice>) => {
+    try {
+      placeDevice(...args)
+      setPlacementError(null)
+      return true
+    } catch (error) {
+      if (!(error instanceof DevicePlacementError)) throw error
+      setPlacementError(error.message)
+      return false
+    }
+  }, [])
+  const placementBlocked = Boolean(levelId && selectedDevice && devicePlacementPreview &&
+    !checkDevicePlacement(levelId, selectedDevice.catalogId,
+      [devicePlacementPreview.point[0], selectedDevice.defaultH ?? 0, devicePlacementPreview.point[1]]).valid)
+
   // 灯带画线 draft —— 用 selector 订阅，每次 push 顶点 / hover 移动都重渲染
   const lightStripDraftState = useEditor((s) => s.lightStripDraft)
   const curtainDraftState = useEditor((s) => s.curtainDraft)
@@ -7391,6 +7411,7 @@ export function FloorplanPanel() {
         startPath,
       }
       event.currentTarget.setPointerCapture(event.pointerId)
+      setPlacementError(null)
       setSelectedReferenceId(null)
       setSelection({ selectedIds: [deviceId] })
     },
@@ -7495,6 +7516,14 @@ export function FloorplanPanel() {
         }
 
         patch.position = [newX, deviceNode.position[1], newZ]
+        // Existing devices use the same footprint guard as creation, excluding themselves.
+        // Keep the last legal position and its wall anchor when the attempted move is occupied.
+        const result = checkDevicePlacementEdit(deviceNode.id, { position: patch.position })
+        if (!result.valid) {
+          setPlacementError(result.reason === 'occupied' ? '位置已被占用，已保留最后有效位置' : '移动位置无效')
+          return
+        }
+        setPlacementError(null)
         updateNode(d.id as AnyNodeId, patch as any)
       })
     },
@@ -7687,11 +7716,15 @@ export function FloorplanPanel() {
       const dz = deviceNode.position[2]
       const worldAngleRad = Math.atan2(pt[1] - dz, pt[0] - dx)
       const directionDeg = (worldAngleRad * 180) / Math.PI
-      updateNode(deviceId as AnyNodeId, {
-        params: { ...(deviceNode.params ?? {}), direction: directionDeg },
-      } as any)
+      try {
+        updateDevicePlacement(deviceId, { direction: directionDeg })
+        setPlacementError(null)
+      } catch (error) {
+        if (!(error instanceof DevicePlacementError)) throw error
+        setPlacementError(`${error.message}，已保留最后有效朝向`)
+      }
     },
-    [getPlanPointFromClientPoint, updateNode],
+    [getPlanPointFromClientPoint],
   )
 
   const exitFollowMode = useCallback(() => {
@@ -9146,7 +9179,7 @@ export function FloorplanPanel() {
             const wallAngleDeg = Math.atan2(wallDz, wallDx) * (180 / Math.PI)
             const y = sd.defaultH ?? 2.5
 
-            placeDevice(
+            if (!tryPlaceDevice(
               currentLevelId,
               sd.catalogId,
               [midX, y, midZ],
@@ -9157,7 +9190,7 @@ export function FloorplanPanel() {
                 curtainWidth: width,
                 direction: wallAngleDeg,
               } as Partial<import('@pascal-app/core').DeviceParams>,
-            )
+            )) return
             editorState.setCurtainDraft(null)
             sfxEmitter.emit('sfx:item-place')
             return
@@ -9213,7 +9246,7 @@ export function FloorplanPanel() {
           const wallAngleDeg = Math.atan2(wDz, wDx) * (180 / Math.PI)
           const y = sd.defaultH ?? bestWindow.cy
 
-          placeDevice(
+          if (!tryPlaceDevice(
             currentLevelId,
             sd.catalogId,
             [bestWindow.cx, y, bestWindow.cz],
@@ -9224,7 +9257,7 @@ export function FloorplanPanel() {
               curtainWidth: bestWindow.width,
               direction: wallAngleDeg,
             } as Partial<import('@pascal-app/core').DeviceParams>,
-          )
+          )) return
           sfxEmitter.emit('sfx:item-place')
           return
         }
@@ -9292,12 +9325,12 @@ export function FloorplanPanel() {
             }
             params.circuitId = circuitId
           }
-          placeDevice(
+          if (!tryPlaceDevice(
             currentLevelId,
             selectedDevice.catalogId,
             [snappedPt[0], y, snappedPt[1]],
             params as Partial<import('@pascal-app/core').DeviceParams>,
-          )
+          )) return
           sfxEmitter.emit('sfx:item-place')
           return
         }
@@ -9410,6 +9443,7 @@ export function FloorplanPanel() {
       levelDevices,
       zones,
       openings,
+      tryPlaceDevice,
     ],
   )
   const handleBackgroundDoubleClick = useCallback(
@@ -9482,15 +9516,15 @@ export function FloorplanPanel() {
       circuitId = `ckt_${Math.random().toString(36).slice(2, 8)}`
       editorState.setCurrentCircuitId(circuitId)
     }
-    placeDevice(
+    if (!tryPlaceDevice(
       currentLevelId,
       sd.catalogId,
       [cx, y, cz],
       { path: points, circuitId } as Partial<import('@pascal-app/core').DeviceParams>,
-    )
+    )) return
     editorState.setLightStripDraft(null)
     sfxEmitter.emit('sfx:item-place')
-  }, [])
+  }, [tryPlaceDevice])
   // 把 commit 函数注册到上面的 keyboard handler 用的 ref
   commitLightStripDraftRef.current = commitLightStripDraft
 
@@ -9688,12 +9722,12 @@ export function FloorplanPanel() {
                 }
                 wallParams.circuitId = circuitId
               }
-              placeDevice(
+              if (!tryPlaceDevice(
                 currentLevelId,
                 selectedDevice.catalogId,
                 [placement.position[0], y, placement.position[1]],
                 wallParams as Partial<import('@pascal-app/core').DeviceParams>,
-              )
+              )) return
               sfxEmitter.emit('sfx:item-place')
               event.stopPropagation()
               return
@@ -9711,7 +9745,7 @@ export function FloorplanPanel() {
         nativeEvent: event.nativeEvent as any,
       } as any)
     },
-    [displayWallPolygons, floorplanOpeningLocalY, hoveredWallId, isOpeningPlacementActive, setSelectedReferenceId],
+    [displayWallPolygons, floorplanOpeningLocalY, hoveredWallId, isOpeningPlacementActive, setSelectedReferenceId, tryPlaceDevice],
   )
 
   const handleWallDoubleClick = useCallback(
@@ -10944,6 +10978,9 @@ export function FloorplanPanel() {
             rotationModifierPressed={rotationModifierPressed}
           />
         )}
+        {placementError && (mode !== 'build' || ((!devicePlacementPreview || placementBlocked) && tool === 'item')) && (
+          <div role="status" className="pointer-events-none absolute bottom-3 left-1/2 z-20 -translate-x-1/2 rounded bg-destructive px-3 py-2 text-sm text-destructive-foreground">{placementError}</div>
+        )}
         {/* 灯带画线提示条 —— build + item + lightType='line' 时顶部显示操作说明。
             比纯光标更清楚地告诉用户"现在处于画灯带模式 + 怎么提交/取消"。*/}
         {mode === 'build' && tool === 'item' && selectedDevice?.lightType === 'line' && (
@@ -11278,6 +11315,7 @@ export function FloorplanPanel() {
             {/* Ghost 圆点 —— 仅在 build 模式 + tool==='item' 放置预览时显示。
                 灯带 / 窗帘 都有自己的 draft 视觉（不需要也不该显示这个标准圆点）。*/}
             <FloorplanDeviceGhost
+              blocked={placementBlocked}
               point={
                 mode === 'build' &&
                 tool === 'item' &&

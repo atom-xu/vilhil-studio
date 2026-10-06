@@ -79,6 +79,12 @@ export {
 // 工具函数（AI / UI / 测试脚本均可调用）
 export {
   placeDevice,
+  checkDevicePlacement,
+  checkDevicePlacementEdit,
+  updateDevicePlacement,
+  DevicePlacementError,
+  deviceBoxesOverlap,
+  type PlacementResult,
   removeDevice,
   setDeviceParams,
   setDeviceState,
@@ -235,3 +241,4 @@ export {
   PlacementGuides,
   CollisionPreview,
 } from './components'
+export { isSecurityCamera, securityCameraRotation } from './renderers/camera'

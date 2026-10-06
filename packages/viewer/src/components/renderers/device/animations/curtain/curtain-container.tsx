@@ -1,6 +1,7 @@
 'use client'
 
 import { type DeviceNode, useScene, type WallNode, type WindowNode } from '@pascal-app/core'
+import { curtainLocalTransform } from '@vilhil/smarthome/curtain'
 import { useMemo } from 'react'
 import { RollerCurtain } from './roller'
 import { RomanShade } from './roman'
@@ -112,6 +113,15 @@ export const CurtainContainer = ({ node }: { node: DeviceNode }) => {
         ? -directionDeg * (Math.PI / 180)
         : (node.rotation?.[1] ?? 0)
 
+  // DeviceRenderer already applies node.position/rotation. Anchors above are in
+  // level space, so convert once to its local frame; shared floor transforms stay outside.
+  const localTransform = useMemo(() => curtainLocalTransform(
+    node.position,
+    node.rotation,
+    posWorld,
+    geom || wallDirVec || directionDeg !== null ? [0, rotY, 0] : node.rotation,
+  ), [node.position, node.rotation, posWorld, geom, wallDirVec, directionDeg, rotY])
+
   // 百叶窗装窗内 → z 从 wallThickness/2 往内数；其他类型装窗外 → z 正偏移
   const isVenetian = curtainType === 'venetian'
   const baseZ = isVenetian ? -(geom?.wallThickness ?? 0.2) * 0.4 : 0
@@ -123,7 +133,7 @@ export const CurtainContainer = ({ node }: { node: DeviceNode }) => {
   const sideOpenIsBoth = isSideOpen && layers.length >= 2
 
   return (
-    <group position={posWorld} rotation={[0, rotY, 0]}>
+    <group position={localTransform.position} quaternion={localTransform.quaternion}>
       <group position={[0, 0, baseZ]}>
         {sideOpenIsBoth && (() => {
           // 'both' 单实例：层 0 = 遮光（blackout 通道，无视 layer.material），
@@ -136,6 +146,7 @@ export const CurtainContainer = ({ node }: { node: DeviceNode }) => {
               width={width}
               height={height}
               layerZ={0}
+              wallSurfaceZ={geom ? geom.wallThickness / 2 : 0}
               openPctBlackout={blackoutPos}
               openPctSheer={sheerPos}
             />
@@ -156,7 +167,7 @@ export const CurtainContainer = ({ node }: { node: DeviceNode }) => {
             return <RomanShade key={key} width={width} height={height} layerZ={layerZ} openPct={layerPos} material={layer.material} />
           }
           // side-open 单层
-          return <SideOpenCurtain key={key} width={width} height={height} layerZ={layerZ} openPct={layerPos} material={layer.material} />
+          return <SideOpenCurtain key={key} width={width} height={height} wallSurfaceZ={geom ? geom.wallThickness / 2 : 0} layerZ={layerZ} openPct={layerPos} material={layer.material} />
         })}
 
         {/* 顶部轨道杆（仅 roller/roman；side-open 现在自带 pelmet box，不再画铁杆；百叶不需要）*/}

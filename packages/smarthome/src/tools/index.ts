@@ -61,3 +61,5 @@ export {
   type PlayerSceneSummary,
   type PlayerSubsystemFocus,
 } from './player-api'
+
+export { checkDevicePlacementEdit, updateDevicePlacement, checkDevicePlacement, deviceBoxesOverlap, DevicePlacementError, type PlacementResult } from './device-placement'

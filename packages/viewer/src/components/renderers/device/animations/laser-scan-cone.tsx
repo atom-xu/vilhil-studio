@@ -23,6 +23,8 @@ interface LaserScanConeProps {
   fovDeg?: number
   /** 朝向旋转（弧度），绕设备的朝外方向 */
   rotationY?: number
+  /** Bullet models face local +X; ceiling cameras face local -Y. */
+  horizontal?: boolean
   /** 颜色 */
   color?: string
   /** 是否启用整体摆动 */
@@ -46,28 +48,31 @@ export const LaserScanCone = ({
   range = 5,
   fovDeg = 90,
   rotationY = 0,
+  horizontal = false,
   color = '#e66008',
   swing = true,
   intensity = 1,
 }: LaserScanConeProps) => {
   const groupRef = useRef<THREE.Group>(null)
   const timeRef = useRef({ value: 0 })
-  const materialsRef = useRef<THREE.MeshBasicMaterial[]>([])
+  const intensityRef = useRef({ value: intensity })
+  const radiusRef = useRef({ value: 1 })
+  const rangeRef = useRef({ value: range })
 
   // ConeGeometry：底圆半径按 fov 派生（tan(fov/2) × height）
-  const bottomRadius = useMemo(() => {
-    const half = (fovDeg * 0.5 * Math.PI) / 180
-    return Math.tan(half) * range
-  }, [fovDeg, range])
+  const safeRange = Math.max(0.01, Number.isFinite(range) ? range : 5)
+  const safeFov = THREE.MathUtils.clamp(Number.isFinite(fovDeg) ? fovDeg : 90, 1, 179)
+  rangeRef.current.value = safeRange
+  radiusRef.current.value = Math.tan(safeFov * Math.PI / 360) * safeRange
+  intensityRef.current.value = intensity
 
   // 几何（一次创建，多层共用）
   const geometry = useMemo(() => {
-    const g = new THREE.ConeGeometry(bottomRadius, range, 120, 40, true)
-    // 默认 ConeGeometry 顶点在 y=height/2, 底圆在 y=-height/2
-    // translate(0, -range/2, 0) 让顶点落到 y=0（挂载点），底圆在 y=-range
-    g.translate(0, -range / 2, 0)
+    const g = new THREE.ConeGeometry(1, 1, 120, 40, true)
+    // Unit cone: FOV/range update shader uniforms, never rebuild geometry.
+    g.translate(0, -0.5, 0)
     return g
-  }, [bottomRadius, range])
+  }, [])
 
   // 材质（每层一个）
   const materials = useMemo(() => {
@@ -88,9 +93,12 @@ export const LaserScanCone = ({
         shader.uniforms.sSpd2  = { value: cfg.sSpeed2 }
         shader.uniforms.wAmp   = { value: cfg.wAmp }
         shader.uniforms.uOp    = { value: cfg.op }
-        shader.uniforms.uInt   = { value: 1 }
-        // 暴露给外部更新
-        ;(mat as any)._uniforms = shader.uniforms
+        shader.uniforms.uInt   = intensityRef.current
+        shader.uniforms.uRadius = radiusRef.current
+        shader.uniforms.uRange = rangeRef.current
+        shader.vertexShader = `uniform float uRadius; uniform float uRange;\n${shader.vertexShader}`
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed *= vec3(uRadius, uRange, uRadius);')
+        mat.userData.scanUniforms = shader.uniforms
 
         shader.fragmentShader = `
           uniform float time;
@@ -134,41 +142,26 @@ export const LaserScanCone = ({
     })
   }, [color])
 
-  // 保存 materials 到 ref 给 useFrame 用
-  materialsRef.current = materials
-
-  // 几何体 dispose
-  useEffect(() => {
-    return () => {
-      geometry.dispose()
-      materials.forEach((m) => m.dispose())
-    }
-  }, [geometry, materials])
+  // Each owner releases only its own lifetime; a color change must not dispose
+  // the still-shared geometry, and parameter changes dispose neither resource.
+  useEffect(() => () => geometry.dispose(), [geometry])
+  useEffect(() => () => materials.forEach((m) => m.dispose()), [materials])
 
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime()
     timeRef.current.value = t
 
-    // 同步 uInt（intensity）到所有材质的 shader uniform（onBeforeCompile 构造的 uniform）
-    for (const mat of materialsRef.current) {
-      const u = (mat as any)._uniforms as Record<string, { value: number }> | undefined
-      if (u?.uInt) u.uInt.value = intensity
-    }
-
-    // 整体摆动
-    if (swing && groupRef.current) {
-      const s = Math.sin(t * 0.4) * 0.06
-      groupRef.current.rotation.y = rotationY + s
-    } else if (groupRef.current) {
-      groupRef.current.rotation.y = rotationY
+    if (groupRef.current) {
+      const s = swing ? Math.sin(t * 0.4) * 0.06 : 0
+      groupRef.current.rotation.set(horizontal ? 0 : s, rotationY + (horizontal ? s : 0), 0)
     }
   })
 
   return (
-    <group ref={groupRef} position={position}>
+    <group ref={groupRef} position={position} visible={intensity > 0}>
       {/* 4 层同一几何不同材质叠加 */}
       {materials.map((mat, i) => (
-        <mesh key={i} geometry={geometry} material={mat} />
+        <mesh key={i} geometry={geometry} material={mat} rotation={[0, 0, horizontal ? Math.PI / 2 : 0]} frustumCulled={false} raycast={() => null} dispose={null} />
       ))}
     </group>
   )

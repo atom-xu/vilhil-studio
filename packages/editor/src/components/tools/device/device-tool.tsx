@@ -7,7 +7,7 @@ import {
   type WallEvent,
 } from '@pascal-app/core'
 import { useViewer } from '@pascal-app/viewer'
-import { placeDevice } from '@vilhil/smarthome'
+import { checkDevicePlacement, DevicePlacementError, placeDevice } from '@vilhil/smarthome'
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { markToolCancelConsumed } from '../../../hooks/use-keyboard'
@@ -47,6 +47,8 @@ export const DeviceTool: React.FC = () => {
   const levelId = useViewer((state) => state.selection.levelId)
   const cursorRef = useRef<THREE.Group>(null)
   const [canPlace, setCanPlace] = useState(false)
+  const canPlaceRef = useRef(false)
+  const [conflict, setConflict] = useState(false)
 
   // 内部状态用 ref 避免触发 re-render（useFrame 规范同理）
   const surfaceRef = useRef<Surface>('floor')
@@ -59,6 +61,31 @@ export const DeviceTool: React.FC = () => {
     const mountType = selectedDevice.mountType ?? 'floor'
     const prefersCeiling = CEILING_MOUNT_TYPES.has(mountType)
     const prefersWall = WALL_MOUNT_TYPES.has(mountType)
+
+    const validatePreview = () => {
+      const result = checkDevicePlacement(levelId, selectedDevice.catalogId,
+        [gridPosition.current.x, gridPosition.current.y, gridPosition.current.z],
+        rotationY.current * 180 / Math.PI)
+      canPlaceRef.current = result.valid
+      setCanPlace(result.valid)
+      setConflict(result.reason === 'occupied')
+      return result.valid
+    }
+    const submitPlacement = () => {
+      if (!canPlaceRef.current || !validatePreview()) return
+      try {
+        placeDevice(levelId, selectedDevice.catalogId,
+          [gridPosition.current.x, gridPosition.current.y, gridPosition.current.z],
+          { direction: rotationY.current * 180 / Math.PI })
+        sfxEmitter.emit('sfx:item-place')
+        validatePreview()
+      } catch (error) {
+        if (!(error instanceof DevicePlacementError)) throw error
+        canPlaceRef.current = false
+        setCanPlace(false)
+        setConflict(error.result.reason === 'occupied')
+      }
+    }
 
     // ─── FLOOR 事件 ───────────────────────────────────────────────────────────
     const onGridMove = (event: GridEvent) => {
@@ -76,18 +103,12 @@ export const DeviceTool: React.FC = () => {
       gridPosition.current.set(x, y, z)
       cursorRef.current.position.set(x, y, z)
       cursorRef.current.rotation.y = rotationY.current
-      setCanPlace(true)
+      validatePreview()
     }
 
     const onGridClick = (_event: GridEvent) => {
       if (surfaceRef.current !== 'floor') return
-      if (!canPlace || !levelId) return
-      placeDevice(levelId, selectedDevice.catalogId, [
-        gridPosition.current.x,
-        gridPosition.current.y,
-        gridPosition.current.z,
-      ], { direction: rotationY.current * (180 / Math.PI) })
-      sfxEmitter.emit('sfx:item-place')
+      submitPlacement()
     }
 
     // ─── CEILING 事件 ─────────────────────────────────────────────────────────
@@ -105,7 +126,7 @@ export const DeviceTool: React.FC = () => {
         cursorRef.current.position.set(x, y, z)
         cursorRef.current.rotation.y = rotationY.current
       }
-      setCanPlace(true)
+      validatePreview()
     }
 
     const onCeilingMove = (event: CeilingEvent) => {
@@ -124,25 +145,21 @@ export const DeviceTool: React.FC = () => {
       if (cursorRef.current) {
         cursorRef.current.position.set(x, y, z)
       }
-      setCanPlace(true)
+      validatePreview()
     }
 
     const onCeilingLeave = (_event: CeilingEvent) => {
       if (surfaceRef.current !== 'ceiling') return
       surfaceRef.current = 'floor'
+      canPlaceRef.current = false
+      setConflict(false)
       setCanPlace(false)
     }
 
     const onCeilingClick = (event: CeilingEvent) => {
       if (!prefersCeiling || surfaceRef.current !== 'ceiling') return
-      if (!canPlace || !levelId) return
       event.stopPropagation()
-      placeDevice(levelId, selectedDevice.catalogId, [
-        gridPosition.current.x,
-        gridPosition.current.y,
-        gridPosition.current.z,
-      ], { direction: rotationY.current * (180 / Math.PI) })
-      sfxEmitter.emit('sfx:item-place')
+      submitPlacement()
     }
 
     // ─── WALL 事件 ────────────────────────────────────────────────────────────
@@ -163,7 +180,7 @@ export const DeviceTool: React.FC = () => {
         cursorRef.current.position.set(x, y, z)
         cursorRef.current.rotation.y = rot
       }
-      setCanPlace(true)
+      validatePreview()
     }
 
     const onWallMove = (event: WallEvent) => {
@@ -186,26 +203,23 @@ export const DeviceTool: React.FC = () => {
         cursorRef.current.position.set(x, y, z)
         cursorRef.current.rotation.y = rot
       }
+      validatePreview()
     }
 
     const onWallLeave = (_event: WallEvent) => {
       if (surfaceRef.current !== 'wall') return
       surfaceRef.current = 'floor'
       rotationY.current = 0
+      canPlaceRef.current = false
+      setConflict(false)
       setCanPlace(false)
     }
 
     const onWallClick = (event: WallEvent) => {
       if (!prefersWall || surfaceRef.current !== 'wall') return
       if (!isValidWallFace(event.normal)) return
-      if (!canPlace || !levelId) return
       event.stopPropagation()
-      placeDevice(levelId, selectedDevice.catalogId, [
-        gridPosition.current.x,
-        gridPosition.current.y,
-        gridPosition.current.z,
-      ], { direction: rotationY.current * (180 / Math.PI) })
-      sfxEmitter.emit('sfx:item-place')
+      submitPlacement()
     }
 
     // ─── 键盘 ─────────────────────────────────────────────────────────────────
@@ -213,6 +227,7 @@ export const DeviceTool: React.FC = () => {
       if ((e.key === 'r' || e.key === 'R') && surfaceRef.current === 'floor') {
         rotationY.current += Math.PI / 2
         if (cursorRef.current) cursorRef.current.rotation.y = rotationY.current
+        validatePreview()
         sfxEmitter.emit('sfx:item-rotate')
       }
     }
@@ -250,15 +265,18 @@ export const DeviceTool: React.FC = () => {
       window.removeEventListener('keydown', onKeyDown)
       // 离开工具时重置状态
       surfaceRef.current = 'floor'
+      canPlaceRef.current = false
+      setConflict(false)
       setCanPlace(false)
     }
-  }, [selectedDevice, levelId, canPlace])
+  }, [selectedDevice, levelId])
 
   if (!selectedDevice) return null
 
   return (
     <group ref={cursorRef}>
-      <CursorSphere color={canPlace ? '#22c55e' : '#ef4444'} />
+      <CursorSphere height={0.3} color={canPlace ? '#22c55e' : '#ef4444'}
+        tooltipContent={conflict ? <span role="status" className="whitespace-nowrap rounded bg-destructive px-2 py-1 text-xs text-destructive-foreground">位置已被占用</span> : undefined} />
       {/* 旋转方向指示器（仅地板模式显示） */}
       <mesh position={[0.3, 0, 0]} visible={canPlace && surfaceRef.current === 'floor'}>
         <boxGeometry args={[0.2, 0.02, 0.02]} />

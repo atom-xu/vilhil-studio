@@ -94,14 +94,16 @@ function makeCloudTexture(r: number, g: number, b: number): THREE.CanvasTexture 
  */
 export const HvacRibbonFlow = ({ position, rotationY = 0, mode = 'cold', intensity = 1 }: HvacRibbonFlowProps) => {
   const { camera } = useThree()
+  const groupRef = useRef<THREE.Group>(null)
   const meshRef = useRef<THREE.Mesh>(null)
   const cloudRefs = useRef<Array<THREE.Mesh | null>>(Array(CLOUD_COUNT).fill(null))
   const currentIntensity = useRef(0)
   const _camDir = useRef(new THREE.Vector3())
   const _camRight = useRef(new THREE.Vector3())
+  const _inverseWorldRotation = useRef(new THREE.Quaternion())
 
   // ─── 初始化 ribbon 数据（一次）─────────────────────────────────
-  const { lineData, vertsPerLine, bufferGeometry, material, cloudState, cloudTexture } = useMemo(() => {
+  const { lineData, vertsPerLine, bufferGeometry, material, cloudState } = useMemo(() => {
     const ld = Array.from({ length: N }, () => {
       const sx = (Math.random() - 0.5) * VENT_W
       const sy = (Math.random() - 0.5) * VENT_H
@@ -193,39 +195,35 @@ export const HvacRibbonFlow = ({ position, rotationY = 0, mode = 'cold', intensi
       rotSpeed: (Math.random() - 0.5) * 0.003,
     }))
 
-    const [cr, cg, cb] = COLOR_BY_MODE.cold.cloud
-    const cloudTex = makeCloudTexture(cr, cg, cb)
-
     return {
       lineData: ld,
       vertsPerLine: vpl,
       bufferGeometry: geo,
       material: mat,
       cloudState: cs,
-      cloudTexture: cloudTex,
     }
   }, [])
 
-  // ─── mode 切换时更新配色 uniform + 重建 cloud texture ──────────
+  const cloudTexture = useMemo(() => makeCloudTexture(...COLOR_BY_MODE[mode].cloud), [mode])
+  const grilleGeometry = useMemo(() => {
+    const plane = new THREE.PlaneGeometry(VENT_W, VENT_H)
+    const edges = new THREE.EdgesGeometry(plane)
+    plane.dispose()
+    return edges
+  }, [])
+  useEffect(() => () => { cloudTexture.dispose() }, [cloudTexture])
+  useEffect(() => () => {
+    bufferGeometry.dispose()
+    material.dispose()
+    grilleGeometry.dispose()
+  }, [bufferGeometry, material, grilleGeometry])
+
+  // ─── mode 切换时更新配色 uniform；所有 cloud 共享同一张纹理 ──────
   useEffect(() => {
     const target = COLOR_BY_MODE[mode]
     ;(material.uniforms.uColorEdge!.value as THREE.Color).copy(target.edge)
     ;(material.uniforms.uColorCore!.value as THREE.Color).copy(target.core)
-
-    const [r, g, b] = target.cloud
-    const newTex = makeCloudTexture(r, g, b)
-    cloudRefs.current.forEach((m) => {
-      if (!m) return
-      const mat = m.material as THREE.MeshBasicMaterial
-      mat.map?.dispose()
-      mat.map = newTex
-      mat.needsUpdate = true
-    })
-    cloudTextureRef.current = newTex
-    return () => { newTex.dispose() }
   }, [mode, material])
-
-  const cloudTextureRef = useRef<THREE.CanvasTexture>(cloudTexture)
 
   // ─── 每帧更新 ribbon + cloud ──────────────────────────────────
   useFrame(({ clock }, delta) => {
@@ -233,23 +231,28 @@ export const HvacRibbonFlow = ({ position, rotationY = 0, mode = 'cold', intensi
 
     // 强度插值（使用 useFrame 提供的 delta，不能再调 clock.getDelta()）
     const targetInt = mode === 'off' ? 0 : intensity
-    const dt = Math.min(delta, 1 / 20)
-    currentIntensity.current += (targetInt - currentIntensity.current) * Math.min(dt * 4, 1)
+    const dt = Math.max(0, delta)
+    currentIntensity.current += (targetInt - currentIntensity.current) * (1 - Math.exp(-dt * 4))
+    if (Math.abs(targetInt - currentIntensity.current) < 0.005) currentIntensity.current = targetInt
     const eff = currentIntensity.current
     material.uniforms.uIntensity!.value = eff
+    if (groupRef.current) groupRef.current.visible = eff > 0
 
-    if (eff < 0.005) return
+    if (eff === 0) {
+      for (const cloud of cloudRefs.current) {
+        if (cloud) (cloud.material as THREE.MeshBasicMaterial).opacity = 0
+      }
+      return
+    }
 
     // camera right 向量（ribbon 朝相机摆放）
     camera.getWorldDirection(_camDir.current)
     _camRight.current.crossVectors(_camDir.current, camera.up).normalize()
-    const camRight = _camRight.current
-
-    // 因为 group 做了 rotationY 旋转，camRight 需要转回"本地"
-    const invRot = -rotationY
-    const cosI = Math.cos(invRot), sinI = Math.sin(invRot)
-    const localRightX = camRight.x * cosI - camRight.z * sinI
-    const localRightZ = camRight.x * sinI + camRight.z * cosI
+    // Include the enclosing device/floor rotation, not just this group's yaw.
+    groupRef.current?.getWorldQuaternion(_inverseWorldRotation.current)
+    _inverseWorldRotation.current.invert()
+    const camRight = _camRight.current.applyQuaternion(_inverseWorldRotation.current)
+    const localRightX = camRight.x, localRightZ = camRight.z
 
     const posAttr = bufferGeometry.attributes.position!
     const acrAttr = bufferGeometry.attributes.aAcross!
@@ -296,7 +299,7 @@ export const HvacRibbonFlow = ({ position, rotationY = 0, mode = 'cold', intensi
     // 云雾更新
     for (let i = 0; i < CLOUD_COUNT; i++) {
       const p = cloudState[i]!
-      p.life += p.speed * 0.012
+      p.life += p.speed * dt * 0.72
       if (p.life >= 1) {
         p.life = 0
         p.x = (Math.random() - 0.5) * VENT_W * 0.9
@@ -306,7 +309,7 @@ export const HvacRibbonFlow = ({ position, rotationY = 0, mode = 'cold', intensi
       const bx = bezier(p.x, p.x + p.bendX, p.x + p.bendX * 2, lf)
       const by = bezier(p.y, p.y + p.bendY * 0.5, p.y + p.bendY * 1.5, lf)
       const bz = bezier(0, p.maxZ * 0.45, p.maxZ, lf)
-      p.angle += p.rotSpeed
+      p.angle += p.rotSpeed * dt * 60
       const scale = p.size * (0.4 + lf * 1.5)
       let alpha = lf < 0.15 ? lf / 0.15 : lf < 0.65 ? 1 : 1 - (lf - 0.65) / 0.35
       alpha *= 0.11 * eff
@@ -315,7 +318,7 @@ export const HvacRibbonFlow = ({ position, rotationY = 0, mode = 'cold', intensi
       if (!m) continue
       m.position.set(bx, by, bz)
       m.scale.setScalar(scale)
-      m.quaternion.copy(camera.quaternion)
+      m.quaternion.copy(camera.quaternion).premultiply(_inverseWorldRotation.current)
       m.rotateZ(p.angle)
       const mat = m.material as THREE.MeshBasicMaterial
       mat.opacity = alpha
@@ -323,10 +326,9 @@ export const HvacRibbonFlow = ({ position, rotationY = 0, mode = 'cold', intensi
   })
 
   return (
-    <group position={position} rotation={[0, rotationY, 0]}>
+    <group ref={groupRef} position={position} rotation={[0, rotationY, 0]}>
       {/* 出风口格栅线框 */}
-      <lineSegments>
-        <edgesGeometry args={[new THREE.PlaneGeometry(VENT_W, VENT_H)]} />
+      <lineSegments geometry={grilleGeometry}>
         <lineBasicMaterial
           color={mode === 'hot' ? 0xffaa88 : 0xaaccee}
           transparent

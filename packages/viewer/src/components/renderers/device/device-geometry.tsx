@@ -27,6 +27,9 @@ import { colorTempToColor } from '../../../lib/color-temp'
 import { applyBvh } from '../../../lib/bvh'
 import { getDeviceModel, getAllModelPaths, type ModelEntry } from './model-registry'
 
+// Configure before eager preloads; the host ships decoders locally.
+useGLTF.setDecoderPath('/draco/')
+
 // 预加载常用 GLB，避免首次拖放时卡顿
 useGLTF.preload('/items/electric-panel/model.glb')
 useGLTF.preload('/items/security-camera-dome/model.glb')

@@ -2,11 +2,13 @@
 
 import {
   getEffectiveCircuitId,
+  isSecurityCamera,
   listCircuitMembers,
   setDeviceState,
   useDeviceState,
 } from '@vilhil/smarthome'
 import { emitter, useScene } from '@pascal-app/core'
+import { DeviceInfoCard } from '@pascal-app/editor'
 import {
   DeviceRenderer,
   DeviceRenderModeProvider,
@@ -27,6 +29,10 @@ import { DemoLightStripPill, LightingShaderWarmup } from './_modules/lighting'
 import { LightPropertyPopup, useLightPopup } from './_modules/light-property-popup'
 import { CurtainPropertyPopup, useCurtainPopup } from './_modules/curtain-property-popup'
 import { CurtainOverlay } from './_modules/curtain-overlay'
+import { curtainViewTarget } from './_modules/curtain-target'
+import { hvacViewTarget } from './_modules/hvac-target'
+import { DeviceDetailEntry } from './_modules/hvac-overlay'
+import { securityViewTarget } from './_modules/security-target'
 import {
   CameraRig, ShaderPreheat, CompassUpdater,
   resolvePoseForView, estimateShotDuration,
@@ -169,6 +175,8 @@ export default function ProposalDemoPage() {
 
   // ── 视角系统 ─────────────────────────────────────────────────────────────
   const [view, setView] = useState<ViewState>({ level: 'global', module: 'lighting' })
+  // A popup must never keep controlling a device from the floor/detail just left.
+  useEffect(() => { curtainPopup.api.close() }, [seed?.levelId, view.level, view.module, view.targetId, curtainPopup.api])
   const cameraApiRef  = useRef<CameraRigApi | null>(null)
   const controlsRef   = useRef<any>(null)
   const floorFocusTimerRef = useRef<number | null>(null)
@@ -444,7 +452,13 @@ export default function ProposalDemoPage() {
     bboxCz: s.bbox.cz,
     bboxSpan: Math.max(s.bbox.w, s.bbox.d, 8),
     rooms: s.roomCentroids.map((r) => ({ id: r.id, cx: r.cx, cz: r.cz, radius: r.radius, width: r.width, depth: r.depth })),
-    devices: s.devices.map((d) => ({ id: d.id, position: d.position })),
+    devices: [
+      ...s.devices.map((d) => ({ id: d.id, position: d.position })),
+      ...s.allDeviceNodes.filter((n) => n.subsystem === 'curtain')
+        .map((n) => curtainViewTarget(n, useScene.getState().nodes)),
+      ...s.allDeviceNodes.filter((n) => n.subsystem === 'hvac').map(hvacViewTarget),
+      ...s.allDeviceNodes.filter(isSecurityCamera).map(securityViewTarget),
+    ],
   }), [])
 
   // 通用推进到指定 ViewState；所有视角切换与楼层动画使用同一时长节奏
@@ -587,18 +601,24 @@ export default function ProposalDemoPage() {
   // 设备点击进入 detail：
   // - 灯光模块保持"按房间俯视"语义，不做单灯具放大
   // - 仅在单楼层（非爆炸全屋）下启用，避免多楼层叠加时误触导致目标不明确
+  const enterDeviceDetail = useCallback((deviceId: string) => {
+      if (view.module === 'lighting') return
+      if (activeAllFloorIdx === null && allSeeds && allSeeds.length > 1) return
+      if (view.module === 'curtain' && !seed?.allDeviceNodes.some((n) => n.id === deviceId && n.subsystem === 'curtain')) return
+      if (view.module === 'hvac' && !seed?.allDeviceNodes.some((n) => n.id === deviceId && n.subsystem === 'hvac')) return
+      if (view.module === 'security' && !seed?.allDeviceNodes.some((n) => n.id === deviceId && isSecurityCamera(n))) return
+      if (view.level === 'detail' && view.targetId === deviceId) return
+      playTo({ level: 'detail', module: view.module, targetId: deviceId })
+  }, [view.module, view.level, view.targetId, activeAllFloorIdx, allSeeds, seed, playTo])
+
   useEffect(() => {
     const onDeviceClick = (event: { node?: { id?: string } }) => {
       const deviceId = event?.node?.id
-      if (!deviceId) return
-      if (view.module === 'lighting') return
-      if (activeAllFloorIdx === null && allSeeds && allSeeds.length > 1) return
-      if (view.level === 'detail' && view.targetId === deviceId) return
-      playTo({ level: 'detail', module: view.module, targetId: deviceId })
+      if (deviceId) enterDeviceDetail(deviceId)
     }
     emitter.on('device:click', onDeviceClick as any)
     return () => emitter.off('device:click', onDeviceClick as any)
-  }, [view.module, view.level, view.targetId, activeAllFloorIdx, allSeeds, playTo])
+  }, [enterDeviceDetail])
 
   // 全屋总览时不选中任何子系统（NetworkHeatmap / XrayOverlay 不显示）；
   // 模块模式下同步选中，让 subsystem-specific effects 跟随。
@@ -741,18 +761,24 @@ export default function ProposalDemoPage() {
 
   // ── 爆炸视图拖拽（水平拖动旋转各楼层）──────────────────────────────────────
   const handleExplodedPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (activeAllFloorIdx !== null) return
+    if (activeAllFloorIdx !== null || !allSeeds || allSeeds.length < 2 || e.button !== 0) return
+    // HUD controls bubble through the stage too. Capturing their pointer here
+    // retargets the click to the stage and prevents buttons such as All Off firing.
+    if (!(e.target instanceof HTMLCanvasElement)) return
     dragRef.current = { x: e.clientX, az0: azimuthRef.current }
     e.currentTarget.setPointerCapture(e.pointerId)
-  }, [activeAllFloorIdx])
+  }, [activeAllFloorIdx, allSeeds])
 
   const handleExplodedPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!dragRef.current) return
     azimuthRef.current = dragRef.current.az0 - (e.clientX - dragRef.current.x) * 0.008
   }, [])
 
-  const handleExplodedPointerUp = useCallback(() => {
+  const handleExplodedPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     dragRef.current = null
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    }
   }, [])
 
   // ── 楼层飞入 / 飞出相机动画 ───────────────────────────────────────────────
@@ -971,7 +997,7 @@ export default function ProposalDemoPage() {
     seed.bbox.cz + lightDir[2] * lightDist,
   ]
   const openingsTotal = Object.values(seed.openingsByWall).reduce((acc, arr) => acc + arr.length, 0)
-  const lightsOn = Object.values(lightStates).filter((s) => s.on).length
+  const lightsOn = seed.devices.filter((device) => lightStates[device.id]?.on ?? device.on).length
   const isTrueColorPreset = activePresetKey === 'mist-warm-contrast'
 
   const canvasFilter = (() => {
@@ -1067,6 +1093,7 @@ export default function ProposalDemoPage() {
           onPointerDown={handleExplodedPointerDown}
           onPointerMove={handleExplodedPointerMove}
           onPointerUp={handleExplodedPointerUp}
+          onPointerCancel={handleExplodedPointerUp}
         >
           {/* 返回按钮 — Detail 模式下左上浮层，回到模块 Overview（Esc 兜底） */}
           {view.level === 'detail' && (
@@ -1416,14 +1443,15 @@ export default function ProposalDemoPage() {
                       }
                     />
                   ))}
-              {/* 窗帘 pill —— 仅 detail + curtain 板块时显示 */}
-              {view.level === 'detail' && view.module === 'curtain' &&
+              {/* 当前楼层遮阳总览复用同一 pill：放大镜只聚焦，主体仍只控制开合。 */}
+              {view.level !== 'global' && view.module === 'curtain' && !isExplodedFloors &&
                 seed.allDeviceNodes
                   .filter((n) => n.subsystem === 'curtain')
                   .map((n) => (
                     <CurtainOverlay
                       key={`curtain-pill-${n.id}`}
                       node={n}
+                      onEnterDetail={view.level === 'overview' ? () => enterDeviceDetail(n.id) : undefined}
                       onQuickToggle={() => toggleCurtain(n.id)}
                       onOpenPopup={() =>
                         handleOpenCurtainPopup(
@@ -1462,7 +1490,7 @@ export default function ProposalDemoPage() {
               enableZoom
               enableRotate={!isExplodedFloors}
               minDistance={2}
-              maxDistance={view.level === 'detail' ? 8 : isExplodedFloors ? orbitDist * 4 : orbitDist * 3}
+              maxDistance={view.level === 'detail' ? (view.module === 'curtain' ? Math.max(8, span * 2) : 8) : isExplodedFloors ? orbitDist * 4 : orbitDist * 3}
               minPolarAngle={
                 isExplodedFloors ? explodedPolar * 0.7
                 : view.level === 'detail' ? 0.02
@@ -1470,7 +1498,7 @@ export default function ProposalDemoPage() {
               }
               maxPolarAngle={
                 isExplodedFloors ? explodedPolar * 1.3
-                : view.level === 'detail' ? Math.PI * 0.22
+                : view.level === 'detail' ? Math.PI * (view.module === 'curtain' || view.module === 'hvac' || view.module === 'security' ? 0.48 : 0.22)
                 : Math.PI * 0.46
               }
             />
@@ -1490,6 +1518,19 @@ export default function ProposalDemoPage() {
             )}
             </Selection>
           </Canvas>
+          {view.level === 'overview' && (view.module === 'hvac' || view.module === 'security') && !isExplodedFloors && (
+            <div role="group" aria-label={view.module === 'hvac' ? '当前楼层暖通设备' : '当前楼层摄像机'} className="absolute left-4 top-4 z-20 flex max-w-[70%] flex-wrap gap-2">
+              {seed.allDeviceNodes.filter((n) => view.module === 'hvac' ? n.subsystem === 'hvac' : isSecurityCamera(n)).map((n) => (
+                <DeviceDetailEntry key={`device-entry-${n.id}`} node={n} onEnterDetail={() => enterDeviceDetail(n.id)} />
+              ))}
+            </div>
+          )}
+          {view.level === 'detail' && (view.module === 'hvac' || view.module === 'security') && !isExplodedFloors &&
+            seed.allDeviceNodes.filter((n) => n.id === view.targetId && (view.module === 'hvac' ? n.subsystem === 'hvac' : isSecurityCamera(n))).map((n) => (
+              <div key={n.id} role="region" aria-label={view.module === 'hvac' ? '暖通设备控制' : '摄像机控制'} className="absolute bottom-20 right-4 z-20">
+                <DeviceInfoCard device={{ ...n, productName: n.productName || n.name }} />
+              </div>
+            ))}
           {/* 灯具属性 popup —— 单灯 / 回路 / 房间共用，浮在 Canvas 上 */}
           {lightPopup.target && (
             <LightPropertyPopup

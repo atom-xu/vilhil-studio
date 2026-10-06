@@ -70,16 +70,18 @@ export const HvacAirflow = ({
 
     // 强度平滑插值（mode='off' 视为 intensity=0）
     const targetIntensity = mode === 'off' ? 0 : intensity
-    currentIntensity.current += (targetIntensity - currentIntensity.current) * Math.min(dt * 4, 1)
+    currentIntensity.current += (targetIntensity - currentIntensity.current) * (1 - Math.exp(-Math.max(0, dt) * 4))
+    if (Math.abs(targetIntensity - currentIntensity.current) < 0.005) currentIntensity.current = targetIntensity
     const eff = currentIntensity.current
+    points.visible = eff > 0
 
     // 颜色平滑插值（lerp rgb）
-    currentColor.current.lerp(targetColor, Math.min(dt * 3, 1))
+    currentColor.current.lerp(targetColor, 1 - Math.exp(-Math.max(0, dt) * 12))
     const mat = points.material as THREE.PointsMaterial
     mat.color.copy(currentColor.current)
     mat.opacity = eff * 0.45
 
-    if (eff < 0.005) return
+    if (eff === 0) return
 
     const posAttr = points.geometry.attributes.position
     if (!posAttr) return

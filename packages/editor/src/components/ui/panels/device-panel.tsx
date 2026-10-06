@@ -17,7 +17,7 @@
 import { type AnyNode, type DeviceNode, useScene } from '@pascal-app/core'
 import type { SceneNodeType } from '@pascal-app/core'
 import { useViewer } from '@pascal-app/viewer'
-import { getDeviceDefinition, getSubsystemColor, getSubsystemLabel } from '@vilhil/smarthome'
+import { updateDevicePlacement, DevicePlacementError, getDeviceDefinition, getSubsystemColor, getSubsystemLabel } from '@vilhil/smarthome'
 import {
   type CircuitInfo,
   getCircuitNumber,
@@ -613,7 +613,6 @@ export function DevicePanel() {
   const selectedIds = useViewer((s: any) => s.selection.selectedIds)
   const setSelection = useViewer((s: any) => s.setSelection)
   const nodes = useScene((s) => s.nodes)
-  const updateNode = useScene((s) => s.updateNode)
 
   const selectedId = selectedIds[0]
   const node = selectedId
@@ -635,14 +634,27 @@ export function DevicePanel() {
     setSelection({ selectedIds: [] })
   }, [node, setSelection])
 
-  // 修改安装高度（params.direction 以外的 position.y 没有专用工具函数，直接 updateNode）
-  const handleHeightChange = useCallback(
-    (y: number) => {
-      if (!node) return
-      updateNode(node.id, { position: [node.position[0], y, node.position[2]] } as any)
-    },
-    [node, updateNode],
-  )
+  const [placementError, setPlacementError] = useState<string | null>(null)
+  useEffect(() => { setPlacementError(null) }, [selectedId])
+  const editPlacement = useCallback((changes: Parameters<typeof updateDevicePlacement>[1]) => {
+    if (!node) return false
+    const current = useScene.getState().nodes[node.id]
+    const changed = current?.type === 'device' && (
+      (changes.position && changes.position.some((v, i) => v !== current.position[i])) ||
+      (changes.direction !== undefined && changes.direction !== (current.params.direction ?? current.rotation[1] * 180 / Math.PI)))
+    try {
+      updateDevicePlacement(node.id, changes)
+      if (changed) setPlacementError(null)
+      return true
+    } catch (error) {
+      if (!(error instanceof DevicePlacementError)) throw error
+      setPlacementError(`${error.message}，已保留最后有效值`)
+      return false
+    }
+  }, [node])
+  const handleHeightChange = useCallback((y: number) => {
+    return node ? editPlacement({ position: [node.position[0], y, node.position[2]] }) : false
+  }, [node, editPlacement])
 
   if (!node) return null
 
@@ -877,6 +889,7 @@ export function DevicePanel() {
       {/* 窗帘专用配置 —— 类型切换 + 关联窗户 */}
       {klass.isCurtain && <CurtainConfigPanel node={node} />}
 
+      {placementError && <p role="status" className="px-3 py-2 text-xs text-destructive">{placementError}</p>}
       {/* 尺寸 —— 像墙/门那样用物理长度描述设备在空间中的占位 */}
       <PanelSection title="尺寸">
         <SliderControl
@@ -946,7 +959,7 @@ export function DevicePanel() {
             label="角度"
             max={360}
             min={-180}
-            onChange={(v) => setDeviceParams(node.id, { direction: v })}
+            onChange={(v) => editPlacement({ direction: v })}
             precision={0}
             step={5}
             unit="°"

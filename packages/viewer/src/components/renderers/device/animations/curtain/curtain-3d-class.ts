@@ -50,6 +50,8 @@ export interface Curtain3DOptions {
   opennessSheer: number
   /** 'blackout' | 'sheer' | 'both' */
   material: 'blackout' | 'sheer' | 'both'
+  /** M7 adapter: smarthome owns the approved sheer mesh; retain legacy housing/blackout. */
+  externalSheer: boolean
 
   /** Fabric 拉伸比（fabricLength / visibleWidth），1.5 偏挺 / 2.0 标准 / 2.5 蓬松 */
   gatherFactor: number
@@ -88,6 +90,7 @@ const DEFAULTS: Curtain3DOptions = {
   openness: 0,
   opennessSheer: 0,
   material: 'blackout',
+  externalSheer: false,
 
   gatherFactor: 2.0,
   pleatsPerMeter: 13,
@@ -360,7 +363,7 @@ export class Curtain3D {
         oBlackout, halfL, fabricL, N, segW, segH, idx)
       idx += 2
     }
-    if (this.opts.material === 'sheer' || this.opts.material === 'both') {
+    if (!this.opts.externalSheer && (this.opts.material === 'sheer' || this.opts.material === 'both')) {
       this._addPanelPair(this.sheerMat, this._layerZ('sheer'),
         oSheer, halfL, fabricL, N, segW, segH, idx)
       idx += 2
