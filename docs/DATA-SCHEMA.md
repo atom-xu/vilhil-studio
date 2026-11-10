@@ -183,5 +183,23 @@ useScene.setScene(nodes, rootNodeIds) → 渲染
 
 ## 9. 变更记录
 
+- 2026-11-10: 项目列表支持从根 Site metadata 读取已有网页演示入口。
 - 2026-04-20: 增加后端数据模型（projects / share_links / project_members）。
 - 2026-04-17: 建立最小稳定数据契约（Project/Level/Device/Scene/RunStatus）。
+
+## 10. 项目网页演示入口（2026-11-10）
+
+项目可在首个有效根 Site 的 `metadata.vilhil.presentations` 登记已有演示：
+
+```ts
+type ExternalWebDemo = {
+  kind: 'external-web-demo'
+  id: string
+  title: string
+  url: string
+}
+```
+
+项目列表的 `presentation?: ExternalWebDemo | null` 返回首个合法条目。URL 仅接受完整 HTTP/HTTPS 地址，禁止 userinfo 和脚本地址；字段损坏时忽略，原编辑项目打开方式不变。
+
+`GET /api/project/list` 保持原所有者过滤，数据库仅投影首个根 Site 的 metadata，返回前校验资源，不返回场景几何或完整 metadata。演示在新页打开，目标站点仍执行自身访问控制；本次不增加导入、内容管理或分享权限。

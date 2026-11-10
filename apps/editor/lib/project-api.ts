@@ -5,6 +5,7 @@
  */
 
 import type { AnyNode } from '@pascal-app/core'
+import type { ExternalWebDemo } from './project-presentations'
 
 export interface ProjectSnapshot {
   nodes: Record<string, AnyNode>
@@ -19,6 +20,7 @@ export interface SavedProject {
   isPublic: boolean
   createdAt: string
   updatedAt: string
+  presentation?: ExternalWebDemo | null
 }
 
 /** 保存项目到云端 */

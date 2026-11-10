@@ -113,9 +113,11 @@ export default function ProjectsPage() {
                 <div className="mt-4 flex items-center gap-2">
                   <Link
                     className="vh-btn vh-btn-primary px-3 py-1.5 text-xs"
-                    href={`/?project=${project.id}`}
+                    href={project.presentation?.url ?? `/?project=${project.id}`}
+                    target={project.presentation ? '_blank' : undefined}
+                    rel={project.presentation ? 'noopener noreferrer' : undefined}
                   >
-                    打开
+                    {project.presentation ? '打开演示' : '打开'}
                   </Link>
 
                   {confirmDeleteId === project.id ? (
